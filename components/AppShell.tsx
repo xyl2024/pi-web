@@ -10,6 +10,7 @@ import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { BranchNavigator } from "./BranchNavigator";
 import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
+import { useI18n } from "@/hooks/useI18n";
 import type { SessionInfo, SessionTreeNode } from "@/lib/types";
 import type { ChatInputHandle } from "./ChatInput";
 
@@ -17,6 +18,7 @@ export function AppShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { preset, setPreset } = useTheme();
+  const { locale, toggleLocale, t } = useI18n();
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   // When user clicks +, we only store the cwd — no fake session id
@@ -246,7 +248,7 @@ export function AppShell() {
       <div style={{ padding: "8px", flexShrink: 0, display: "flex", justifyContent: "space-between", gap: 4 }}>
         {([
           {
-            label: "Models",
+            label: t("Models"),
             onClick: () => setModelsConfigOpen(true),
             disabled: false,
             icon: (
@@ -260,7 +262,7 @@ export function AppShell() {
             ),
           },
           {
-            label: "Skills",
+            label: t("Skills"),
             onClick: () => setSkillsConfigOpen(true),
             disabled: !activeCwd && !selectedSession?.cwd && !newSessionCwd,
             icon: (
@@ -334,7 +336,7 @@ export function AppShell() {
         <div ref={topBarRef} style={{ display: "flex", alignItems: "center", flexShrink: 0, borderBottom: "1px solid var(--border)", height: 36, background: "var(--bg-panel)", overflow: "visible", zIndex: 45 }}>
           <button
             onClick={() => setSidebarOpen((v) => !v)}
-            title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            title={sidebarOpen ? t("Hide sidebar") : t("Show sidebar")}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
@@ -360,7 +362,7 @@ export function AppShell() {
               onClick={() => {
                 setThemeMenuOpen((v) => !v);
               }}
-              title="切换主题"
+              title={t("Switch theme")}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
                 width: 36, height: 36, padding: 0,
@@ -423,6 +425,21 @@ export function AppShell() {
               </>
             )}
           </div>
+          <button
+            onClick={toggleLocale}
+            title={t("Switch language")}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, padding: 0,
+              background: "none", border: "none", borderRight: "1px solid var(--border)",
+              color: "var(--text-muted)", cursor: "pointer", flexShrink: 0, transition: "color 0.12s",
+              fontSize: 11, fontWeight: 700, fontFamily: "var(--font-mono)",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
+          >
+            {locale === "zh" ? "EN" : "中"}
+          </button>
           {showChat && (
             <div style={{ display: "flex", alignItems: "stretch", height: "100%" }}>
               <BranchNavigator
@@ -458,7 +475,7 @@ export function AppShell() {
                   <line x1="8" y1="13" x2="16" y2="13" />
                   <line x1="8" y1="17" x2="13" y2="17" />
                 </svg>
-                <span>System</span>
+                <span>{t("System")}</span>
               </button>
             </div>
           )}
@@ -575,11 +592,11 @@ export function AppShell() {
                     </div>
                   ) : systemPrompt === "" ? (
                     <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
-                      System prompt is empty (tools are disabled)
+                      {t("System prompt is empty (tools are disabled)")}
                     </div>
                   ) : (
                     <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
-                      Send a message to load the system prompt
+                      {t("Send a message to load the system prompt")}
                     </div>
                   )}
                 </div>
@@ -609,7 +626,7 @@ export function AppShell() {
           ) : showPlaceholder ? (
             activeCwd ? (
               <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 15 }}>
-                Select a session from the sidebar
+                {t("Select a session from the sidebar")}
               </div>
             ) : (
               <div style={{ position: "absolute", top: 12, left: 12, display: "flex", alignItems: "flex-start", gap: 8, userSelect: "none", pointerEvents: "none" }}>
@@ -617,10 +634,10 @@ export function AppShell() {
                   <line x1="20" y1="12" x2="4" y2="12" /><polyline points="10 6 4 12 10 18" />
                 </svg>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>Get Started</div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>{t("Get Started")}</div>
                   <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.8 }}>
-                    <span style={{ color: "var(--text-dim)", marginRight: 6 }}>1.</span>Select a project directory from the sidebar<br />
-                    <span style={{ color: "var(--text-dim)", marginRight: 6 }}>2.</span>Add models via the <strong style={{ color: "var(--text)" }}>Models</strong> button at the bottom
+                    <span style={{ color: "var(--text-dim)", marginRight: 6 }}>1.</span>{t("Select a project directory from the sidebar")}<br />
+                    <span style={{ color: "var(--text-dim)", marginRight: 6 }}>2.</span>{t("Add models via the Models button at the bottom")}
                   </div>
                 </div>
               </div>
@@ -658,7 +675,7 @@ export function AppShell() {
             <FileViewer filePath={activeFileTab.filePath} cwd={activeCwd ?? undefined} />
           ) : (
             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
-              No file open
+              {t("No file open")}
             </div>
           )}
         </div>
@@ -667,7 +684,7 @@ export function AppShell() {
     {/* File panel toggle — always visible at top-right */}
     <button
       onClick={() => setRightPanelOpen((v) => !v)}
-      title={rightPanelOpen ? "Hide file panel" : "Show file panel"}
+      title={rightPanelOpen ? t("Hide file panel") : t("Show file panel")}
       style={{
         position: "fixed", top: 0, right: 0, zIndex: 300,
         display: "flex", alignItems: "center", justifyContent: "center",

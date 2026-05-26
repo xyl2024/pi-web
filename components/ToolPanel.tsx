@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useI18n } from "@/hooks/useI18n";
 
 export interface ToolEntry {
   name: string;
@@ -34,6 +35,7 @@ const PRESETS: { id: ToolPreset; label: string; desc: string; tools: string[] }[
 ];
 
 export function ToolPanel({ tools, onPreset, onClose }: Props) {
+  const { t } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
   const current = getPresetFromTools(tools);
 
@@ -96,7 +98,7 @@ export function ToolPanel({ tools, onPreset, onClose }: Props) {
                 transition: "all 0.12s",
               }}
             >
-              {preset.label}
+              {preset.id === "none" ? t("Off") : preset.id === "default" ? t("Low") : t("High")}
             </button>
           );
         })}
@@ -104,8 +106,8 @@ export function ToolPanel({ tools, onPreset, onClose }: Props) {
 
       {/* Description of current selection */}
       <div style={{ fontSize: 11, color: "var(--text-dim)", lineHeight: 1.5 }}>
-        {currentIndex >= 0 ? PRESETS[currentIndex].desc || "No tools enabled" : ""}
-        {current === "none" && <span> — agent will not use any tools</span>}
+        {currentIndex >= 0 ? PRESETS[currentIndex].desc || t("No tools enabled") : ""}
+        {current === "none" && <span> — {t("agent will not use any tools")}</span>}
       </div>
 
       {/* Track bar */}
@@ -123,7 +125,7 @@ export function ToolPanel({ tools, onPreset, onClose }: Props) {
       </div>
 
       <div style={{ fontSize: 10, color: "var(--text-dim)" }}>
-        takes effect on next turn
+        {t("takes effect on next turn")}
       </div>
     </div>
   );

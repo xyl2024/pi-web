@@ -8,6 +8,7 @@ import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
 import { useAudio } from "@/hooks/useAudio";
 import { useDragDrop } from "@/hooks/useDragDrop";
+import { useI18n, type Locale } from "@/hooks/useI18n";
 
 interface Props {
   session: SessionInfo | null;
@@ -23,38 +24,60 @@ interface Props {
   onContextUsageChange?: (usage: { percent: number | null; contextWindow: number; tokens: number | null } | null) => void;
 }
 
-function phaseLabel(phase: AgentPhase): string {
+function phaseLabel(phase: AgentPhase, t: ReturnType<typeof useI18n>["t"]): string {
   if (phase?.kind === "running_tools") {
     const names = phase.tools.map((t) => t.name);
-    if (names.length === 0) return "Running tool...";
-    if (names.length === 1) return `Running ${names[0]}...`;
-    if (names.length <= 3) return `Running ${names.join(", ")}...`;
-    return `Running ${names.slice(0, 2).join(", ")} (+${names.length - 2})...`;
+    if (names.length === 0) return t("Running tool...");
+    if (names.length === 1) return `${t("Running")} ${names[0]}...`;
+    if (names.length <= 3) return `${t("Running")} ${names.join(", ")}...`;
+    return `${t("Running")} ${names.slice(0, 2).join(", ")} (+${names.length - 2})...`;
   }
-  if (phase?.kind === "waiting_model") return "Waiting for model...";
-  return "Thinking...";
+  if (phase?.kind === "waiting_model") return t("Waiting for model...");
+  return t("Thinking...");
 }
 
-const TYPEWRITER_PHRASES = [
-  "ready when you are.",
-  "ask me anything.",
-  "let's build something cool.",
-  "explore your codebase.",
-  "draft an email.",
-  "summarize that paper.",
-  "plan your weekend.",
-  "explain it like I'm five.",
-  "pair-program with me.",
-  "fix that pesky bug.",
-  "translate to 中文.",
-  "write a haiku.",
-  "brainstorm ideas.",
-  "review my pull request.",
-  "what should we cook tonight?",
-  "ship it.",
-  "make it pretty.",
-  "rubber-duck with me.",
-];
+const TYPEWRITER_PHRASES: Record<Locale, string[]> = {
+  en: [
+    "ready when you are.",
+    "ask me anything.",
+    "let's build something cool.",
+    "explore your codebase.",
+    "draft an email.",
+    "summarize that paper.",
+    "plan your weekend.",
+    "explain it like I'm five.",
+    "pair-program with me.",
+    "fix that pesky bug.",
+    "translate to Chinese.",
+    "write a haiku.",
+    "brainstorm ideas.",
+    "review my pull request.",
+    "what should we cook tonight?",
+    "ship it.",
+    "make it pretty.",
+    "talk it through with me.",
+  ],
+  zh: [
+    "我准备好了。",
+    "随时问我任何问题。",
+    "一起做点有趣的东西。",
+    "探索你的代码库。",
+    "帮你起草一封邮件。",
+    "总结那篇论文。",
+    "规划你的周末。",
+    "像讲给五岁小孩一样解释。",
+    "和我一起结对编程。",
+    "修掉那个烦人的 bug。",
+    "翻译成中文。",
+    "写一首俳句。",
+    "一起头脑风暴。",
+    "帮我 review 这个 PR。",
+    "今晚吃什么？",
+    "发版吧。",
+    "把它变好看。",
+    "陪我梳理一下思路。",
+  ],
+};
 
 function Typewriter({ phrases }: { phrases: string[] }) {
   const [phraseIdx, setPhraseIdx] = useState(() => Math.floor(Math.random() * phrases.length));
@@ -91,6 +114,7 @@ function Typewriter({ phrases }: { phrases: string[] }) {
 }
 
 export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSessionStatsChange, onContextUsageChange }: Props) {
+  const { locale, t } = useI18n();
   const {
     loading, error, messages, entryIds, streamState,
     agentRunning, modelNames, modelList, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
@@ -198,7 +222,7 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-text-muted">
-        Loading session...
+        {t("Loading session...")}
       </div>
     );
   }
@@ -270,7 +294,7 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
                 <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--text)" }}>π</span>
                 <span style={{ fontSize: 22, color: "var(--text)", fontWeight: 700, letterSpacing: "-0.01em" }}>Pi Agent Web</span>
                 <span style={{ fontSize: 14, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                  <Typewriter phrases={TYPEWRITER_PHRASES} />
+                  <Typewriter phrases={TYPEWRITER_PHRASES[locale]} />
                 </span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
@@ -357,7 +381,7 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
 
             {agentRunning && !streamState.streamingMessage && (
               <div className="py-2 text-[13px] text-text-muted">
-                <span className="animate-[pulse_1.5s_infinite]">{phaseLabel(agentPhase)}</span>
+                <span className="animate-[pulse_1.5s_infinite]">{phaseLabel(agentPhase, t)}</span>
               </div>
             )}
 
