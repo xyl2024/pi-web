@@ -205,7 +205,12 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [customPathOpen, setCustomPathOpen] = useState(false);
   const [customPathValue, setCustomPathValue] = useState("");
+  const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
+  const [createSpaceValue, setCreateSpaceValue] = useState("");
+  const [createSpaceError, setCreateSpaceError] = useState<string | null>(null);
+  const [creatingSpace, setCreatingSpace] = useState(false);
   const customPathInputRef = useRef<HTMLInputElement>(null);
+  const createSpaceInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [explorerOpen, setExplorerOpen] = useState(true);
   const [explorerKey, setExplorerKey] = useState(0);
@@ -286,8 +291,42 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     }
     setCustomPathOpen(false);
     setCustomPathValue("");
+    setCreateSpaceOpen(false);
+    setCreateSpaceValue("");
+    setCreateSpaceError(null);
     setDropdownOpen(false);
   }, [customPathValue]);
+
+  const commitCreateSpace = useCallback(async () => {
+    const dirName = createSpaceValue.trim();
+    if (!dirName || creatingSpace) return;
+    setCreatingSpace(true);
+    setCreateSpaceError(null);
+    try {
+      const res = await fetch("/api/create-space", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dir_name: dirName }),
+      });
+      const data = await res.json() as { cwd?: string; error?: string };
+      if (!res.ok || !data.cwd) {
+        setCreateSpaceError(data.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      setSelectedCwd(data.cwd);
+      setCreateSpaceOpen(false);
+      setCreateSpaceValue("");
+      setCreateSpaceError(null);
+      setCustomPathOpen(false);
+      setCustomPathValue("");
+      setDropdownOpen(false);
+      setExplorerKey((k) => k + 1);
+    } catch (e) {
+      setCreateSpaceError(String(e));
+    } finally {
+      setCreatingSpace(false);
+    }
+  }, [createSpaceValue, creatingSpace]);
 
   const handleDefaultCwd = useCallback(async () => {
     try {
@@ -296,6 +335,11 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
       if (data.cwd) {
         setSelectedCwd(data.cwd);
         setDropdownOpen(false);
+        setCustomPathOpen(false);
+        setCustomPathValue("");
+        setCreateSpaceOpen(false);
+        setCreateSpaceValue("");
+        setCreateSpaceError(null);
       }
     } catch {
       // ignore
@@ -309,6 +353,9 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         setDropdownOpen(false);
         setCustomPathOpen(false);
         setCustomPathValue("");
+        setCreateSpaceOpen(false);
+        setCreateSpaceValue("");
+        setCreateSpaceError(null);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -483,6 +530,9 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                     setSelectedCwd(cwd);
                     setCustomPathOpen(false);
                     setCustomPathValue("");
+                    setCreateSpaceOpen(false);
+                    setCreateSpaceValue("");
+                    setCreateSpaceError(null);
                     setDropdownOpen(false);
                   }}
                   style={{
@@ -516,7 +566,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
               ))}
 
               {/* Default cwd shortcut */}
-              {!customPathOpen && (
+              {!customPathOpen && !createSpaceOpen && (
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDefaultCwd(); }}
                   style={{
@@ -541,12 +591,126 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 </button>
               )}
 
+              {/* Create space entry */}
+              {!customPathOpen && !createSpaceOpen ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCreateSpaceOpen(true);
+                    setCreateSpaceError(null);
+                    setTimeout(() => createSpaceInputRef.current?.focus(), 0);
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                    width: "100%",
+                    padding: "8px 10px",
+                    background: "none",
+                    border: "none",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    fontSize: 11,
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <path d="M1 3A1 1 0 0 1 2 2H4L5 3.5H8.5a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 1 8V3Z" />
+                    <line x1="5" y1="4.3" x2="5" y2="7.3" />
+                    <line x1="3.5" y1="5.8" x2="6.5" y2="5.8" />
+                  </svg>
+                  <span>Create space…</span>
+                </button>
+              ) : createSpaceOpen ? (
+                <div style={{ padding: "6px 8px", borderTop: recentCwds.length > 0 ? "none" : undefined }}>
+                  <input
+                    ref={createSpaceInputRef}
+                    value={createSpaceValue}
+                    onChange={(e) => {
+                      setCreateSpaceValue(e.target.value);
+                      setCreateSpaceError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void commitCreateSpace();
+                      if (e.key === "Escape") {
+                        setCreateSpaceOpen(false);
+                        setCreateSpaceValue("");
+                        setCreateSpaceError(null);
+                      }
+                    }}
+                    placeholder="dir name"
+                    disabled={creatingSpace}
+                    style={{
+                      width: "100%",
+                      fontSize: 11,
+                      fontFamily: "var(--font-mono)",
+                      padding: "5px 8px",
+                      border: "1px solid var(--accent)",
+                      borderRadius: 5,
+                      outline: "none",
+                      background: "var(--bg)",
+                      color: "var(--text)",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  {createSpaceError && (
+                    <div style={{ marginTop: 5, color: "#f87171", fontSize: 11, lineHeight: 1.35 }}>
+                      {createSpaceError}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 5, marginTop: 5 }}>
+                    <button
+                      onClick={() => { void commitCreateSpace(); }}
+                      disabled={creatingSpace || !createSpaceValue.trim()}
+                      style={{
+                        flex: 1,
+                        padding: "4px 0",
+                        background: "var(--accent)",
+                        border: "none",
+                        borderRadius: 5,
+                        color: "#fff",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: creatingSpace || !createSpaceValue.trim() ? "default" : "pointer",
+                        opacity: creatingSpace || !createSpaceValue.trim() ? 0.6 : 1,
+                      }}
+                    >
+                      {creatingSpace ? "Creating..." : "Create"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCreateSpaceOpen(false);
+                        setCreateSpaceValue("");
+                        setCreateSpaceError(null);
+                      }}
+                      disabled={creatingSpace}
+                      style={{
+                        flex: 1,
+                        padding: "4px 0",
+                        background: "var(--bg-hover)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 5,
+                        color: "var(--text-muted)",
+                        fontSize: 11,
+                        cursor: creatingSpace ? "default" : "pointer",
+                        opacity: creatingSpace ? 0.6 : 1,
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
               {/* Custom path entry */}
-              {!customPathOpen ? (
+              {!customPathOpen && !createSpaceOpen ? (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setCustomPathOpen(true);
+                    setCreateSpaceOpen(false);
+                    setCreateSpaceValue("");
+                    setCreateSpaceError(null);
                     setTimeout(() => customPathInputRef.current?.focus(), 0);
                   }}
                   style={{
@@ -569,7 +733,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                   </svg>
                   <span>Custom path…</span>
                 </button>
-              ) : (
+              ) : customPathOpen ? (
                 <div style={{ padding: "6px 8px", borderTop: recentCwds.length > 0 ? "none" : undefined }}>
                   <input
                     ref={customPathInputRef}
@@ -630,7 +794,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                     </button>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           )}
         </div>
