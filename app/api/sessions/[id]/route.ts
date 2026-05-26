@@ -9,15 +9,23 @@ import {
   listAllSessions,
 } from "@/lib/session-reader";
 import { getRpcSession } from "@/lib/rpc-manager";
+import { createLogger, elapsedMs } from "@/lib/logger";
+
+const log = createLogger("api/sessions/[id]");
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const startedAt = Date.now();
+  const url = new URL(req.url);
+  const includeState = url.searchParams.has("includeState");
+  log.debug("get session requested", { id, includeState });
   try {
     const filePath = await resolveSessionPath(id);
     if (!filePath) {
+      log.warn("get session not found", { id, durationMs: elapsedMs(startedAt) });
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
@@ -50,9 +58,8 @@ export async function GET(
       parentSessionId,
     } : null;
 
-    const url = new URL(req.url);
     let agentState: { running: boolean; state?: unknown } | undefined;
-    if (url.searchParams.has("includeState")) {
+    if (includeState) {
       const rpc = getRpcSession(id);
       if (rpc?.isAlive()) {
         const state = await rpc.send({ type: "get_state" });
@@ -62,6 +69,14 @@ export async function GET(
       }
     }
 
+    log.info("get session completed", {
+      id,
+      filePath,
+      messageCount: context.messages.length,
+      includeState,
+      agentRunning: agentState?.running,
+      durationMs: elapsedMs(startedAt),
+    });
     return NextResponse.json({
       sessionId: id,
       filePath,
@@ -72,6 +87,7 @@ export async function GET(
       ...(agentState !== undefined ? { agentState } : {}),
     });
   } catch (error) {
+    log.error("get session failed", { id, error, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
@@ -82,19 +98,30 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const startedAt = Date.now();
+  log.debug("rename session requested", { id });
   try {
     const { name } = await req.json() as { name?: string };
     if (typeof name !== "string") {
+      log.warn("rename session rejected", { id, reason: "missing name", durationMs: elapsedMs(startedAt) });
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
     const filePath = await resolveSessionPath(id);
     if (!filePath) {
+      log.warn("rename session not found", { id, durationMs: elapsedMs(startedAt) });
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
     const sm = SessionManager.open(filePath);
     sm.appendSessionInfo(name.trim());
+    log.info("rename session completed", {
+      id,
+      filePath,
+      nameLength: name.trim().length,
+      durationMs: elapsedMs(startedAt),
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
+    log.error("rename session failed", { id, error, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
@@ -105,9 +132,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const startedAt = Date.now();
+  log.debug("delete session requested", { id });
   try {
     const filePath = await resolveSessionPath(id);
     if (!filePath) {
+      log.warn("delete session not found", { id, durationMs: elapsedMs(startedAt) });
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
@@ -122,6 +152,7 @@ export async function DELETE(
     // Re-attach all direct children to this session's parent (cascade re-parent)
     // Scan sibling files in the same directory
     const dir = filePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
+    let reparentedChildren = 0;
     try {
       const files = readdirSync(dir).filter((f) => f.endsWith(".jsonl") && join(dir, f) !== filePath);
       for (const file of files) {
@@ -135,6 +166,7 @@ export async function DELETE(
             header.parentSession = parentSessionPath;
             lines[0] = JSON.stringify(header);
             writeFileSync(childPath, lines.join("\n"));
+            reparentedChildren += 1;
           }
         } catch { /* skip malformed */ }
       }
@@ -143,8 +175,15 @@ export async function DELETE(
     getRpcSession(id)?.destroy();
     unlinkSync(filePath);
     invalidateSessionPathCache(id);
+    log.info("delete session completed", {
+      id,
+      filePath,
+      reparentedChildren,
+      durationMs: elapsedMs(startedAt),
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
+    log.error("delete session failed", { id, error, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }

@@ -1,9 +1,13 @@
 import { AuthStorage, ModelRegistry, SettingsManager, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import { createLogger, elapsedMs } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
+const log = createLogger("api/models");
+
 export async function GET() {
+  const startedAt = Date.now();
   const nameMap = new Map<string, string>();
   let modelList: { id: string; name: string; provider: string }[] = [];
   let defaultModel: { provider: string; modelId: string } | null = null;
@@ -33,7 +37,15 @@ export async function GET() {
     if (provider) {
       defaultModel = { provider, modelId: modelId ?? available[0]?.id ?? "" };
     }
-  } catch { /* return empty */ }
+    log.info("models loaded", {
+      count: modelList.length,
+      defaultProvider: defaultModel?.provider,
+      defaultModelId: defaultModel?.modelId,
+      durationMs: elapsedMs(startedAt),
+    });
+  } catch (error) {
+    log.warn("models load failed; returning empty list", { error, durationMs: elapsedMs(startedAt) });
+  }
 
   return Response.json({ models: Object.fromEntries(nameMap), modelList, defaultModel, thinkingLevels, thinkingLevelMaps });
 }

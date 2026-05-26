@@ -54,6 +54,38 @@ npm install
 npm run dev   # 端口 30141
 ```
 
+## 后端日志
+
+pi-web 后端日志会同时输出到启动进程的终端，并追加写入日志文件。
+
+默认日志文件：
+
+```bash
+~/.pi-web/logs/pi-web-YYYY-MM-DD.log
+```
+
+可用环境变量调整：
+
+```bash
+PI_WEB_LOG_LEVEL=debug npm run dev              # debug/info/warn/error
+PI_WEB_LOG_FILE=/tmp/pi-web.log npm run dev     # 指定日志文件基名，实际写入 /tmp/pi-web-YYYY-MM-DD.log
+PI_WEB_LOG_DIR=/tmp/pi-web-logs npm run dev     # 指定日志目录，实际写入该目录下 pi-web-YYYY-MM-DD.log
+PI_WEB_LOG_FILE=off npm run dev                 # 关闭文件日志，仅输出终端
+```
+
+Docker Compose 默认将 `/home/node` 挂载为 volume，容器内默认日志路径为：
+
+```bash
+/home/node/.pi-web/logs/pi-web-YYYY-MM-DD.log
+```
+
+查看 Docker 日志：
+
+```bash
+docker compose logs -f pi-web
+tail -f ./volumes/pi_home/.pi-web/logs/pi-web-$(date +%F).log
+```
+
 ## 项目结构
 
 ```

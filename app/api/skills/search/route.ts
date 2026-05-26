@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { runNpx } from "@/lib/npx";
+import { createLogger, elapsedMs } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,7 @@ const DEFAULT_LIMIT = 50;
 const MIN_LIMIT = 1;
 const MAX_LIMIT = 50;
 const SEARCH_API_BASE = process.env.SKILLS_API_URL || "https://skills.sh";
+const log = createLogger("api/skills/search");
 
 export interface SkillSearchResult {
   package: string;
@@ -94,28 +96,56 @@ function parseInstallCount(installs: string): number {
 
 // POST /api/skills/search  body: { query: string, limit?: number }
 export async function POST(req: Request) {
+  const startedAt = Date.now();
   try {
     const { query, limit: rawLimit } = await req.json() as { query?: string; limit?: unknown };
-    if (!query?.trim()) return NextResponse.json({ error: "query required" }, { status: 400 });
+    if (!query?.trim()) {
+      log.warn("skill search rejected", { reason: "missing query", durationMs: elapsedMs(startedAt) });
+      return NextResponse.json({ error: "query required" }, { status: 400 });
+    }
     const limit = parseLimit(rawLimit);
+    const trimmedQuery = query.trim();
+    log.info("skill search requested", { query: trimmedQuery, limit });
 
     try {
-      const results = await searchSkillsApi(query.trim(), limit);
+      const results = await searchSkillsApi(trimmedQuery, limit);
+      log.info("skill search completed", {
+        query: trimmedQuery,
+        limit,
+        resultCount: results.length,
+        source: "api",
+        durationMs: elapsedMs(startedAt),
+      });
       return NextResponse.json({ results });
-    } catch {
-      const { stdout, stderr } = await runNpx(["skills", "find", query.trim()], {
+    } catch (error) {
+      log.warn("skill search api failed; falling back to npx", { query: trimmedQuery, error });
+      const { stdout, stderr } = await runNpx(["skills", "find", trimmedQuery], {
         timeout: 20000,
         env: { ...process.env, FORCE_COLOR: "0" },
       });
 
       const results = parseSearchOutput(stdout + stderr).slice(0, limit);
+      log.info("skill search completed", {
+        query: trimmedQuery,
+        limit,
+        resultCount: results.length,
+        source: "npx",
+        durationMs: elapsedMs(startedAt),
+      });
       return NextResponse.json({ results });
     }
   } catch (e: unknown) {
     const err = e as { stdout?: string; stderr?: string; message?: string };
     const raw = (err.stdout ?? "") + (err.stderr ?? "");
     const results = raw ? parseSearchOutput(raw) : [];
-    if (results.length > 0) return NextResponse.json({ results });
+    if (results.length > 0) {
+      log.warn("skill search recovered results from failed command", {
+        resultCount: results.length,
+        durationMs: elapsedMs(startedAt),
+      });
+      return NextResponse.json({ results });
+    }
+    log.error("skill search failed", { error: err.message ?? String(e), durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ error: err.message ?? String(e) }, { status: 500 });
   }
 }

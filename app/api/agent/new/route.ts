@@ -1,19 +1,34 @@
 import { NextResponse } from "next/server";
 import { existsSync } from "fs";
 import { startRpcSession } from "@/lib/rpc-manager";
+import { createLogger, elapsedMs } from "@/lib/logger";
+
+const log = createLogger("api/agent/new");
 
 // POST /api/agent/new  body: { cwd: string; type: string; message: string; ... }
 // Spawns a brand-new pi session and immediately sends the first command.
 // Returns { sessionId, data } where sessionId is pi's real session id.
 export async function POST(req: Request) {
+  const startedAt = Date.now();
   try {
     const body = await req.json() as { cwd?: string; [key: string]: unknown };
     const { cwd, ...command } = body;
+    const commandType = typeof command.type === "string" ? command.type : "unknown";
+    log.info("new agent session requested", {
+      cwd,
+      commandType,
+      provider: typeof command.provider === "string" ? command.provider : undefined,
+      modelId: typeof command.modelId === "string" ? command.modelId : undefined,
+      toolCount: Array.isArray(command.toolNames) ? command.toolNames.length : undefined,
+      thinkingLevel: typeof command.thinkingLevel === "string" ? command.thinkingLevel : undefined,
+    });
 
     if (!cwd || typeof cwd !== "string") {
+      log.warn("new agent session rejected", { reason: "missing cwd", durationMs: elapsedMs(startedAt) });
       return NextResponse.json({ error: "cwd is required" }, { status: 400 });
     }
     if (!existsSync(cwd)) {
+      log.warn("new agent session rejected", { cwd, reason: "cwd not found", durationMs: elapsedMs(startedAt) });
       return NextResponse.json({ error: `Directory does not exist: ${cwd}` }, { status: 400 });
     }
 
@@ -40,8 +55,15 @@ export async function POST(req: Request) {
 
     const result = await session.send(promptCommand);
 
+    log.info("new agent session completed", {
+      cwd,
+      sessionId: realSessionId,
+      commandType,
+      durationMs: elapsedMs(startedAt),
+    });
     return NextResponse.json({ success: true, sessionId: realSessionId, data: result });
   } catch (error) {
+    log.error("new agent session failed", { error, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }

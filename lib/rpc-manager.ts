@@ -1,6 +1,9 @@
 import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
 import { cacheSessionPath } from "./session-reader";
 import type { AgentSessionLike, ToolInfo } from "./pi-types";
+import { createLogger, elapsedMs } from "./logger";
+
+const log = createLogger("rpc-manager");
 
 // ============================================================================
 // Types
@@ -40,6 +43,10 @@ export class AgentSessionWrapper {
   }
 
   start(): void {
+    log.info("agent wrapper started", {
+      sessionId: this.sessionId,
+      sessionFile: this.sessionFile || undefined,
+    });
     this.unsubscribe = this.inner.subscribe((event: AgentEvent) => {
       this.resetIdleTimer();
       for (const l of this.listeners) l(event);
@@ -67,6 +74,7 @@ export class AgentSessionWrapper {
   async send(command: Record<string, unknown>): Promise<unknown> {
     this.resetIdleTimer();
     const type = command.type as string;
+    log.debug("agent command dispatch", { sessionId: this.sessionId, type });
 
     switch (type) {
       case "prompt": {
@@ -114,6 +122,8 @@ export class AgentSessionWrapper {
         const entryId = command.entryId as string;
         const sessionManager = this.inner.sessionManager;
         const currentSessionFile = this.inner.sessionFile;
+        const startedAt = Date.now();
+        log.info("fork requested", { sessionId: this.sessionId, entryId });
 
         if (!sessionManager.isPersisted()) return { cancelled: true };
         if (!currentSessionFile) throw new Error("Persisted session is missing a session file");
@@ -139,12 +149,23 @@ export class AgentSessionWrapper {
 
         const newSessionId = SessionManager.open(newSessionFile, sessionDir).getSessionId();
         cacheSessionPath(newSessionId, newSessionFile);
+        log.info("fork completed", {
+          sessionId: this.sessionId,
+          newSessionId,
+          newSessionFile,
+          durationMs: elapsedMs(startedAt),
+        });
         this.destroy();
         return { cancelled: false, newSessionId };
       }
 
       case "navigate_tree": {
         const result = await this.inner.navigateTree(command.targetId as string, {});
+        log.info("navigate tree completed", {
+          sessionId: this.sessionId,
+          targetId: command.targetId,
+          cancelled: result.cancelled,
+        });
         return { cancelled: result.cancelled };
       }
 
@@ -161,6 +182,8 @@ export class AgentSessionWrapper {
       }
 
       case "compact": {
+        const startedAt = Date.now();
+        log.info("compaction requested", { sessionId: this.sessionId });
         // pi's compact() does not guard against empty messagesToSummarize — use findCutPoint
         // to pre-check and throw a clean error instead of generating a useless empty summary.
         const { findCutPoint, DEFAULT_COMPACTION_SETTINGS } = await import("@earendil-works/pi-coding-agent");
@@ -177,6 +200,7 @@ export class AgentSessionWrapper {
           throw new Error("Conversation too short to compact");
         }
         const result = await this.inner.compact(command.customInstructions as string | undefined);
+        log.info("compaction completed", { sessionId: this.sessionId, durationMs: elapsedMs(startedAt) });
         return result;
       }
 
@@ -233,6 +257,10 @@ export class AgentSessionWrapper {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.unsubscribe?.();
     this.onDestroyCallback?.();
+    log.info("agent wrapper destroyed", {
+      sessionId: this.sessionId,
+      sessionFile: this.sessionFile || undefined,
+    });
   }
 }
 
@@ -278,14 +306,27 @@ export async function startRpcSession(
 ): Promise<{ session: AgentSessionWrapper; realSessionId: string }> {
   const registry = getRegistry();
   const locks = getLocks();
+  const startedAt = Date.now();
 
   const existing = registry.get(sessionId);
-  if (existing?.isAlive()) return { session: existing, realSessionId: sessionId };
+  if (existing?.isAlive()) {
+    log.debug("reuse live agent session", { sessionId });
+    return { session: existing, realSessionId: sessionId };
+  }
 
   const inflight = locks.get(sessionId);
-  if (inflight) return inflight;
+  if (inflight) {
+    log.debug("reuse inflight agent session start", { sessionId });
+    return inflight;
+  }
 
   const starting = (async () => {
+    log.info("start agent session", {
+      sessionId,
+      sessionFile: sessionFile || undefined,
+      cwd,
+      requestedToolCount: toolNames?.length,
+    });
     const { SessionManager, getAgentDir } = await import("@earendil-works/pi-coding-agent");
     const agentDir = getAgentDir();
 
@@ -331,8 +372,23 @@ export async function startRpcSession(
     wrapper.onDestroy(() => registry.delete(realSessionId));
     registry.set(realSessionId, wrapper);
 
+    log.info("agent session started", {
+      sessionId,
+      realSessionId,
+      sessionFile: realSessionFile,
+      durationMs: elapsedMs(startedAt),
+    });
     return { session: wrapper, realSessionId };
-  })().finally(() => locks.delete(sessionId));
+  })().catch((error) => {
+    log.error("agent session start failed", {
+      sessionId,
+      sessionFile: sessionFile || undefined,
+      cwd,
+      error,
+      durationMs: elapsedMs(startedAt),
+    });
+    throw error;
+  }).finally(() => locks.delete(sessionId));
 
   locks.set(sessionId, starting);
   return starting;

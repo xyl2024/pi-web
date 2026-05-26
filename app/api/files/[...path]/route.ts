@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { listAllSessions } from "@/lib/session-reader";
+import { createLogger, elapsedMs } from "@/lib/logger";
 
 const IGNORED_NAMES = new Set([
   "node_modules", ".git", ".next", "dist", "build", "__pycache__",
@@ -13,6 +14,7 @@ const IGNORED_SUFFIXES = [".pyc"];
 
 const TEXT_PREVIEW_MAX_BYTES = 256 * 1024;
 const IMAGE_PREVIEW_MAX_BYTES = 10 * 1024 * 1024;
+const log = createLogger("api/files");
 
 const IMAGE_EXT_TO_MIME: Record<string, string> = {
   png: "image/png",
@@ -252,13 +254,16 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
+  const startedAt = Date.now();
   try {
     const { path: segments } = await params;
     const filePath = filePathFromSegments(segments);
     const type = request.nextUrl.searchParams.get("type") ?? "list";
+    log.debug("file request received", { type, path: filePath });
 
     const allowedRoots = await getAllowedRoots();
     if (!isPathAllowed(filePath, allowedRoots)) {
+      log.warn("file request denied", { type, path: filePath, durationMs: elapsedMs(startedAt) });
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
@@ -266,34 +271,59 @@ export async function GET(
     try {
       stat = fs.statSync(filePath);
     } catch {
+      log.warn("file request not found", { type, path: filePath, durationMs: elapsedMs(startedAt) });
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
     if (type === "read") {
       if (!stat.isFile()) {
+        log.warn("file read rejected", { path: filePath, reason: "not a file", durationMs: elapsedMs(startedAt) });
         return NextResponse.json({ error: "Not a file" }, { status: 400 });
       }
       const imageMime = getImageMime(filePath);
       if (imageMime) {
         if (stat.size > IMAGE_PREVIEW_MAX_BYTES) {
+          log.warn("image read rejected", { path: filePath, size: stat.size, durationMs: elapsedMs(startedAt) });
           return NextResponse.json({ error: "Image too large (>10MB)" }, { status: 413 });
         }
+        log.info("image read streamed", {
+          path: filePath,
+          size: stat.size,
+          contentType: imageMime,
+          range: request.headers.get("range") ?? undefined,
+          durationMs: elapsedMs(startedAt),
+        });
         return streamFile(filePath, stat, imageMime, request.headers.get("range"));
       }
       const audioMime = getAudioMime(filePath);
       if (audioMime) {
+        log.info("audio read streamed", {
+          path: filePath,
+          size: stat.size,
+          contentType: audioMime,
+          range: request.headers.get("range") ?? undefined,
+          durationMs: elapsedMs(startedAt),
+        });
         return streamFile(filePath, stat, audioMime, request.headers.get("range"));
       }
       if (stat.size > TEXT_PREVIEW_MAX_BYTES) {
+        log.warn("text read rejected", { path: filePath, size: stat.size, durationMs: elapsedMs(startedAt) });
         return NextResponse.json({ error: "File too large for preview (>256KB)" }, { status: 413 });
       }
       const content = fs.readFileSync(filePath, "utf-8");
       const language = getLanguage(filePath);
+      log.info("text file read", {
+        path: filePath,
+        size: stat.size,
+        language,
+        durationMs: elapsedMs(startedAt),
+      });
       return NextResponse.json({ content, language, size: stat.size });
     }
 
     if (type === "watch") {
       if (!stat.isFile()) {
+        log.warn("file watch rejected", { path: filePath, reason: "not a file", durationMs: elapsedMs(startedAt) });
         return NextResponse.json({ error: "Not a file" }, { status: 400 });
       }
       let watcher: fs.FSWatcher | null = null;
@@ -319,17 +349,21 @@ export async function GET(
               }
             });
             watcher.on("error", () => {
+              log.warn("file watch error", { path: filePath, durationMs: elapsedMs(startedAt) });
               try { controller.close(); } catch { /* ignore */ }
             });
           } catch {
+            log.warn("file watch failed to start", { path: filePath, durationMs: elapsedMs(startedAt) });
             send("error", { message: "Failed to watch file" });
             controller.close();
           }
         },
         cancel() {
           try { watcher?.close(); } catch { /* ignore */ }
+          log.info("file watch closed", { path: filePath, durationMs: elapsedMs(startedAt) });
         },
       });
+      log.info("file watch connected", { path: filePath, durationMs: elapsedMs(startedAt) });
       return new Response(stream, {
         headers: {
           "Content-Type": "text/event-stream",
@@ -342,6 +376,7 @@ export async function GET(
 
     // type === "list"
     if (!stat.isDirectory()) {
+      log.warn("directory list rejected", { path: filePath, reason: "not a directory", durationMs: elapsedMs(startedAt) });
       return NextResponse.json({ error: "Not a directory" }, { status: 400 });
     }
 
@@ -369,8 +404,14 @@ export async function GET(
         return a!.name.localeCompare(b!.name);
       });
 
+    log.info("directory listed", {
+      path: filePath,
+      entryCount: entries.length,
+      durationMs: elapsedMs(startedAt),
+    });
     return NextResponse.json({ entries, path: filePath });
   } catch (error) {
+    log.error("file request failed", { error, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
