@@ -2,55 +2,74 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
-type Theme = "light" | "dark";
+export type ThemePreset = "default" | "midnight" | "synthwave" | "forest" | "sepia";
+
+export const PRESETS: ThemePreset[] = ["default", "midnight", "synthwave", "forest", "sepia"];
+
+export const PRESET_LABELS: Record<ThemePreset, string> = {
+  default: "默认",
+  midnight: "暗夜",
+  synthwave: "赛博",
+  forest: "森林",
+  sepia: "羊皮",
+};
+
+/** Whether a preset uses dark background tones — used for syntax-highlighter themes. */
+export const PRESET_IS_DARK: Record<ThemePreset, boolean> = {
+  default: false,
+  midnight: true,
+  synthwave: true,
+  forest: false,
+  sepia: false,
+};
+
+const PRESET_CLASS: Record<ThemePreset, string> = {
+  default: "theme-default",
+  midnight: "theme-midnight",
+  synthwave: "theme-synthwave",
+  forest: "theme-forest",
+  sepia: "theme-sepia",
+};
 
 const listeners = new Set<() => void>();
 
 function subscribe(cb: () => void): () => void {
   listeners.add(cb);
-  return () => {
-    listeners.delete(cb);
-  };
+  return () => { listeners.delete(cb); };
 }
 
-function getSnapshot(): Theme {
-  if (typeof document === "undefined") return "light";
-  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+function getSnapshot(): ThemePreset {
+  if (typeof document === "undefined") return "default";
+  for (const preset of PRESETS) {
+    if (document.documentElement.classList.contains(PRESET_CLASS[preset])) return preset;
+  }
+  return "default";
 }
 
-function getServerSnapshot(): Theme {
-  return "light";
+function getServerSnapshot(): ThemePreset {
+  return "default";
 }
 
 type ToggleOrigin = { x: number; y: number };
 
 export function useTheme() {
-  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const preset = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  const toggleTheme = useCallback((origin?: ToggleOrigin) => {
-    const next: Theme = getSnapshot() === "dark" ? "light" : "dark";
-
+  const setPreset = useCallback((next: ThemePreset, origin?: ToggleOrigin) => {
     const apply = () => {
-      if (next === "dark") {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
+      // Remove all preset classes, then add the new one
+      for (const cls of Object.values(PRESET_CLASS)) {
+        document.documentElement.classList.remove(cls);
       }
-      try {
-        localStorage.setItem("pi-theme", next);
-      } catch {
-        // ignore storage errors (private mode, quota, etc.)
-      }
+      document.documentElement.classList.add(PRESET_CLASS[next]);
+      try { localStorage.setItem("pi-theme", next); } catch { /* ignore */ }
       listeners.forEach((cb) => cb());
     };
 
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const supportsVT = typeof document.startViewTransition === "function";
 
-    if (!supportsVT || reduceMotion) {
-      apply();
-      return;
-    }
+    if (!supportsVT || reduceMotion) { apply(); return; }
 
     const x = origin?.x ?? window.innerWidth / 2;
     const y = origin?.y ?? window.innerHeight / 2;
@@ -76,10 +95,19 @@ export function useTheme() {
           },
         );
       })
-      .catch(() => {
-        // transition cancelled — ignore
-      });
+      .catch(() => { /* transition cancelled — ignore */ });
   }, []);
 
-  return { theme, toggleTheme, isDark: theme === "dark" };
+  const cycleTheme = useCallback((origin?: ToggleOrigin) => {
+    const idx = PRESETS.indexOf(preset);
+    const next = PRESETS[(idx + 1) % PRESETS.length];
+    setPreset(next, origin);
+  }, [preset, setPreset]);
+
+  return {
+    preset,
+    setPreset,
+    cycleTheme,
+    isDark: PRESET_IS_DARK[preset],
+  };
 }

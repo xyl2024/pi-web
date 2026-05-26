@@ -18,7 +18,8 @@
   --font-mono-font: var(--font-mono);
 }
 
-:root {
+/* ── Preset: default (light) ───────────────────────────────── */
+.theme-default {
   --bg: #ffffff;
   --bg-panel: #f5f5f5;
   --bg-hover: #eeeeee;
@@ -35,7 +36,8 @@
   --bg-subtle: rgba(0,0,0,0.03);
 }
 
-html.dark {
+/* ── Preset: midnight (dark) ───────────────────────────────── */
+.theme-midnight {
   --bg: #1a1a1a;
   --bg-panel: #242424;
   --bg-hover: #2e2e2e;
@@ -50,6 +52,60 @@ html.dark {
   --assistant-bg: #1a1a1a;
   --tool-bg: #1f2937;
   --bg-subtle: rgba(255,255,255,0.04);
+}
+
+/* ── Preset: synthwave ─────────────────────────────────────── */
+.theme-synthwave {
+  --bg: #1a1625;
+  --bg-panel: #251e35;
+  --bg-hover: #2f2845;
+  --bg-selected: #3a3355;
+  --border: #4a4265;
+  --text: #f0e8ff;
+  --text-muted: #a895c8;
+  --text-dim: #7a6598;
+  --accent: #ff6ec7;
+  --accent-hover: #ff8fd5;
+  --user-bg: #2d1f42;
+  --assistant-bg: #1a1625;
+  --tool-bg: #251e35;
+  --bg-subtle: rgba(255,110,199,0.08);
+}
+
+/* ── Preset: forest ────────────────────────────────────────── */
+.theme-forest {
+  --bg: #f4f1e8;
+  --bg-panel: #e8e4d9;
+  --bg-hover: #ddd8cc;
+  --bg-selected: #d1cbbd;
+  --border: #c4b89e;
+  --text: #2c2416;
+  --text-muted: #6b5c3e;
+  --text-dim: #9a8665;
+  --accent: #2e7d32;
+  --accent-hover: #1b5e20;
+  --user-bg: #e8f5e9;
+  --assistant-bg: #f4f1e8;
+  --tool-bg: #e0dbd0;
+  --bg-subtle: rgba(46,125,50,0.06);
+}
+
+/* ── Preset: sepia ─────────────────────────────────────────── */
+.theme-sepia {
+  --bg: #f7f0e3;
+  --bg-panel: #ede0cc;
+  --bg-hover: #e3d2b6;
+  --bg-selected: #d8c5a4;
+  --border: #c9b48a;
+  --text: #3d2e1a;
+  --text-muted: #7a5c30;
+  --text-dim: #a88650;
+  --accent: #8b4513;
+  --accent-hover: #a0522d;
+  --user-bg: #fdf3dc;
+  --assistant-bg: #f7f0e3;
+  --tool-bg: #ece0ce;
+  --bg-subtle: rgba(139,69,19,0.07);
 }
 
 /* Theme toggle: circular wipe via View Transitions API.
