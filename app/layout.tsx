@@ -23,7 +23,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("pi-theme");if(t==="dark")document.documentElement.classList.add("dark")}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem("pi-theme");if(t)document.documentElement.classList.add("theme-"+t)}catch(e){}})();`,
           }}
         />
       </head>
