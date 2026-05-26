@@ -1,0 +1,20 @@
+services:
+  pi-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Pass the host's ~/.pi path so the build can copy it into the image.
+        PI_HOME: ${HOME}
+
+    volumes:
+      # 如果要复用自己的pi配置，将 ~/.pi 拷贝到./volumes/pi_home中，并剔除.pi/agent/sessions
+      - ./volumes/pi_home:/home/node:rw
+
+    ports:
+      - "30141:30141"
+
+    restart: unless-stopped
+
+    environment:
+      HOME: /home/node

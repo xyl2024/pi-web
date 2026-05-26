@@ -1,0 +1,32 @@
+# Dependencies
+node_modules
+
+# Build output (rebuilt inside Docker via multi-stage build)
+.next
+
+# Development files
+AGENTS.md
+README.md
+docs
+*.tsbuildinfo
+eslint.config.mjs
+
+# VCS
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+
+# Data (should not be sent to build context)
+volumes
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env overrides
+.env
+.env.*
+!.env.example
