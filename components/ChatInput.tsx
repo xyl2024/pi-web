@@ -348,6 +348,12 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (selectedSlashResource && e.shiftKey && e.key === "Backspace") {
+        e.preventDefault();
+        setSelectedSlashResource(null);
+        return;
+      }
+
       if (slashMenuOpen && slashQuery && filteredSlashResources.length > 0) {
         if (e.key === "ArrowDown") {
           e.preventDefault();
@@ -359,7 +365,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           setSlashActiveIndex((i) => (i - 1 + filteredSlashResources.length) % filteredSlashResources.length);
           return;
         }
-        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+        if ((e.key === " " || e.code === "Space") && !e.shiftKey && !e.nativeEvent.isComposing) {
           e.preventDefault();
           selectSlashResource(filteredSlashResources[slashActiveIndex] ?? filteredSlashResources[0]);
           return;
@@ -380,7 +386,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         }
       }
     },
-    [isStreaming, onSteer, onFollowUp, sendQueued, handleSend, slashMenuOpen, slashQuery, filteredSlashResources, slashActiveIndex, selectSlashResource]
+    [isStreaming, onSteer, onFollowUp, sendQueued, handleSend, slashMenuOpen, slashQuery, filteredSlashResources, slashActiveIndex, selectSlashResource, selectedSlashResource]
   );
 
   const handleInput = useCallback(() => {
