@@ -12,7 +12,7 @@ import { PromptsConfig } from "./PromptsConfig";
 import { BranchNavigator } from "./BranchNavigator";
 import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
-import type { SessionInfo, SessionTreeNode } from "@/lib/types";
+import type { SessionInfo, SessionTreeNode, AgentsFile } from "@/lib/types";
 import type { ChatInputHandle } from "./ChatInput";
 
 export function AppShell() {
@@ -57,6 +57,14 @@ export function AppShell() {
     setSystemPrompt(prompt);
   }, []);
 
+  // Agents files (AGENTS.md) — populated by ChatWindow, displayed in context panel
+  const [agentsFiles, setAgentsFiles] = useState<AgentsFile[]>([]);
+  const [selectedAgentsFileIndex, setSelectedAgentsFileIndex] = useState<number>(0);
+  const handleAgentsFilesChange = useCallback((files: AgentsFile[]) => {
+    setAgentsFiles(files);
+    setSelectedAgentsFileIndex(0);
+  }, []);
+
   // Session stats (tokens + cost) — populated by ChatWindow, displayed in top bar
   const [sessionStats, setSessionStats] = useState<{ tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null>(null);
   const handleSessionStatsChange = useCallback((stats: { tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null) => {
@@ -70,10 +78,10 @@ export function AppShell() {
   }, []);
 
   // Single active panel — only one dropdown open at a time
-  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | null>(null);
+  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "context" | null>(null);
   const [topPanelPos, setTopPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  const toggleTopPanel = useCallback((panel: "branches" | "system") => {
+  const toggleTopPanel = useCallback((panel: "branches" | "system" | "context") => {
     setActiveTopPanel((cur) => cur === panel ? null : panel);
   }, []);
 
@@ -123,6 +131,7 @@ export function AppShell() {
     setBranchTree([]);
     setBranchActiveLeafId(null);
     setSystemPrompt(null);
+    setAgentsFiles([]);
     setActiveTopPanel(null);
     router.replace("/", { scroll: false });
   }, [router]);
@@ -132,6 +141,7 @@ export function AppShell() {
     setSelectedSession(session);
     setSessionKey((k) => k + 1);
     setSystemPrompt(null);
+    setAgentsFiles([]);
     setInitialSessionRestored(true);
     if (isRestore) {
       // Suppress the redundant sessionKey bump that would come from the
@@ -153,6 +163,7 @@ export function AppShell() {
     setBranchTree([]);
     setBranchActiveLeafId(null);
     setSystemPrompt(null);
+    setAgentsFiles([]);
     setActiveTopPanel(null);
     router.replace("/", { scroll: false });
   }, [router]);
@@ -491,6 +502,35 @@ export function AppShell() {
                 </svg>
                 <span>{t("System")}</span>
               </button>
+              <button
+                onClick={() => toggleTopPanel("context")}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  height: "100%", padding: "0 12px",
+                  background: activeTopPanel === "context" ? "var(--bg-selected)" : "none",
+                  border: "none",
+                  borderTop: activeTopPanel === "context" ? "2px solid var(--accent)" : "2px solid transparent",
+                  borderRight: "1px solid var(--border)",
+                  cursor: agentsFiles.length > 0 ? "pointer" : "default",
+                  color: agentsFiles.length > 0 ? (activeTopPanel === "context" ? "var(--text)" : "var(--text-muted)") : "var(--text-dim)",
+                  fontSize: 11, whiteSpace: "nowrap", transition: "color 0.1s, background 0.1s",
+                  opacity: agentsFiles.length > 0 ? 1 : 0.5,
+                }}
+                onMouseEnter={(e) => { if (agentsFiles.length > 0) e.currentTarget.style.color = "var(--text)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = agentsFiles.length > 0 ? (activeTopPanel === "context" ? "var(--text)" : "var(--text-muted)") : "var(--text-dim)"; }}
+                title={agentsFiles.length > 0 ? `${agentsFiles.length} AGENTS.md file(s)` : t("No AGENTS.md files found")}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                  <line x1="8" y1="7" x2="16" y2="7" />
+                  <line x1="8" y1="11" x2="14" y2="11" />
+                </svg>
+                <span>{t("Context")}</span>
+                {agentsFiles.length > 1 && (
+                  <span style={{ fontSize: 10, opacity: 0.7 }}>({agentsFiles.length})</span>
+                )}
+              </button>
             </div>
           )}
           {/* Session stats — right-aligned in top bar */}
@@ -615,6 +655,55 @@ export function AppShell() {
                   )}
                 </div>
               )}
+              {activeTopPanel === "context" && (
+                <div style={{
+                  background: "var(--bg-panel)",
+                  borderBottom: "1px solid var(--border)",
+                }}>
+                  {agentsFiles.length === 0 ? (
+                    <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
+                      {t("No AGENTS.md files found for this project")}
+                    </div>
+                  ) : (
+                    <>
+                      {agentsFiles.length > 1 && (
+                        <div style={{ display: "flex", gap: 4, padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
+                          {agentsFiles.map((file, idx) => (
+                            <button
+                              key={file.path}
+                              onClick={() => setSelectedAgentsFileIndex(idx)}
+                              style={{
+                                padding: "4px 10px",
+                                fontSize: 11,
+                                background: selectedAgentsFileIndex === idx ? "var(--bg-selected)" : "none",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                cursor: "pointer",
+                                color: selectedAgentsFileIndex === idx ? "var(--text)" : "var(--text-muted)",
+                                transition: "background 0.1s, color 0.1s",
+                              }}
+                            >
+                              {file.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{
+                        maxHeight: "min(600px, 75vh)",
+                        overflowY: "auto",
+                        padding: "12px 16px",
+                        color: "var(--text-muted)",
+                        fontSize: 12,
+                        lineHeight: 1.6,
+                        whiteSpace: "pre-wrap",
+                        fontFamily: "var(--font-mono)",
+                      }}>
+                        {agentsFiles[selectedAgentsFileIndex]?.content}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -634,6 +723,7 @@ export function AppShell() {
               chatInputRef={chatInputRef}
               onBranchDataChange={handleBranchDataChange}
               onSystemPromptChange={handleSystemPromptChange}
+              onAgentsFilesChange={handleAgentsFilesChange}
               onSessionStatsChange={handleSessionStatsChange}
               onContextUsageChange={handleContextUsageChange}
             />

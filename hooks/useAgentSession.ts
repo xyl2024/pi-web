@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useReducer } from "react";
-import type { AgentMessage, SessionInfo, SessionTreeNode } from "@/lib/types";
+import type { AgentMessage, SessionInfo, SessionTreeNode, AgentsFile } from "@/lib/types";
 import { normalizeToolCalls } from "@/lib/normalize";
 import { sendAgentCommand } from "@/lib/agent-client";
 import type { ToolEntry } from "@/components/ToolPanel";
@@ -82,6 +82,12 @@ export interface AttachedImage {
   previewUrl: string;
 }
 
+export interface ChatInputHandle {
+  insertText: (text: string) => void;
+  insertIfEmpty: (content: string) => void;
+  addImages: (files: File[]) => void;
+}
+
 export function useAgentSession(opts: UseAgentSessionOptions) {
   const {
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
@@ -108,6 +114,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [retryInfo, setRetryInfo] = useState<{ attempt: number; maxAttempts: number; errorMessage?: string } | null>(null);
   const [contextUsage, setContextUsage] = useState<{ percent: number | null; contextWindow: number; tokens: number | null } | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
+  const [agentsFiles, setAgentsFiles] = useState<AgentsFile[]>([]);
   const [forkingEntryId, setForkingEntryId] = useState<string | null>(null);
   const [currentModelOverride, setCurrentModelOverride] = useState<{ provider: string; modelId: string } | null>(null);
   const [pendingModel, setPendingModel] = useState<{ provider: string; modelId: string } | null>(null);
@@ -211,6 +218,18 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       console.error("Failed to load tools:", e);
     }
   }, [setToolPresetState]);
+
+  const loadAgentsFiles = useCallback(async (cwd: string) => {
+    try {
+      const res = await fetch(`/api/context?cwd=${encodeURIComponent(cwd)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json() as { files: AgentsFile[] };
+      setAgentsFiles(d.files ?? []);
+    } catch (e) {
+      console.error("Failed to load agents files:", e);
+      setAgentsFiles([]);
+    }
+  }, []);
 
   const connectEvents = useCallback((sid: string) => {
     if (eventSourceRef.current) {
@@ -575,6 +594,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           if (agentState.state.thinkingLevel !== undefined) setThinkingLevel((agentState.state.thinkingLevel as ThinkingLevelOption) ?? "auto");
         }
       });
+      // Load agents files for this session's cwd
+      if (session.cwd) loadAgentsFiles(session.cwd);
+    } else if (newSessionCwd) {
+      // New session: just load agents files for the cwd
+      loadAgentsFiles(newSessionCwd);
     }
     return () => {
       eventSourceRef.current?.close();
@@ -586,6 +610,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   useEffect(() => {
     onSystemPromptChange?.(systemPrompt);
   }, [systemPrompt, onSystemPromptChange]);
+
+  // Load agents files whenever cwd changes (session switch or new session)
+  useEffect(() => {
+    const cwd = session?.cwd ?? newSessionCwd;
+    if (cwd) loadAgentsFiles(cwd);
+    else setAgentsFiles([]);
+  }, [session?.cwd, newSessionCwd, loadAgentsFiles]);
 
   useEffect(() => {
     if (!onBranchDataChange) return;
@@ -642,13 +673,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     isCompacting, compactError, currentModel, displayModel, sessionStats,
     agentPhase,
     isNew,
+    agentsFiles,
     // Refs
     sessionIdRef, eventSourceRef, messagesEndRef, scrollContainerRef,
     lastUserMsgRef, pendingScrollToUserRef, initialScrollDoneRef,
     // Actions
     handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
     handleCompact, handleSteer, handleFollowUp, handleAbortCompaction,
-    handleToolPresetChange, handleThinkingLevelChange, loadTools, setActiveLeafId, setData, setMessages,
+    handleToolPresetChange, handleThinkingLevelChange, loadTools, loadAgentsFiles, setActiveLeafId, setData, setMessages,
     dispatch, setAgentRunning, setForkingEntryId,
     // Subscriptions
     handleAgentEventRef,

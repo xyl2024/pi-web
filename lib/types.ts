@@ -201,3 +201,9 @@ export interface RpcSessionState {
   sessionName?: string;
   messageCount: number;
 }
+
+export interface AgentsFile {
+  path: string;
+  content: string;
+  label: string;
+}
