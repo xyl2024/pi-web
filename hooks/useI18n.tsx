@@ -47,6 +47,7 @@ const ZH_TRANSLATIONS = {
   "Steer": "插话",
   "Follow-up": "排队发送",
   "Attach image": "附加图片",
+  "↑↓ switch, ←→ page": "↑↓切换，←→翻页",
   "Change thinking level": "切换推理强度",
   "Change tool preset": "切换工具预设",
   "Stop compaction": "停止压缩",

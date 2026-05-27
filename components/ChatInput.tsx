@@ -63,6 +63,7 @@ const TOOL_PRESETS = ["off", "default", "full"] as const;
 const TOOL_PRESET_MAP: Record<"off" | "default" | "full", "none" | "default" | "full"> = { off: "none", default: "default", full: "full" };
 
 const THINKING_LEVELS = ["auto", "off", "minimal", "low", "medium", "high", "xhigh"] as const;
+const SLASH_PAGE_SIZE = 5;
 
 function getSlashQuery(value: string, cursor: number): { start: number; query: string } | null {
   const beforeCursor = value.slice(0, cursor);
@@ -160,6 +161,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const [selectedSlashResource, setSelectedSlashResource] = useState<SlashResource | null>(null);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashActiveIndex, setSlashActiveIndex] = useState(0);
+  const [slashPage, setSlashPage] = useState(0);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [modelDropdownRect, setModelDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const [toolDropdownOpen, setToolDropdownOpen] = useState(false);
@@ -181,18 +183,34 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       return item.command.toLowerCase().includes(q) ||
         item.name.toLowerCase().includes(q) ||
         item.description.toLowerCase().includes(q);
-    }).slice(0, 10);
+    });
   }, [slashMenuOpen, slashQuery, slashResources]);
+  const slashPageCount = Math.max(1, Math.ceil(filteredSlashResources.length / SLASH_PAGE_SIZE));
+  const slashCurrentPage = Math.min(slashPage, slashPageCount - 1);
+  const visibleSlashResources = useMemo(() => {
+    const start = slashCurrentPage * SLASH_PAGE_SIZE;
+    return filteredSlashResources.slice(start, start + SLASH_PAGE_SIZE);
+  }, [filteredSlashResources, slashCurrentPage]);
 
   useEffect(() => {
     setSelectedSlashResource(null);
     setSlashMenuOpen(false);
     setSlashActiveIndex(0);
+    setSlashPage(0);
   }, [slashResourceKey]);
 
   useEffect(() => {
     setSlashActiveIndex(0);
+    setSlashPage(0);
   }, [slashQuery?.query, slashResources]);
+
+  useEffect(() => {
+    setSlashPage((page) => Math.min(page, slashPageCount - 1));
+  }, [slashPageCount]);
+
+  useEffect(() => {
+    setSlashActiveIndex((index) => Math.min(index, Math.max(0, visibleSlashResources.length - 1)));
+  }, [visibleSlashResources.length]);
 
   const selectedPromptResource = selectedSlashResource?.source === "prompt" ? selectedSlashResource : null;
   const selectedPromptPreview = selectedPromptResource
@@ -334,6 +352,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     setValue(nextValue);
     setSlashMenuOpen(false);
     setSlashActiveIndex(0);
+    setSlashPage(0);
 
     requestAnimationFrame(() => {
       const nextCursor = query ? query.start : cursor;
@@ -354,20 +373,32 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         return;
       }
 
-      if (slashMenuOpen && slashQuery && filteredSlashResources.length > 0) {
+      if (slashMenuOpen && slashQuery && visibleSlashResources.length > 0) {
         if (e.key === "ArrowDown") {
           e.preventDefault();
-          setSlashActiveIndex((i) => (i + 1) % filteredSlashResources.length);
+          setSlashActiveIndex((i) => (i + 1) % visibleSlashResources.length);
           return;
         }
         if (e.key === "ArrowUp") {
           e.preventDefault();
-          setSlashActiveIndex((i) => (i - 1 + filteredSlashResources.length) % filteredSlashResources.length);
+          setSlashActiveIndex((i) => (i - 1 + visibleSlashResources.length) % visibleSlashResources.length);
+          return;
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          setSlashPage((page) => Math.min(page + 1, slashPageCount - 1));
+          setSlashActiveIndex(0);
+          return;
+        }
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          setSlashPage((page) => Math.max(page - 1, 0));
+          setSlashActiveIndex(0);
           return;
         }
         if ((e.key === " " || e.code === "Space") && !e.shiftKey && !e.nativeEvent.isComposing) {
           e.preventDefault();
-          selectSlashResource(filteredSlashResources[slashActiveIndex] ?? filteredSlashResources[0]);
+          selectSlashResource(visibleSlashResources[slashActiveIndex] ?? visibleSlashResources[0]);
           return;
         }
       }
@@ -386,7 +417,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         }
       }
     },
-    [isStreaming, onSteer, onFollowUp, sendQueued, handleSend, slashMenuOpen, slashQuery, filteredSlashResources, slashActiveIndex, selectSlashResource, selectedSlashResource]
+    [isStreaming, onSteer, onFollowUp, sendQueued, handleSend, slashMenuOpen, slashQuery, visibleSlashResources, slashActiveIndex, slashPageCount, selectSlashResource, selectedSlashResource]
   );
 
   const handleInput = useCallback(() => {
@@ -758,53 +789,60 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 borderRadius: 8, boxShadow: "0 -4px 16px rgba(0,0,0,0.10)",
                 overflow: "hidden",
               }}>
-                {filteredSlashResources.length > 0 ? filteredSlashResources.map((item, index) => {
-                  const active = index === slashActiveIndex;
-                  return (
-                    <button
-                      key={`${item.source}:${item.path}`}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        selectSlashResource(item);
-                      }}
-                      style={{
-                        width: "100%", display: "grid", gridTemplateColumns: "72px minmax(0, 1fr)",
-                        gap: 10, padding: "8px 10px",
-                        background: active ? "var(--bg-selected)" : "none",
-                        border: "none", borderBottom: index < filteredSlashResources.length - 1 ? "1px solid color-mix(in srgb, var(--border) 55%, transparent)" : "none",
-                        color: active ? "var(--text)" : "var(--text-muted)",
-                        cursor: "pointer", textAlign: "left",
-                      }}
-                    >
-                      <span style={{
-                        alignSelf: "start", justifySelf: "start",
-                        padding: "2px 6px", borderRadius: 5,
-                        background: item.source === "skill" ? "rgba(5,150,105,0.10)" : "rgba(37,99,235,0.10)",
-                        color: item.source === "skill" ? "#059669" : "var(--accent)",
-                        fontSize: 10, fontWeight: 700, textTransform: "uppercase",
-                      }}>
-                        {item.source}
-                      </span>
-                      <span style={{ minWidth: 0 }}>
-                        <span style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
-                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            /{item.command}
+                {visibleSlashResources.length > 0 ? (
+                  <>
+                    {visibleSlashResources.map((item, index) => {
+                      const active = index === slashActiveIndex;
+                      return (
+                        <button
+                          key={`${item.source}:${item.path}`}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            selectSlashResource(item);
+                          }}
+                          style={{
+                            width: "100%", display: "grid", gridTemplateColumns: "72px minmax(0, 1fr)",
+                            gap: 10, padding: "8px 10px",
+                            background: active ? "var(--bg-selected)" : "none",
+                            border: "none", borderBottom: "1px solid color-mix(in srgb, var(--border) 55%, transparent)",
+                            color: active ? "var(--text)" : "var(--text-muted)",
+                            cursor: "pointer", textAlign: "left",
+                          }}
+                        >
+                          <span style={{
+                            alignSelf: "start", justifySelf: "start",
+                            padding: "2px 6px", borderRadius: 5,
+                            background: item.source === "skill" ? "rgba(5,150,105,0.10)" : "rgba(37,99,235,0.10)",
+                            color: item.source === "skill" ? "#059669" : "var(--accent)",
+                            fontSize: 10, fontWeight: 700, textTransform: "uppercase",
+                          }}>
+                            {item.source}
                           </span>
-                          {item.argumentHint && (
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", whiteSpace: "nowrap" }}>
-                              {item.argumentHint}
+                          <span style={{ minWidth: 0 }}>
+                            <span style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+                              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                /{item.command}
+                              </span>
+                              {item.argumentHint && (
+                                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", whiteSpace: "nowrap" }}>
+                                  {item.argumentHint}
+                                </span>
+                              )}
                             </span>
-                          )}
-                        </span>
-                        {item.description && (
-                          <span style={{ display: "block", marginTop: 2, fontSize: 11, color: "var(--text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {item.description}
+                            {item.description && (
+                              <span style={{ display: "block", marginTop: 2, fontSize: 11, color: "var(--text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {item.description}
+                              </span>
+                            )}
                           </span>
-                        )}
-                      </span>
-                    </button>
-                  );
-                }) : (
+                        </button>
+                      );
+                    })}
+                    <div style={{ padding: "6px 10px", fontSize: 11, color: "var(--text-dim)", textAlign: "right" }}>
+                      {t("↑↓ switch, ←→ page")}
+                    </div>
+                  </>
+                ) : (
                   <div style={{ padding: "10px 12px", fontSize: 12, color: "var(--text-dim)" }}>
                     {t("No matches")}
                   </div>
