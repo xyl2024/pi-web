@@ -217,14 +217,10 @@ const ZH_TRANSLATIONS = {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 function detectInitialLocale(): Locale {
+  // Always return "en" during SSR to ensure hydration match.
+  // The real locale will be set in useEffect after mount.
   if (typeof window === "undefined") return "en";
-  try {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved === "en" || saved === "zh") return saved;
-  } catch {
-    // ignore
-  }
-  return window.navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
+  return "en"; // placeholder until useEffect runs
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
@@ -244,8 +240,20 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, [locale, setLocale]);
 
   useEffect(() => {
-    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-  }, [locale]);
+    // Read real locale after hydration to avoid mismatch
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved === "en" || saved === "zh") {
+        setLocaleState(saved);
+        document.documentElement.lang = saved === "zh" ? "zh-CN" : "en";
+      } else if (navigator.language.toLowerCase().startsWith("zh")) {
+        setLocaleState("zh");
+        document.documentElement.lang = "zh-CN";
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const value = useMemo<I18nContextValue>(() => ({
     locale,
