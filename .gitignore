@@ -42,3 +42,5 @@ next-env.d.ts
 .factory
 
 volumes
+
+.playwright-cli

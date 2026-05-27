@@ -245,7 +245,7 @@ export function BranchNavigator({ tree, activeLeafId, onLeafChange, inline, cont
   const noBranchReason = !hasSession
     ? t("No active session")
     : !hasBranch(tree)
-      ? t("This session has no branches")
+      ? t("This session has no branches (you can click `Edit from here` on any user message to start a new session branch)")
       : null;
 
   // Find first meaningful node (skip pure linear prefix)
@@ -384,7 +384,7 @@ export function BranchNavigator({ tree, activeLeafId, onLeafChange, inline, cont
             </div>
           ) : (
             <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
-              {noBranchReason ?? t("This session has no branches")}
+              {noBranchReason ?? t("This session has no branches (you can click `Edit from here` on any user message to start a new session branch)")}
             </div>
           )}
         </div>
