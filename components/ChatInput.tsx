@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useCallback, useEffect, useImperativeHandle, forwardRef, KeyboardEvent } from "react";
+import React, { useRef, useState, useCallback, useEffect, useImperativeHandle, forwardRef, KeyboardEvent, useMemo } from "react";
 import { useI18n } from "@/hooks/useI18n";
 
 export interface AttachedImage {
@@ -13,6 +13,17 @@ interface ModelOption {
   provider: string;
   modelId: string;
   name: string;
+}
+
+export interface SlashResource {
+  source: "prompt" | "skill";
+  name: string;
+  command: string;
+  description: string;
+  argumentHint?: string;
+  path: string;
+  location?: string;
+  content: string;
 }
 
 interface Props {
@@ -38,6 +49,8 @@ interface Props {
   retryInfo?: { attempt: number; maxAttempts: number; errorMessage?: string } | null;
   soundEnabled?: boolean;
   onSoundToggle?: () => void;
+  slashResources?: SlashResource[];
+  slashResourceKey?: string;
 }
 
 export interface ChatInputHandle {
@@ -50,15 +63,103 @@ const TOOL_PRESETS = ["off", "default", "full"] as const;
 const TOOL_PRESET_MAP: Record<"off" | "default" | "full", "none" | "default" | "full"> = { off: "none", default: "default", full: "full" };
 
 const THINKING_LEVELS = ["auto", "off", "minimal", "low", "medium", "high", "xhigh"] as const;
+
+function getSlashQuery(value: string, cursor: number): { start: number; query: string } | null {
+  const beforeCursor = value.slice(0, cursor);
+  const match = beforeCursor.match(/(^|\s)\/([^\s/]*)$/);
+  if (!match) return null;
+  return {
+    start: beforeCursor.length - match[2].length - 1,
+    query: match[2],
+  };
+}
+
+function parseCommandArgs(argsString: string): string[] {
+  const args: string[] = [];
+  let current = "";
+  let inQuote: "\"" | "'" | null = null;
+
+  for (const char of argsString) {
+    if (inQuote) {
+      if (char === inQuote) inQuote = null;
+      else current += char;
+    } else if (char === "\"" || char === "'") {
+      inQuote = char;
+    } else if (/\s/.test(char)) {
+      if (current) {
+        args.push(current);
+        current = "";
+      }
+    } else {
+      current += char;
+    }
+  }
+
+  if (current) args.push(current);
+  return args;
+}
+
+function substitutePromptArgs(content: string, args: string[]): string {
+  let result = content;
+  result = result.replace(/\$(\d+)/g, (_, num: string) => args[parseInt(num, 10) - 1] ?? "");
+  result = result.replace(/\$\{@:(\d+)(?::(\d+))?\}/g, (_, startStr: string, lengthStr?: string) => {
+    const start = Math.max(0, parseInt(startStr, 10) - 1);
+    if (lengthStr) return args.slice(start, start + parseInt(lengthStr, 10)).join(" ");
+    return args.slice(start).join(" ");
+  });
+  const allArgs = args.join(" ");
+  result = result.replace(/\$ARGUMENTS/g, allArgs);
+  result = result.replace(/\$@/g, allArgs);
+  return result;
+}
+
+function hasPromptArgPlaceholder(content: string): boolean {
+  return /\$(\d+|@|ARGUMENTS)|\$\{@:\d+(?::\d+)?\}/.test(content);
+}
+
+function formatSlashContent(item: SlashResource, argsString = "", appendUnusedArgs = false): string {
+  const content = item.content.trim();
+  if (item.source === "prompt") {
+    const expanded = substitutePromptArgs(content, parseCommandArgs(argsString));
+    const args = argsString.trim();
+    if (appendUnusedArgs && args && !hasPromptArgPlaceholder(content)) {
+      return `${expanded}\n\n${args}`;
+    }
+    return expanded;
+  }
+
+  const name = item.name.replace(/"/g, "&quot;");
+  const path = item.path.replace(/"/g, "&quot;");
+  const skillBlock = `<skill name="${name}" location="${path}">\n${content}\n</skill>`;
+  const args = argsString.trim();
+  return args ? `${skillBlock}\n\n${args}` : skillBlock;
+}
+
+function findDirectSlashResource(message: string, resources: SlashResource[]): { item: SlashResource; args: string } | null {
+  const match = message.trim().match(/^\/([^\s]+)(?:\s+([\s\S]*))?$/);
+  if (!match) return null;
+
+  const command = match[1];
+  const item = resources.find((resource) => resource.command === command);
+  if (!item) return null;
+
+  return { item, args: match[2] ?? "" };
+}
+
 export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   onSend, onAbort, onSteer, onFollowUp, isStreaming, model, modelNames, modelList, onModelChange,
   onCompact, onAbortCompaction, isCompacting, compactError, toolPreset, onToolPresetChange,
   thinkingLevel, onThinkingLevelChange, availableThinkingLevels, thinkingLevelMap,
   retryInfo,
   soundEnabled, onSoundToggle,
+  slashResources = [], slashResourceKey,
 }: Props, ref) {
   const { t } = useI18n();
   const [value, setValue] = useState("");
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const [selectedSlashResource, setSelectedSlashResource] = useState<SlashResource | null>(null);
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [slashActiveIndex, setSlashActiveIndex] = useState(0);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [modelDropdownRect, setModelDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const [toolDropdownOpen, setToolDropdownOpen] = useState(false);
@@ -71,6 +172,32 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const toolDropdownRef = useRef<HTMLDivElement>(null);
   const thinkingDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const slashQuery = useMemo(() => getSlashQuery(value, cursorPosition), [value, cursorPosition]);
+  const filteredSlashResources = useMemo(() => {
+    if (!slashMenuOpen || !slashQuery) return [];
+    const q = slashQuery.query.toLowerCase();
+    return slashResources.filter((item) => {
+      return item.command.toLowerCase().includes(q) ||
+        item.name.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q);
+    }).slice(0, 10);
+  }, [slashMenuOpen, slashQuery, slashResources]);
+
+  useEffect(() => {
+    setSelectedSlashResource(null);
+    setSlashMenuOpen(false);
+    setSlashActiveIndex(0);
+  }, [slashResourceKey]);
+
+  useEffect(() => {
+    setSlashActiveIndex(0);
+  }, [slashQuery?.query, slashResources]);
+
+  const selectedPromptResource = selectedSlashResource?.source === "prompt" ? selectedSlashResource : null;
+  const selectedPromptPreview = selectedPromptResource
+    ? formatSlashContent(selectedPromptResource, value.trim())
+    : null;
 
   useImperativeHandle(ref, () => ({
     insertIfEmpty(text: string) {
@@ -150,20 +277,37 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     });
   }, []);
 
+  const buildMessage = useCallback((rawMessage: string) => {
+    const msg = rawMessage.trim();
+    if (selectedSlashResource) {
+      return formatSlashContent(selectedSlashResource, msg, true);
+    }
+
+    const directSlash = findDirectSlashResource(msg, slashResources);
+    if (directSlash) {
+      return formatSlashContent(directSlash.item, directSlash.args);
+    }
+
+    return msg;
+  }, [selectedSlashResource, slashResources]);
+
   const handleSend = useCallback(() => {
-    const msg = value.trim();
+    const msg = buildMessage(value);
     if (!msg && !attachedImages.length) return;
     if (isStreaming) return;
     onSend(msg, attachedImages.length ? attachedImages : undefined);
     setValue("");
+    setCursorPosition(0);
+    setSelectedSlashResource(null);
+    setSlashMenuOpen(false);
     clearImages();
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [value, attachedImages, isStreaming, onSend, clearImages]);
+  }, [value, attachedImages, isStreaming, onSend, clearImages, buildMessage]);
 
   const sendQueued = useCallback((mode: "steer" | "followup") => {
-    const msg = value.trim();
+    const msg = buildMessage(value);
     if (!msg && !attachedImages.length) return;
     if (mode === "steer" && onSteer) {
       onSteer(msg, attachedImages.length ? attachedImages : undefined);
@@ -171,12 +315,61 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       onFollowUp(msg, attachedImages.length ? attachedImages : undefined);
     }
     setValue("");
+    setCursorPosition(0);
+    setSelectedSlashResource(null);
+    setSlashMenuOpen(false);
     clearImages();
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-  }, [value, attachedImages, onSteer, onFollowUp, clearImages]);
+  }, [value, attachedImages, onSteer, onFollowUp, clearImages, buildMessage]);
+
+  const selectSlashResource = useCallback((item: SlashResource) => {
+    const ta = textareaRef.current;
+    const cursor = ta?.selectionStart ?? cursorPosition;
+    const query = getSlashQuery(value, cursor);
+    const nextValue = query
+      ? value.slice(0, query.start) + value.slice(cursor)
+      : value;
+
+    setSelectedSlashResource(item);
+    setValue(nextValue);
+    setSlashMenuOpen(false);
+    setSlashActiveIndex(0);
+
+    requestAnimationFrame(() => {
+      const nextCursor = query ? query.start : cursor;
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(nextCursor, nextCursor);
+      setCursorPosition(nextCursor);
+      ta.style.height = "auto";
+      ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+    });
+  }, [cursorPosition, value]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (slashMenuOpen && slashQuery && filteredSlashResources.length > 0) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setSlashActiveIndex((i) => (i + 1) % filteredSlashResources.length);
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setSlashActiveIndex((i) => (i - 1 + filteredSlashResources.length) % filteredSlashResources.length);
+          return;
+        }
+        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+          e.preventDefault();
+          selectSlashResource(filteredSlashResources[slashActiveIndex] ?? filteredSlashResources[0]);
+          return;
+        }
+      }
+      if (slashMenuOpen && e.key === "Escape") {
+        e.preventDefault();
+        setSlashMenuOpen(false);
+        return;
+      }
       if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
         if (isStreaming && (onSteer || onFollowUp)) {
@@ -187,7 +380,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         }
       }
     },
-    [isStreaming, onSteer, onFollowUp, sendQueued, handleSend]
+    [isStreaming, onSteer, onFollowUp, sendQueued, handleSend, slashMenuOpen, slashQuery, filteredSlashResources, slashActiveIndex, selectSlashResource]
   );
 
   const handleInput = useCallback(() => {
@@ -332,6 +525,51 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           </div>
         )}
 
+        {selectedPromptResource && selectedPromptPreview !== null && (
+          <div style={{
+            height: 156,
+            marginBottom: 8,
+            background: "var(--bg-panel)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+          }}>
+            <div style={{
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "7px 10px",
+              borderBottom: "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
+              color: "var(--text-muted)",
+              fontSize: 12,
+            }}>
+              <span style={{ color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>
+                prompt
+              </span>
+              <span style={{ fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                /{selectedPromptResource.command}
+              </span>
+            </div>
+            <pre style={{
+              margin: 0,
+              padding: "9px 10px",
+              flex: 1,
+              overflowY: "auto",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              color: "var(--text)",
+              fontSize: 12,
+              lineHeight: 1.5,
+              fontFamily: "var(--font-mono)",
+            }}>
+              {selectedPromptPreview}
+            </pre>
+          </div>
+        )}
+
         {/* Main input */}
         <div
           style={{
@@ -351,10 +589,24 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setCursorPosition(e.target.selectionStart ?? e.target.value.length);
+              setSlashMenuOpen(Boolean(getSlashQuery(e.target.value, e.target.selectionStart ?? e.target.value.length)));
+            }}
             onKeyDown={handleKeyDown}
             onInput={handleInput}
             onPaste={handlePaste}
+            onSelect={(e) => {
+              const pos = e.currentTarget.selectionStart ?? value.length;
+              setCursorPosition(pos);
+              setSlashMenuOpen(Boolean(getSlashQuery(value, pos)));
+            }}
+            onFocus={(e) => {
+              const pos = e.currentTarget.selectionStart ?? value.length;
+              setCursorPosition(pos);
+              setSlashMenuOpen(Boolean(getSlashQuery(value, pos)));
+            }}
             placeholder={
               isStreaming && (onSteer || onFollowUp)
                 ? t("Steer immediately / queue follow-up...")
@@ -383,16 +635,16 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               {onSteer && (
                 <button
                   onClick={() => sendQueued("steer")}
-                  disabled={!value.trim() && !attachedImages.length}
+                  disabled={!value.trim() && !attachedImages.length && !selectedSlashResource}
                   title={t("Interrupt the running agent and inject this message")}
                   style={{
                     display: "flex", alignItems: "center", gap: 5,
                     padding: "7px 12px",
-                    background: (value.trim() || attachedImages.length) ? "rgba(234,179,8,0.12)" : "none",
+                    background: (value.trim() || attachedImages.length || selectedSlashResource) ? "rgba(234,179,8,0.12)" : "none",
                     border: "1px solid rgba(234,179,8,0.35)",
                     borderRadius: 8,
-                    color: (value.trim() || attachedImages.length) ? "rgba(180,130,0,1)" : "var(--text-dim)",
-                    cursor: (value.trim() || attachedImages.length) ? "pointer" : "not-allowed",
+                    color: (value.trim() || attachedImages.length || selectedSlashResource) ? "rgba(180,130,0,1)" : "var(--text-dim)",
+                    cursor: (value.trim() || attachedImages.length || selectedSlashResource) ? "pointer" : "not-allowed",
                     fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em",
                     transition: "background 0.12s",
                   }}
@@ -406,16 +658,16 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               {onFollowUp && (
                 <button
                   onClick={() => sendQueued("followup")}
-                  disabled={!value.trim() && !attachedImages.length}
+                  disabled={!value.trim() && !attachedImages.length && !selectedSlashResource}
                   title={t("Queue this message after the agent finishes")}
                   style={{
                     display: "flex", alignItems: "center", gap: 5,
                     padding: "7px 12px",
-                    background: (value.trim() || attachedImages.length) ? "rgba(129,140,248,0.12)" : "none",
+                    background: (value.trim() || attachedImages.length || selectedSlashResource) ? "rgba(129,140,248,0.12)" : "none",
                     border: "1px solid rgba(129,140,248,0.35)",
                     borderRadius: 8,
-                    color: (value.trim() || attachedImages.length) ? "rgba(99,102,241,1)" : "var(--text-dim)",
-                    cursor: (value.trim() || attachedImages.length) ? "pointer" : "not-allowed",
+                    color: (value.trim() || attachedImages.length || selectedSlashResource) ? "rgba(99,102,241,1)" : "var(--text-dim)",
+                    cursor: (value.trim() || attachedImages.length || selectedSlashResource) ? "pointer" : "not-allowed",
                     fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em",
                     transition: "background 0.12s",
                   }}
@@ -431,21 +683,21 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           ) : (
             <button
               onClick={handleSend}
-              disabled={!value.trim() && !attachedImages.length}
+              disabled={!value.trim() && !attachedImages.length && !selectedSlashResource}
               style={{
                 flexShrink: 0,
                 alignSelf: "flex-end",
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "7px 14px",
-                background: (value.trim() || attachedImages.length) ? "var(--accent)" : "var(--bg-panel)",
+                background: (value.trim() || attachedImages.length || selectedSlashResource) ? "var(--accent)" : "var(--bg-panel)",
                 border: "none",
                 borderRadius: 8,
-                color: (value.trim() || attachedImages.length) ? "#fff" : "var(--text-dim)",
-                cursor: (value.trim() || attachedImages.length) ? "pointer" : "not-allowed",
+                color: (value.trim() || attachedImages.length || selectedSlashResource) ? "#fff" : "var(--text-dim)",
+                cursor: (value.trim() || attachedImages.length || selectedSlashResource) ? "pointer" : "not-allowed",
                 fontSize: 13,
                 fontWeight: 600,
                 letterSpacing: "-0.01em",
-                boxShadow: (value.trim() || attachedImages.length) ? "0 1px 3px rgba(37,99,235,0.25)" : "none",
+                boxShadow: (value.trim() || attachedImages.length || selectedSlashResource) ? "0 1px 3px rgba(37,99,235,0.25)" : "none",
                 transition: "background 0.15s, box-shadow 0.15s",
               }}
             >
@@ -457,6 +709,104 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             </button>
           )}
         </div>
+        {(selectedSlashResource || (slashMenuOpen && slashQuery)) && (
+          <div style={{ position: "relative" }}>
+            {selectedSlashResource && (
+              <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  maxWidth: "100%", padding: "4px 8px",
+                  background: "var(--bg-panel)", border: "1px solid var(--border)",
+                  borderRadius: 7, color: "var(--text-muted)", fontSize: 12,
+                }}>
+                  <span style={{
+                    color: selectedSlashResource.source === "skill" ? "#059669" : "var(--accent)",
+                    fontWeight: 700, textTransform: "uppercase", fontSize: 10,
+                  }}>
+                    {selectedSlashResource.source}
+                  </span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    /{selectedSlashResource.command}
+                  </span>
+                  <button
+                    onClick={() => setSelectedSlashResource(null)}
+                    title={t("Remove")}
+                    style={{
+                      width: 16, height: 16, border: "none", background: "none",
+                      color: "var(--text-dim)", cursor: "pointer", padding: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >
+                    <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                      <line x1="1.5" y1="1.5" x2="7.5" y2="7.5" /><line x1="7.5" y1="1.5" x2="1.5" y2="7.5" />
+                    </svg>
+                  </button>
+                </span>
+              </div>
+            )}
+            {slashMenuOpen && slashQuery && (
+              <div style={{
+                position: "absolute", bottom: "calc(100% + 44px)", left: 0,
+                zIndex: 200, width: "min(560px, 100%)",
+                background: "var(--bg)", border: "1px solid var(--border)",
+                borderRadius: 8, boxShadow: "0 -4px 16px rgba(0,0,0,0.10)",
+                overflow: "hidden",
+              }}>
+                {filteredSlashResources.length > 0 ? filteredSlashResources.map((item, index) => {
+                  const active = index === slashActiveIndex;
+                  return (
+                    <button
+                      key={`${item.source}:${item.path}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        selectSlashResource(item);
+                      }}
+                      style={{
+                        width: "100%", display: "grid", gridTemplateColumns: "72px minmax(0, 1fr)",
+                        gap: 10, padding: "8px 10px",
+                        background: active ? "var(--bg-selected)" : "none",
+                        border: "none", borderBottom: index < filteredSlashResources.length - 1 ? "1px solid color-mix(in srgb, var(--border) 55%, transparent)" : "none",
+                        color: active ? "var(--text)" : "var(--text-muted)",
+                        cursor: "pointer", textAlign: "left",
+                      }}
+                    >
+                      <span style={{
+                        alignSelf: "start", justifySelf: "start",
+                        padding: "2px 6px", borderRadius: 5,
+                        background: item.source === "skill" ? "rgba(5,150,105,0.10)" : "rgba(37,99,235,0.10)",
+                        color: item.source === "skill" ? "#059669" : "var(--accent)",
+                        fontSize: 10, fontWeight: 700, textTransform: "uppercase",
+                      }}>
+                        {item.source}
+                      </span>
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            /{item.command}
+                          </span>
+                          {item.argumentHint && (
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", whiteSpace: "nowrap" }}>
+                              {item.argumentHint}
+                            </span>
+                          )}
+                        </span>
+                        {item.description && (
+                          <span style={{ display: "block", marginTop: 2, fontSize: 11, color: "var(--text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {item.description}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                }) : (
+                  <div style={{ padding: "10px 12px", fontSize: 12, color: "var(--text-dim)" }}>
+                    {t("No matches")}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Bottom bar: left | center (context) | right */}
         <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>

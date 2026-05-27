@@ -9,6 +9,7 @@ import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
 import { useAudio } from "@/hooks/useAudio";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { useI18n, type Locale } from "@/hooks/useI18n";
+import type { SlashResource } from "./ChatInput";
 
 interface Props {
   session: SessionInfo | null;
@@ -115,6 +116,7 @@ function Typewriter({ phrases }: { phrases: string[] }) {
 
 export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSessionStatsChange, onContextUsageChange }: Props) {
   const { locale, t } = useI18n();
+  const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
   const {
     loading, error, messages, entryIds, streamState,
     agentRunning, modelNames, modelList, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
@@ -191,6 +193,33 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
     ? (modelThinkingLevelMaps[`${displayModelValue.provider}:${displayModelValue.modelId}`] ?? null)
     : null;
 
+  const sessionId = session?.id;
+  const slashResourceKey = sessionId ?? (newSessionCwd ? `new:${newSessionCwd}` : "none");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = sessionId
+      ? `sessionId=${encodeURIComponent(sessionId)}`
+      : newSessionCwd ? `cwd=${encodeURIComponent(newSessionCwd)}` : "";
+
+    if (!params) {
+      setSlashResources([]);
+      return;
+    }
+
+    fetch(`/api/slash-commands?${params}`, { signal: controller.signal })
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then((d: { commands?: SlashResource[] }) => setSlashResources(d.commands ?? []))
+      .catch((e) => {
+        if ((e as { name?: string }).name !== "AbortError") {
+          console.error("Failed to load slash commands:", e);
+        }
+        setSlashResources([]);
+      });
+
+    return () => controller.abort();
+  }, [sessionId, newSessionCwd]);
+
   const chatInputElement = (
     <ChatInput
       ref={chatInputRef}
@@ -216,6 +245,8 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
       retryInfo={retryInfo}
       soundEnabled={soundEnabled}
       onSoundToggle={onSoundToggle}
+      slashResources={slashResources}
+      slashResourceKey={slashResourceKey}
     />
   );
 
