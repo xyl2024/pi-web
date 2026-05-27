@@ -18,6 +18,16 @@ type SlashResource = {
   content: string;
 };
 
+// Module-level cache: cwd → { prompts, skills, commands, expiresAt }
+const SLASH_CACHE_TTL_MS = 30_000;
+type CachedSlash = {
+  prompts: SlashResource[];
+  skills: SlashResource[];
+  commands: SlashResource[];
+  expiresAt: number;
+};
+const slashCache = new Map<string, CachedSlash>();
+
 async function resolveCwd(url: URL): Promise<string | null> {
   const cwd = url.searchParams.get("cwd");
   if (cwd) return cwd;
@@ -43,6 +53,17 @@ export async function GET(req: Request) {
     }
     if (!existsSync(cwd)) {
       return NextResponse.json({ error: `Directory does not exist: ${cwd}` }, { status: 400 });
+    }
+
+    const cached = slashCache.get(cwd);
+    if (cached && cached.expiresAt > startedAt) {
+      log.debug("slash commands cached", {
+        cwd,
+        promptCount: cached.prompts.length,
+        skillCount: cached.skills.length,
+        durationMs: elapsedMs(startedAt),
+      });
+      return NextResponse.json({ prompts: cached.prompts, skills: cached.skills, commands: cached.commands });
     }
 
     const loader = new DefaultResourceLoader({ cwd, agentDir: getAgentDir() });
@@ -71,6 +92,9 @@ export async function GET(req: Request) {
       }))
     );
 
+    const commands = [...prompts, ...skills];
+    slashCache.set(cwd, { prompts, skills, commands, expiresAt: startedAt + SLASH_CACHE_TTL_MS });
+
     log.info("slash commands loaded", {
       cwd,
       promptCount: prompts.length,
@@ -78,7 +102,7 @@ export async function GET(req: Request) {
       durationMs: elapsedMs(startedAt),
     });
 
-    return NextResponse.json({ prompts, skills, commands: [...prompts, ...skills] });
+    return NextResponse.json({ prompts, skills, commands });
   } catch (error) {
     log.error("slash commands failed", { error, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ error: String(error) }, { status: 500 });

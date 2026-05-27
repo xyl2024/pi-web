@@ -131,6 +131,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const pendingScrollToUserRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const loadingAgentsFilesRef = useRef<string | null>(null);
 
   const setNewSessionModel = opts.setNewSessionModel ?? setNewSessionModelState;
   const setToolPresetState = opts.setToolPreset ?? setToolPreset;
@@ -220,14 +221,19 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, [setToolPresetState]);
 
   const loadAgentsFiles = useCallback(async (cwd: string) => {
+    if (loadingAgentsFilesRef.current === cwd) return;
+    loadingAgentsFilesRef.current = cwd;
     try {
       const res = await fetch(`/api/context?cwd=${encodeURIComponent(cwd)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (loadingAgentsFilesRef.current !== cwd) return;
       const d = await res.json() as { files: AgentsFile[] };
       setAgentsFiles(d.files ?? []);
     } catch (e) {
       console.error("Failed to load agents files:", e);
       setAgentsFiles([]);
+    } finally {
+      if (loadingAgentsFilesRef.current === cwd) loadingAgentsFilesRef.current = null;
     }
   }, []);
 
@@ -574,10 +580,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     container.scrollTo({ top: elAbsTop - 16, behavior: "smooth" });
   }, []);
 
-  // Load session on mount
+  // Load session + agents files on mount (parallel)
   useEffect(() => {
     if (session) {
       sessionIdRef.current = session.id;
+      // Start both in parallel; agents files won't clobber if session.cwd changes mid-flight
+      if (session.cwd) loadAgentsFiles(session.cwd);
       loadSession(session.id, true, true).then((agentState) => {
         if (agentState?.running) {
           loadTools(session.id);
@@ -594,10 +602,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           if (agentState.state.thinkingLevel !== undefined) setThinkingLevel((agentState.state.thinkingLevel as ThinkingLevelOption) ?? "auto");
         }
       });
-      // Load agents files for this session's cwd
-      if (session.cwd) loadAgentsFiles(session.cwd);
     } else if (newSessionCwd) {
-      // New session: just load agents files for the cwd
       loadAgentsFiles(newSessionCwd);
     }
     return () => {
