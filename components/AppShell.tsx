@@ -14,6 +14,13 @@ import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
 import type { SessionInfo, SessionTreeNode, AgentsFile } from "@/lib/types";
 import type { ChatInputHandle } from "./ChatInput";
+import { sendAgentCommand } from "@/lib/agent-client";
+
+interface ToolInfo {
+  name: string;
+  description: string;
+  active: boolean;
+}
 
 export function AppShell() {
   const router = useRouter();
@@ -77,11 +84,30 @@ export function AppShell() {
     setContextUsage(usage);
   }, []);
 
+  // Tools list — fetched once per session, cached for button clicks
+  const [tools, setTools] = useState<ToolInfo[]>([]);
+  const toolsBtnRef = useRef<HTMLButtonElement>(null);
+
+  const fetchTools = useCallback(async (sessionId: string) => {
+    try {
+      const result = await sendAgentCommand<ToolInfo[]>(sessionId, { type: "get_tools" });
+      setTools(result ?? []);
+    } catch {
+      setTools([]);
+    }
+  }, []);
+
+  // Fetch tools when session changes (sessionKey bumps on session switch or URL restore)
+  useEffect(() => {
+    if (!selectedSession?.id) return;
+    fetchTools(selectedSession.id);
+  }, [sessionKey, selectedSession?.id, fetchTools]);
+
   // Single active panel — only one dropdown open at a time
-  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "context" | null>(null);
+  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "context" | "tools" | null>(null);
   const [topPanelPos, setTopPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  const toggleTopPanel = useCallback((panel: "branches" | "system" | "context") => {
+  const toggleTopPanel = useCallback((panel: "branches" | "system" | "context" | "tools") => {
     setActiveTopPanel((cur) => cur === panel ? null : panel);
   }, []);
 
@@ -132,6 +158,7 @@ export function AppShell() {
     setBranchActiveLeafId(null);
     setSystemPrompt(null);
     setAgentsFiles([]);
+    setTools([]);
     setActiveTopPanel(null);
     router.replace("/", { scroll: false });
   }, [router]);
@@ -142,6 +169,7 @@ export function AppShell() {
     setSessionKey((k) => k + 1);
     setSystemPrompt(null);
     setAgentsFiles([]);
+    setTools([]);
     setInitialSessionRestored(true);
     if (isRestore) {
       // Suppress the redundant sessionKey bump that would come from the
@@ -164,6 +192,7 @@ export function AppShell() {
     setBranchActiveLeafId(null);
     setSystemPrompt(null);
     setAgentsFiles([]);
+    setTools([]);
     setActiveTopPanel(null);
     router.replace("/", { scroll: false });
   }, [router]);
@@ -206,6 +235,8 @@ export function AppShell() {
       setBranchTree([]);
       setBranchActiveLeafId(null);
       setSystemPrompt(null);
+      setAgentsFiles([]);
+      setTools([]);
       setActiveTopPanel(null);
       router.replace("/", { scroll: false });
     }
@@ -531,6 +562,34 @@ export function AppShell() {
                   <span style={{ fontSize: 10, opacity: 0.7 }}>({agentsFiles.length})</span>
                 )}
               </button>
+              <button
+                ref={toolsBtnRef}
+                onClick={() => toggleTopPanel("tools")}
+                disabled={tools.length === 0}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  height: "100%", padding: "0 12px",
+                  background: activeTopPanel === "tools" ? "var(--bg-selected)" : "none",
+                  border: "none",
+                  borderTop: activeTopPanel === "tools" ? "2px solid var(--accent)" : "2px solid transparent",
+                  borderRight: "1px solid var(--border)",
+                  cursor: tools.length > 0 ? "pointer" : "default",
+                  color: tools.length > 0 ? (activeTopPanel === "tools" ? "var(--text)" : "var(--text-muted)") : "var(--text-dim)",
+                  fontSize: 11, whiteSpace: "nowrap", transition: "color 0.1s, background 0.1s",
+                  opacity: tools.length > 0 ? 1 : 0.5,
+                }}
+                onMouseEnter={(e) => { if (tools.length > 0) e.currentTarget.style.color = "var(--text)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = tools.length > 0 ? (activeTopPanel === "tools" ? "var(--text)" : "var(--text-muted)") : "var(--text-dim)"; }}
+                title={tools.length > 0 ? `${tools.filter((t) => t.active).length} / ${tools.length} ${t("Active").toLowerCase()}` : t("No tools available for this session")}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                </svg>
+                <span>{t("Tools")}</span>
+                {tools.length > 0 && (
+                  <span style={{ fontSize: 10, opacity: 0.7 }}>{tools.filter((t) => t.active).length}</span>
+                )}
+              </button>
             </div>
           )}
           {/* Session stats — right-aligned in top bar */}
@@ -702,6 +761,50 @@ export function AppShell() {
                       </div>
                     </>
                   )}
+                </div>
+              )}
+              {activeTopPanel === "tools" && (
+                <div style={{
+                  background: "var(--bg-panel)",
+                  borderBottom: "1px solid var(--border)",
+                }}>
+                  {tools.length === 0 ? (
+                    <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
+                      {t("Loading tools...")}
+                    </div>
+                  ) : (() => {
+                    const sorted = [...tools].sort((a, b) => a.name.localeCompare(b.name));
+                    return (
+                      <div style={{ maxHeight: "min(600px, 75vh)", overflowY: "auto" }}>
+                        {sorted.map((tool) => (
+                          <div
+                            key={tool.name}
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: 10,
+                              padding: "10px 16px",
+                              borderBottom: "1px solid var(--border)",
+                            }}
+                          >
+                            <div style={{
+                              width: 7, height: 7, borderRadius: "50%",
+                              background: tool.active ? "var(--accent)" : "var(--text-dim)",
+                              flexShrink: 0, marginTop: 4,
+                            }} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 12, color: "var(--text)", fontWeight: 500, fontFamily: "var(--font-mono)" }}>
+                                {tool.name}
+                              </div>
+                              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.5 }}>
+                                {tool.description || t("No description")}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
