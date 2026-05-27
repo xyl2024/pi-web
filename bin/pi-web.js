@@ -44,13 +44,14 @@ if (!fs.existsSync(nextDir)) {
   process.exit(1);
 }
 
-const nextArgs = ["start", "-p", port];
+const runtimeCwd = process.env.PI_WEB_WORKDIR || process.cwd();
+const nextArgs = ["start", pkgDir, "-p", port];
 if (hostname) nextArgs.push("-H", hostname);
 
 // Always run next's JS entry with node directly — avoids .bin symlink issues
 // and path-with-spaces problems on Windows when shell: true is used.
 const child = spawn(process.execPath, [nextBin, ...nextArgs], {
-  cwd: pkgDir,
+  cwd: runtimeCwd,
   stdio: ["inherit", "pipe", "inherit"],
   env: { ...process.env },
 });

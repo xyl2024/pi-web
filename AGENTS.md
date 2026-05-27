@@ -10,6 +10,31 @@ Typecheck: `node_modules/.bin/tsc --noEmit`
 Lint: `node node_modules/next/dist/bin/next lint`  
 **Never run `next build` during dev** — pollutes `.next/` and breaks `npm run dev`.
 
+## Host systemd deployment
+
+This fork is deployed as a user systemd service from a production copy, not from
+the global `@agegr/pi-web` package and not directly from this source directory.
+
+Deploy updated source with:
+
+```bash
+scripts/deploy-systemd-user.sh
+```
+
+The script syncs this repo to `/home/alone/.local/share/pi-web-fork`, excluding
+`.git`, `node_modules`, `.next`, `volumes`, and `tsconfig.tsbuildinfo`; then it
+runs `npm ci`, `npm run build`, and restarts `pi-web.service`.
+
+Defaults can be overridden:
+
+```bash
+PI_WEB_DEPLOY_DIR=/path/to/deploy PI_WEB_SERVICE_NAME=pi-web.service scripts/deploy-systemd-user.sh
+```
+
+Keep the service runtime cwd and HOME under `/home/alone`. The current user
+service lives at `/home/alone/.config/systemd/user/pi-web.service`; deployment
+details are documented in `docs/host-systemd-deployment.md`.
+
 ---
 
 ## Architecture

@@ -86,6 +86,55 @@ docker compose logs -f pi-web
 tail -f ./volumes/pi_home/.pi-web/logs/pi-web-$(date +%F).log
 ```
 
+## 宿主机部署
+
+当前仓库的宿主机 systemd 部署记录见 [`docs/host-systemd-deployment.md`](docs/host-systemd-deployment.md)。
+
+宿主机部署时不要用 `npm run dev` 或从项目目录长期运行服务。推荐把服务进程作为真实使用者启动，并把工作目录设为该用户的 `$HOME`，这样默认工作区、`~/.pi`、`~/.pi-web` 等路径都按宿主机用户解析。
+
+要求：
+
+- Node.js 22+
+- 以实际使用 pi 的用户运行，例如 `alone`
+- 默认数据目录为 `~/.pi/agent`；如需自定义可设置 `PI_CODING_AGENT_DIR`
+
+本 fork 使用源码部署脚本：
+
+```bash
+scripts/deploy-systemd-user.sh
+```
+
+systemd 示例：
+
+```ini
+[Unit]
+Description=pi-web
+After=network.target
+
+[Service]
+Type=simple
+Environment=NODE_ENV=production
+Environment=HOME=/home/alone
+Environment=PI_WEB_WORKDIR=/home/alone
+# 如需指定 pi 数据目录，取消下一行注释
+# Environment=PI_CODING_AGENT_DIR=/home/alone/.pi/agent
+WorkingDirectory=/home/alone
+ExecStart=/home/alone/.local/share/pi-node/node-v22.22.3-linux-x64/bin/node /home/alone/.local/share/pi-web-fork/bin/pi-web.js --hostname 0.0.0.0 --port 30141
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+```
+
+启用：
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now pi-web
+journalctl --user -u pi-web -f
+```
+
 ## 项目结构
 
 ```
