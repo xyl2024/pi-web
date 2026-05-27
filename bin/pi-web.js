@@ -71,4 +71,30 @@ child.stdout.on("data", (chunk) => {
   }
 });
 
-child.on("exit", (code) => process.exit(code ?? 0));
+let shuttingDown = false;
+let forceKillTimer = null;
+
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  if (child.exitCode !== null || child.signalCode !== null) {
+    process.exit(0);
+  }
+
+  child.kill(signal);
+  forceKillTimer = setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGKILL");
+    }
+  }, 5000);
+  forceKillTimer.unref();
+}
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+child.on("exit", (code) => {
+  if (forceKillTimer) clearTimeout(forceKillTimer);
+  process.exit(code ?? 0);
+});

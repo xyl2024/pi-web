@@ -58,6 +58,7 @@ Type=simple
 Environment=NODE_ENV=production
 Environment=HOME=/home/alone
 Environment=PI_WEB_WORKDIR=/home/alone
+Environment=PATH=/home/alone/.local/share/pi-node/node-v22.22.3-linux-x64/bin:/home/alone/.bun/bin:/home/alone/.local/bin:/home/alone/.opencode/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
 WorkingDirectory=/home/alone
 ExecStart=/home/alone/.local/share/pi-node/node-v22.22.3-linux-x64/bin/node /home/alone/.local/share/pi-web-fork/bin/pi-web.js --hostname 0.0.0.0 --port 30141
 Restart=on-failure
@@ -201,6 +202,13 @@ systemctl --user stop pi-web
 journalctl --user -u pi-web -f
 ```
 
+查看服务实际环境：
+
+```bash
+pid=$(systemctl --user show pi-web.service -p MainPID --value)
+tr '\0' '\n' < "/proc/$pid/environ" | rg '^(PATH|HOME|NODE_ENV|PI_WEB_WORKDIR)='
+```
+
 查看端口占用：
 
 ```bash
@@ -219,3 +227,4 @@ docker ps --format '{{.ID}} {{.Names}} {{.Ports}}' | rg '30141|pi-web'
 - 不要直接从 `/home/alone/p/pi-web` 长期运行生产服务；使用部署副本 `/home/alone/.local/share/pi-web-fork`。
 - 开发目录避免执行 `next build`，生产构建放到部署目录执行。
 - 如果端口启动失败，优先检查是否有旧 Docker 容器、手动 `npm run dev` 或其他 `next-server` 占用了 `30141`。
+- systemd user service 不会读取交互式 shell 的 zsh/bash 初始化文件。Web 里的 bash 工具会继承 `pi-web.service` 的 `PATH`，所以需要在 unit 中显式包含 pi-node、`~/.local/bin`、`~/.bun/bin` 等命令目录；否则会出现 `playwright-cli: command not found` 这类和 `npm run dev`/原生 pi TUI 不一致的问题。
