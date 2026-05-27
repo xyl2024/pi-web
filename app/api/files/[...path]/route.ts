@@ -12,7 +12,7 @@ const IGNORED_NAMES = new Set([
 
 const IGNORED_SUFFIXES = [".pyc"];
 
-const TEXT_PREVIEW_MAX_BYTES = 256 * 1024;
+const TEXT_PREVIEW_MAX_BYTES = 10 * 1024 * 1024;
 const IMAGE_PREVIEW_MAX_BYTES = 10 * 1024 * 1024;
 const log = createLogger("api/files");
 
