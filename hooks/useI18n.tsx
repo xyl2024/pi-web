@@ -64,7 +64,7 @@ const ZH_TRANSLATIONS = {
   "Highest reasoning": "最高强度推理",
   "No tools, chat only": "无工具，纯聊天",
   "4 built-in tools": "4 项内置工具",
-  "All built-in tools": "全部内置工具",
+  "All available tools": "全部可用工具",
   "New": "新建",
   "New session": "新会话",
   "Select a project first": "请先选择项目",

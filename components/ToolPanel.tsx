@@ -12,13 +12,14 @@ export interface ToolEntry {
 export type ToolPreset = "none" | "default" | "full";
 export const PRESET_NONE: string[] = [];
 export const PRESET_DEFAULT: string[] = ["read", "bash", "edit", "write"];
-export const PRESET_FULL: string[] = ["bash", "read", "edit", "write", "grep", "find", "ls"];
 
 export function getPresetFromTools(tools: ToolEntry[]): ToolPreset {
-  const active = tools.filter(t => t.active).map(t => t.name).sort().join(",");
+  const activeNames = tools.filter(t => t.active).map(t => t.name).sort();
+  const allNames = tools.map(t => t.name).sort();
+  const active = activeNames.join(",");
   if (active === "") return "none";
   if (active === [...PRESET_DEFAULT].sort().join(",")) return "default";
-  if (active === [...PRESET_FULL].sort().join(",")) return "full";
+  if (allNames.length > 0 && active === allNames.join(",")) return "full";
   return "default"; // closest match
 }
 
@@ -28,10 +29,10 @@ interface Props {
   onClose: () => void;
 }
 
-const PRESETS: { id: ToolPreset; label: string; desc: string; tools: string[] }[] = [
+const PRESETS: { id: ToolPreset; label: string; desc: string; tools?: string[] }[] = [
   { id: "none",    label: "Off",  desc: "No tools",                                tools: PRESET_NONE },
   { id: "default", label: "Low",  desc: "read · bash · edit · write",              tools: PRESET_DEFAULT },
-  { id: "full",    label: "High", desc: "read · bash · edit · write · grep · find · ls", tools: PRESET_FULL },
+  { id: "full",    label: "High", desc: "All available tools",                     tools: [] },
 ];
 
 export function ToolPanel({ tools, onPreset, onClose }: Props) {
@@ -84,7 +85,7 @@ export function ToolPanel({ tools, onPreset, onClose }: Props) {
           return (
             <button
               key={preset.id}
-              onClick={() => { onPreset(preset.id, preset.tools); onClose(); }}
+              onClick={() => { onPreset(preset.id, preset.id === "full" ? tools.map(t => t.name) : preset.tools ?? []); onClose(); }}
               style={{
                 padding: "5px 0",
                 borderRadius: 6,

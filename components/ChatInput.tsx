@@ -735,7 +735,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     {TOOL_PRESETS.map((lvl) => {
                       const preset = TOOL_PRESET_MAP[lvl];
                       const isActive = (toolPreset ?? "default") === preset;
-                      const desc = lvl === "off" ? t("No tools, chat only") : lvl === "default" ? t("4 built-in tools") : t("All built-in tools");
+                      const desc = lvl === "off" ? t("No tools, chat only") : lvl === "default" ? t("4 built-in tools") : t("All available tools");
                       return (
                         <button
                           key={lvl}

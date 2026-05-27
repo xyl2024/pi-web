@@ -19,7 +19,7 @@ export async function POST(req: Request) {
       commandType,
       provider: typeof command.provider === "string" ? command.provider : undefined,
       modelId: typeof command.modelId === "string" ? command.modelId : undefined,
-      toolCount: Array.isArray(command.toolNames) ? command.toolNames.length : undefined,
+      toolCount: command.toolNames === "all" ? "all" : Array.isArray(command.toolNames) ? command.toolNames.length : undefined,
       thinkingLevel: typeof command.thinkingLevel === "string" ? command.thinkingLevel : undefined,
     });
 
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     }
 
     // Use a one-time key so startRpcSession's lock doesn't conflict with real session ids
-    const { provider, modelId, toolNames, thinkingLevel, ...promptCommand } = command as { provider?: string; modelId?: string; toolNames?: string[]; thinkingLevel?: string; [key: string]: unknown };
+    const { provider, modelId, toolNames, thinkingLevel, ...promptCommand } = command as { provider?: string; modelId?: string; toolNames?: string[] | "all"; thinkingLevel?: string; [key: string]: unknown };
 
     const tempKey = `__new__${Date.now()}`;
     const { session, realSessionId } = await startRpcSession(tempKey, "", cwd, toolNames);
