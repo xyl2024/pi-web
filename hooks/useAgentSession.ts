@@ -290,7 +290,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       case "message_start":
       case "message_update": {
         const msg = event.message as Partial<AgentMessage> | undefined;
-        if (msg) {
+        // User messages are added optimistically by handleSend/handleSteer/handleFollowUp.
+        // Skip SSE events for user messages to avoid double-display during streaming.
+        if (msg && msg.role !== "user") {
           dispatch({ type: "update", message: normalizeToolCalls(msg as AgentMessage) });
         }
         setAgentPhase(null);
@@ -298,7 +300,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
       case "message_end": {
         const completed = event.message as AgentMessage | undefined;
-        if (completed) {
+        // User messages are added optimistically by handleSend/handleSteer/handleFollowUp.
+        // Skip appending from SSE to avoid duplication.
+        if (completed && completed.role !== "user") {
           setMessages((prev) => [...prev, normalizeToolCalls(completed)]);
         }
         dispatch({ type: "reset" });
