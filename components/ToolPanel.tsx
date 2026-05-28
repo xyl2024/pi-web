@@ -11,7 +11,7 @@ export interface ToolEntry {
 
 export type ToolPreset = "none" | "full";
 export const PRESET_NONE: string[] = [];
-export const PRESET_DEFAULT: string[] = ["read", "bash", "edit", "write"];
+export const PRESET_DEFAULT: string[] = ["read", "bash", "edit", "write", "find", "grep", "ls"];
 
 export function getPresetFromTools(tools: ToolEntry[]): ToolPreset {
   const activeNames = tools.filter(t => t.active).map(t => t.name).sort();

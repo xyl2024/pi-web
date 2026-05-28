@@ -618,7 +618,7 @@ function ThinkingBlock({ block, duration }: { block: ThinkingContent; duration?:
 
 
 function ToolCallBlock({ block, result, isRunning, duration }: { block: ToolCallContent; result?: ToolResultMessage; isRunning?: boolean; duration?: number }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const inputStr = JSON.stringify(block.input, null, 2);
 
   // Result display
