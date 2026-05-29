@@ -10,6 +10,9 @@ import { useAudio } from "@/hooks/useAudio";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { useI18n, type Locale } from "@/hooks/useI18n";
 import type { SlashResource } from "./ChatInput";
+import { ToolCallStatsProvider, useToolCallStatsEmit } from "@/hooks/ToolCallStatsContext";
+import { useToolCallStats } from "@/hooks/useToolCallStats";
+import { ToolCallStatsDrawer } from "./ToolCallStatsDrawer";
 
 interface Props {
   session: SessionInfo | null;
@@ -115,9 +118,13 @@ function Typewriter({ phrases }: { phrases: string[] }) {
   );
 }
 
-export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onAgentsFilesChange, onSessionStatsChange, onContextUsageChange }: Props) {
+function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onAgentsFilesChange, onSessionStatsChange, onContextUsageChange }: Props) {
   const { locale, t } = useI18n();
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
+
+  // Tool call stats: wire the context emit into useAgentSession
+  const statsEmit = useToolCallStatsEmit();
+
   const {
     loading, error, messages, entryIds, streamState,
     agentRunning, modelNames, modelList, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
@@ -134,7 +141,18 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
   } = useAgentSession({
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
     modelsRefreshKey, onBranchDataChange, onSystemPromptChange,
+    statsEmit,
   });
+
+  // Tool call stats hook
+  const { snapshot, isDrawerOpen, toggleDrawer } = useToolCallStats(messages);
+
+  // Running summary for the drawer toggle button
+  const runningSummary = agentPhase?.kind === "running_tools" && agentPhase.tools.length > 0
+    ? t("{n} running · {m} total").replace("{n}", String(agentPhase.tools.length)).replace("{m}", String(snapshot.totalCount))
+    : snapshot.totalCount > 0
+      ? t("{n} total").replace("{n}", String(snapshot.totalCount))
+      : undefined;
 
   // ── Scroll-to-bottom: auto-track during streaming, pause on user scroll-up ──
   const [showToBottom, setShowToBottom] = useState(false);
@@ -496,6 +514,45 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
             </svg>
           </button>
         )}
+
+        {/* Tool call stats drawer — jump to chat message on click */}
+        {(() => {
+          // Build a map from toolCallId → visible message index
+          const toolCallToVisibleIdx = new Map<string, number>();
+          let vi = 0;
+          for (const msg of messages) {
+            if (msg.role !== "user" && msg.role !== "assistant") continue;
+            if (msg.role === "assistant") {
+              for (const block of msg.content) {
+                if (block.type === "toolCall") {
+                  toolCallToVisibleIdx.set((block as import("@/lib/types").ToolCallContent).toolCallId, vi);
+                }
+              }
+            }
+            vi++;
+          }
+          const handleScrollToToolCall = (toolCallId: string) => {
+            const idx = toolCallToVisibleIdx.get(toolCallId);
+            if (idx === undefined) return;
+            const el = messageRefs.current[idx];
+            const container = scrollContainerRef.current;
+            if (el && container) {
+              userScrolledUpRef.current = false;
+              setShowToBottom(false);
+              const elTop = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+              container.scrollTo({ top: elTop - 20, behavior: "smooth" });
+            }
+          };
+          return (
+            <ToolCallStatsDrawer
+              snapshot={snapshot}
+              open={isDrawerOpen}
+              onToggle={toggleDrawer}
+              runningSummary={runningSummary}
+              onScrollToToolCall={handleScrollToToolCall}
+            />
+          );
+        })()}
       </div>
 
       <div className="relative">
@@ -504,5 +561,13 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
       </>
       )}
     </div>
+  );
+}
+
+export function ChatWindow(props: Props) {
+  return (
+    <ToolCallStatsProvider>
+      <ChatWindowContent {...props} />
+    </ToolCallStatsProvider>
   );
 }

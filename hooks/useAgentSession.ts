@@ -5,6 +5,7 @@ import type { AgentMessage, SessionInfo, SessionTreeNode, AgentsFile } from "@/l
 import { normalizeToolCalls } from "@/lib/normalize";
 import { sendAgentCommand } from "@/lib/agent-client";
 import type { ToolEntry } from "@/components/ToolPanel";
+import type { ToolCallStatsDispatch } from "./ToolCallStatsContext";
 
 export interface SessionData {
   sessionId: string;
@@ -66,6 +67,8 @@ export interface UseAgentSessionOptions {
   onSystemPromptChange?: (prompt: string | null) => void;
   setNewSessionModel?: (model: { provider: string; modelId: string } | null) => void;
   setToolPreset?: (preset: "none" | "full") => void;
+  /** Push tool lifecycle events to the stats panel */
+  statsEmit?: ToolCallStatsDispatch;
 }
 
 export type ThinkingLevelOption = "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -91,8 +94,10 @@ export interface ChatInputHandle {
 export function useAgentSession(opts: UseAgentSessionOptions) {
   const {
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
-    modelsRefreshKey, onBranchDataChange, onSystemPromptChange,
+    modelsRefreshKey, onBranchDataChange, onSystemPromptChange, statsEmit,
   } = opts;
+  const statsEmitRef = useRef(statsEmit);
+  statsEmitRef.current = statsEmit;
 
   const isNew = session === null && newSessionCwd !== null;
 
@@ -269,6 +274,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         setAgentRunning(true);
         setAgentPhase({ kind: "waiting_model" });
         dispatch({ type: "start" });
+        statsEmitRef.current?.({ type: "reset" });
         break;
       case "agent_end":
         setAgentRunning(false);
@@ -312,6 +318,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       case "tool_execution_start": {
         const id = event.toolCallId as string;
         const name = event.toolName as string;
+        statsEmitRef.current?.({ type: "tool_start", toolCallId: id, toolName: name, timestamp: Date.now() });
         setAgentPhase((prev) => {
           const tools = prev?.kind === "running_tools" ? [...prev.tools] : [];
           if (!tools.some((t) => t.id === id)) tools.push({ id, name });
@@ -321,6 +328,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
       case "tool_execution_end": {
         const id = event.toolCallId as string;
+        statsEmitRef.current?.({ type: "tool_end", toolCallId: id, isError: false, timestamp: Date.now() });
         setAgentPhase((prev) => {
           if (prev?.kind !== "running_tools") return prev;
           const tools = prev.tools.filter((t) => t.id !== id);

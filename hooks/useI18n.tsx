@@ -214,6 +214,22 @@ const ZH_TRANSLATIONS = {
   "Save": "保存",
   "Pinned": "已固定",
   "Recent": "最近使用",
+  // Tool call stats drawer
+  "Tool call statistics": "工具调用统计",
+  "Tool Calls": "工具调用",
+  "{n} total": "共 {n} 次",
+  "Success": "成功",
+  "Errors": "失败",
+  "Rate": "成功率",
+  "Avg": "平均",
+  "By Tool": "按工具",
+  "Tool": "工具",
+  "#": "次数",
+  "OK": "成功",
+  "Err": "失败",
+  "Timeline": "时间线",
+  "No tool calls yet": "暂无工具调用",
+  "{n} running \u00b7 {m} total": "{n} 运行中 \u00b7 共 {m} 次",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
