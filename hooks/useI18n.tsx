@@ -212,6 +212,8 @@ const ZH_TRANSLATIONS = {
   "Saved": "已保存",
   "Saving...": "正在保存...",
   "Save": "保存",
+  "Pinned": "已固定",
+  "Recent": "最近使用",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

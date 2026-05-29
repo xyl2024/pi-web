@@ -46,7 +46,6 @@ function getRecentCwds(sessions: SessionInfo[]): string[] {
   }
   return [...latestByCwd.entries()]
     .sort((a, b) => b[1].localeCompare(a[1]))
-    .slice(0, 5)
     .map(([cwd]) => cwd);
 }
 
@@ -211,6 +210,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const [createSpaceValue, setCreateSpaceValue] = useState("");
   const [createSpaceError, setCreateSpaceError] = useState<string | null>(null);
   const [creatingSpace, setCreatingSpace] = useState(false);
+  const [pinnedCwds, setPinnedCwds] = useState<string[]>([]);
   const customPathInputRef = useRef<HTMLInputElement>(null);
   const createSpaceInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -348,6 +348,34 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     }
   }, []);
 
+  // Fetch pinned CWDs when dropdown opens
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    fetch("/api/pinned-cwds")
+      .then((r) => r.json())
+      .then((d: { cwds?: string[] }) => {
+        if (Array.isArray(d.cwds)) setPinnedCwds(d.cwds);
+      })
+      .catch(() => {});
+  }, [dropdownOpen]);
+
+  const togglePin = useCallback(async (cwd: string) => {
+    const next = pinnedCwds.includes(cwd)
+      ? pinnedCwds.filter((p) => p !== cwd)
+      : [...pinnedCwds, cwd];
+    setPinnedCwds(next);
+    try {
+      await fetch("/api/pinned-cwds", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cwds: next }),
+      });
+    } catch {
+      // revert on failure
+      setPinnedCwds(pinnedCwds);
+    }
+  }, [pinnedCwds]);
+
   // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -375,6 +403,8 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   }, [selectedCwd, onNewSession]);
 
   const recentCwds = getRecentCwds(allSessions);
+  const pinnedSet = new Set(pinnedCwds);
+  const unpinnedRecentCwds = recentCwds.filter((c) => !pinnedSet.has(c));
   const filteredSessions = selectedCwd
     ? allSessions.filter((s) => s.cwd === selectedCwd)
     : allSessions;
@@ -525,47 +555,113 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 overflow: "hidden",
               }}
             >
-              {recentCwds.map((cwd) => (
-                <button
-                  key={cwd}
-                  onClick={() => {
-                    setSelectedCwd(cwd);
-                    setCustomPathOpen(false);
-                    setCustomPathValue("");
-                    setCreateSpaceOpen(false);
-                    setCreateSpaceValue("");
-                    setCreateSpaceError(null);
-                    setDropdownOpen(false);
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 7,
-                    width: "100%",
-                    padding: "8px 10px",
-                    background: cwd === selectedCwd ? "var(--bg-selected)" : "none",
-                    border: "none",
-                    borderBottom: "1px solid var(--border)",
-                    color: cwd === selectedCwd ? "var(--text)" : "var(--text-muted)",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    fontSize: 11,
-                    fontFamily: "var(--font-mono)",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                  title={cwd}
-                >
-                  {cwd === selectedCwd && (
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                      <polyline points="1.5 5 4 7.5 8.5 2.5" />
-                    </svg>
-                  )}
-                  {cwd !== selectedCwd && <span style={{ width: 10, flexShrink: 0 }} />}
-                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortenCwd(cwd, homeDir)}</span>
-                </button>
-              ))}
+              <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                {/* Pinned section */}
+                {pinnedCwds.length > 0 && (
+                  <>
+                    <div style={{ padding: "6px 10px 3px", fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      {t("Pinned")}
+                    </div>
+                    {pinnedCwds.map((cwd) => (
+                      <button
+                        key={`pinned-${cwd}`}
+                        onClick={() => {
+                          setSelectedCwd(cwd);
+                          setCustomPathOpen(false);
+                          setCustomPathValue("");
+                          setCreateSpaceOpen(false);
+                          setCreateSpaceValue("");
+                          setCreateSpaceError(null);
+                          setDropdownOpen(false);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 7,
+                          width: "100%",
+                          padding: "8px 10px",
+                          background: cwd === selectedCwd ? "var(--bg-selected)" : "none",
+                          border: "none",
+                          borderBottom: "1px solid var(--border)",
+                          color: cwd === selectedCwd ? "var(--text)" : "var(--text-muted)",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          fontSize: 11,
+                          fontFamily: "var(--font-mono)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={cwd}
+                      >
+                        <span
+                          onClick={(e) => { e.stopPropagation(); togglePin(cwd); }}
+                          style={{ display: "flex", alignItems: "center", flexShrink: 0, cursor: "pointer", padding: 2 }}
+                          title="Unpin"
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="var(--accent)" stroke="none">
+                            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2Z" />
+                          </svg>
+                        </span>
+                        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortenCwd(cwd, homeDir)}</span>
+                      </button>
+                    ))}
+                  </>
+                )}
+
+                {/* Recent section */}
+                {unpinnedRecentCwds.length > 0 && (
+                  <>
+                    <div style={{ padding: pinnedCwds.length > 0 ? "4px 10px 3px" : "6px 10px 3px", fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      {t("Recent")}
+                    </div>
+                    {unpinnedRecentCwds.map((cwd) => (
+                      <button
+                        key={`recent-${cwd}`}
+                        onClick={() => {
+                          setSelectedCwd(cwd);
+                          setCustomPathOpen(false);
+                          setCustomPathValue("");
+                          setCreateSpaceOpen(false);
+                          setCreateSpaceValue("");
+                          setCreateSpaceError(null);
+                          setDropdownOpen(false);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 7,
+                          width: "100%",
+                          padding: "8px 10px",
+                          background: cwd === selectedCwd ? "var(--bg-selected)" : "none",
+                          border: "none",
+                          borderBottom: "1px solid var(--border)",
+                          color: cwd === selectedCwd ? "var(--text)" : "var(--text-muted)",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          fontSize: 11,
+                          fontFamily: "var(--font-mono)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={cwd}
+                      >
+                        <span
+                          onClick={(e) => { e.stopPropagation(); togglePin(cwd); }}
+                          style={{ display: "flex", alignItems: "center", flexShrink: 0, cursor: "pointer", padding: 2, opacity: 0.45 }}
+                          title="Pin"
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2Z" />
+                          </svg>
+                        </span>
+                        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortenCwd(cwd, homeDir)}</span>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
 
               {/* Default cwd shortcut */}
               {!customPathOpen && !createSpaceOpen && (
@@ -579,7 +675,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                     padding: "8px 10px",
                     background: "none",
                     border: "none",
-                    borderTop: recentCwds.length > 0 ? "1px solid var(--border)" : "none",
+                    borderTop: (pinnedCwds.length > 0 || unpinnedRecentCwds.length > 0) ? "1px solid var(--border)" : "none",
                     color: "var(--text-muted)",
                     cursor: "pointer",
                     textAlign: "left",
@@ -624,7 +720,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                   <span>{t("Create space...")}</span>
                 </button>
               ) : createSpaceOpen ? (
-                <div style={{ padding: "6px 8px", borderTop: recentCwds.length > 0 ? "none" : undefined }}>
+                <div style={{ padding: "6px 8px" }}>
                   <input
                     ref={createSpaceInputRef}
                     value={createSpaceValue}
@@ -736,7 +832,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                   <span>{t("Custom path...")}</span>
                 </button>
               ) : customPathOpen ? (
-                <div style={{ padding: "6px 8px", borderTop: recentCwds.length > 0 ? "none" : undefined }}>
+                <div style={{ padding: "6px 8px" }}>
                   <input
                     ref={customPathInputRef}
                     value={customPathValue}
