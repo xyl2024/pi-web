@@ -122,10 +122,27 @@ export function AppShell() {
         e.preventDefault();
         setPaletteOpen((v) => !v);
       }
+      // Space — focus chat input when not already focused
+      if (
+        e.key === " " &&
+        !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !paletteOpen &&
+        chatInputRef.current
+      ) {
+        const active = document.activeElement;
+        const isEditable =
+          active instanceof HTMLInputElement ||
+          active instanceof HTMLTextAreaElement ||
+          (active instanceof HTMLElement && active.isContentEditable);
+        if (!isEditable) {
+          e.preventDefault();
+          chatInputRef.current.focus();
+        }
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [paletteOpen]);
 
   useEffect(() => {
     if (!activeTopPanel || !topBarRef.current) return;

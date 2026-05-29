@@ -58,6 +58,7 @@ export interface ChatInputHandle {
   insertText: (text: string) => void;
   insertIfEmpty: (text: string) => void;
   addImages: (files: File[]) => void;
+  focus: () => void;
 }
 
 const TOOL_PRESETS = ["off", "full"] as const;
@@ -255,6 +256,14 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     },
     addImages(files: File[]) {
       processImageFiles(files);
+    },
+    focus() {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      ta.focus();
+      // Place cursor at end of current text
+      const end = ta.value.length;
+      ta.setSelectionRange(end, end);
     },
   }));
 
