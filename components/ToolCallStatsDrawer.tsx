@@ -1,6 +1,7 @@
 "use client";
 
 import { useI18n } from "@/hooks/useI18n";
+import { Tooltip } from "./Tooltip";
 import type { ToolCallStatsSnapshot, PerToolStat, WaterfallEntry } from "@/hooks/useToolCallStats";
 
 // ── Props ──
@@ -46,9 +47,9 @@ export function ToolCallStatsDrawer({ snapshot, open, onToggle, runningSummary, 
   return (
     <>
       {/* Toggle button */}
+      <Tooltip content={t("Tool call statistics")}>
       <button
         onClick={onToggle}
-        title={t("Tool call statistics")}
         style={{
           position: "absolute",
           top: 12,
@@ -81,6 +82,7 @@ export function ToolCallStatsDrawer({ snapshot, open, onToggle, runningSummary, 
           </span>
         )}
       </button>
+      </Tooltip>
 
       {/* Drawer panel */}
       <div

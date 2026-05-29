@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useI18n } from "@/hooks/useI18n";
+import { Tooltip } from "./Tooltip";
 // Color icons (have their own fill colors — no background needed)
 import AnthropicIcon from "@lobehub/icons/es/Anthropic/components/Mono";
 import OpenAIIcon from "@lobehub/icons/es/OpenAI/components/Mono";
@@ -196,11 +197,11 @@ function SecretTextInput({
         autoComplete={autoComplete}
         spellCheck={spellCheck}
       />
+      <Tooltip content={visible ? t("Hide API key") : t("Show API key")}>
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? t("Hide API key") : t("Show API key")}
-        title={visible ? t("Hide API key") : t("Show API key")}
         style={{
           position: "absolute",
           right: 5,
@@ -232,6 +233,7 @@ function SecretTextInput({
           </svg>
         )}
       </button>
+      </Tooltip>
     </div>
   );
 }

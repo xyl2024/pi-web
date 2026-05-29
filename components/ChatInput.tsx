@@ -2,6 +2,7 @@
 
 import React, { useRef, useState, useCallback, useEffect, useImperativeHandle, forwardRef, KeyboardEvent, useMemo } from "react";
 import { useI18n } from "@/hooks/useI18n";
+import { Tooltip } from "./Tooltip";
 
 export interface AttachedImage {
   data: string;   // base64, no prefix
@@ -670,10 +671,10 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           {isStreaming ? (
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, alignSelf: "flex-end" }}>
               {onSteer && (
+                <Tooltip content={t("Interrupt the running agent and inject this message")}>
                 <button
                   onClick={() => sendQueued("steer")}
                   disabled={!value.trim() && !attachedImages.length && !selectedSlashResource}
-                  title={t("Interrupt the running agent and inject this message")}
                   style={{
                     display: "flex", alignItems: "center", gap: 5,
                     padding: "7px 12px",
@@ -691,12 +692,13 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   </svg>
                   {t("Steer")}
                 </button>
+                </Tooltip>
               )}
               {onFollowUp && (
+                <Tooltip content={t("Queue this message after the agent finishes")}>
                 <button
                   onClick={() => sendQueued("followup")}
                   disabled={!value.trim() && !attachedImages.length && !selectedSlashResource}
-                  title={t("Queue this message after the agent finishes")}
                   style={{
                     display: "flex", alignItems: "center", gap: 5,
                     padding: "7px 12px",
@@ -715,6 +717,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   </svg>
                   {t("Follow-up")}
                 </button>
+                </Tooltip>
               )}
             </div>
           ) : (
@@ -765,9 +768,9 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     /{selectedSlashResource.command}
                   </span>
+                  <Tooltip content={t("Remove")}>
                   <button
                     onClick={() => setSelectedSlashResource(null)}
-                    title={t("Remove")}
                     style={{
                       width: 16, height: 16, border: "none", background: "none",
                       color: "var(--text-dim)", cursor: "pointer", padding: 0,
@@ -778,6 +781,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                       <line x1="1.5" y1="1.5" x2="7.5" y2="7.5" /><line x1="7.5" y1="1.5" x2="1.5" y2="7.5" />
                     </svg>
                   </button>
+                  </Tooltip>
                 </span>
               </div>
             )}
@@ -857,10 +861,10 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
           {/* LEFT: attach + model selector (idle) or steer/followup toggle (streaming) */}
           <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 2 }}>
+            <Tooltip content={t("Attach image")}>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isStreaming}
-              title={t("Attach image")}
               style={{
                 flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
                 width: 32, height: 32, padding: 0,
@@ -887,6 +891,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 <polyline points="21 15 16 10 5 21" />
               </svg>
             </button>
+            </Tooltip>
             {/* Model selector — visible always, disabled during streaming */}
             {modelOptions.length > 0 && currentName && onModelChange && (
                 <div ref={dropdownRef} style={{ position: "relative" }}>
@@ -997,10 +1002,10 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }}>
             {!isStreaming && onThinkingLevelChange && (
               <div ref={thinkingDropdownRef} style={{ position: "relative" }}>
+                <Tooltip content={t("Change thinking level")}>
                 <button
                   onClick={() => !isStreaming && setThinkingDropdownOpen((v) => !v)}
                   disabled={isStreaming}
-                  title={t("Change thinking level")}
                   style={{
                     display: "flex", alignItems: "center", gap: 5,
                     padding: "8px 12px",
@@ -1036,6 +1041,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     return mapped != null ? mapped : lvl;
                   })()}</span>
                 </button>
+                </Tooltip>
                 {thinkingDropdownOpen && (
                   <div style={{
                     position: "absolute", bottom: "calc(100% + 6px)", right: 0,
@@ -1087,10 +1093,10 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             )}
             {!isStreaming && onToolPresetChange && (
               <div ref={toolDropdownRef} style={{ position: "relative" }}>
+                <Tooltip content={t("Change tool preset")}>
                 <button
                   onClick={() => !isStreaming && setToolDropdownOpen((v) => !v)}
                   disabled={isStreaming}
-                  title={t("Change tool preset")}
                   style={{
                     display: "flex", alignItems: "center", gap: 5,
                     padding: "8px 12px",
@@ -1119,6 +1125,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   </svg>
                   <span>{Object.entries(TOOL_PRESET_MAP).find(([, v]) => v === toolPreset)?.[0] ?? "off"}</span>
                 </button>
+                </Tooltip>
                 {toolDropdownOpen && (
                   <div style={{
                     position: "absolute", bottom: "calc(100% + 6px)", right: 0,
@@ -1197,7 +1204,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     e.currentTarget.style.background = isCompacting ? "rgba(239,68,68,0.08)" : "none";
                     e.currentTarget.style.color = isCompacting ? "#ef4444" : "var(--text-muted)";
                   }}
-                  title={isCompacting ? t("Stop compaction") : t("Compact context")}
                 >
                   {isCompacting ? (
                     <><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="2" y="2" width="6" height="6" rx="1" fill="currentColor" /></svg>{t("Compacting...")}</>
@@ -1214,7 +1220,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             {isStreaming && (
               <button
                 onClick={onAbort}
-                title={t("Stop agent")}
                 style={{
                   display: "flex", alignItems: "center", gap: 6,
                   padding: "8px 14px",
@@ -1241,7 +1246,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             {onSoundToggle !== undefined && (
               <button
                 onClick={onSoundToggle}
-                title={soundEnabled ? t("Turn completion sound off") : t("Turn completion sound on")}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   width: 32, height: 32, padding: 0,

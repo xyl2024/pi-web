@@ -8,6 +8,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTheme } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
+import { Tooltip } from "./Tooltip";
 import { encodeFilePathForApi, getFileName, getRelativeFilePath } from "@/lib/file-paths";
 
 interface Props {
@@ -336,14 +337,14 @@ function ImageViewer({ filePath, cwd }: { filePath: string; cwd?: string }) {
           flexShrink: 0,
         }}
       >
-        <span style={{ fontFamily: "var(--font-mono)" }} title={filePath}>
+        <Tooltip content={filePath}><span style={{ fontFamily: "var(--font-mono)" }}>
           {getRelativeFilePath(filePath, cwd)}
-        </span>
+        </span></Tooltip>
         <span style={{ marginLeft: "auto" }}>{ext || "image"}</span>
         {naturalSize && <span>{naturalSize.w} × {naturalSize.h}</span>}
         {formatSizeStr && <span>{formatSizeStr}</span>}
+        <Tooltip content={watching ? t("Live sync active") : t("Not watching")}>
         <span
-          title={watching ? t("Live sync active") : t("Not watching")}
           style={{ display: "flex", alignItems: "center", gap: 4, color: watching ? "#4ade80" : "var(--text-dim)" }}
         >
           <span
@@ -358,6 +359,7 @@ function ImageViewer({ filePath, cwd }: { filePath: string; cwd?: string }) {
           />
           {watching ? t("live") : t("static")}
         </span>
+        </Tooltip>
       </div>
       <div
         style={{
@@ -471,14 +473,14 @@ function AudioViewer({ filePath, cwd }: { filePath: string; cwd?: string }) {
           flexShrink: 0,
         }}
       >
-        <span style={{ fontFamily: "var(--font-mono)" }} title={filePath}>
+        <Tooltip content={filePath}><span style={{ fontFamily: "var(--font-mono)" }}>
           {getRelativeFilePath(filePath, cwd)}
-        </span>
+        </span></Tooltip>
         <span style={{ marginLeft: "auto" }}>{ext || "audio"}</span>
         {duration != null && <span>{formatDuration(duration)}</span>}
         {size != null && <span>{formatSize(size)}</span>}
+        <Tooltip content={watching ? t("Live sync active") : t("Not watching")}>
         <span
-          title={watching ? t("Live sync active") : t("Not watching")}
           style={{ display: "flex", alignItems: "center", gap: 4, color: watching ? "#4ade80" : "var(--text-dim)" }}
         >
           <span
@@ -493,6 +495,7 @@ function AudioViewer({ filePath, cwd }: { filePath: string; cwd?: string }) {
           />
           {watching ? t("live") : t("static")}
         </span>
+        </Tooltip>
       </div>
       <div
         style={{
@@ -662,16 +665,16 @@ function TextFileViewer({ filePath, cwd }: Props) {
           flexShrink: 0,
         }}
       >
-        <span style={{ fontFamily: "var(--font-mono)" }} title={filePath}>
+        <Tooltip content={filePath}><span style={{ fontFamily: "var(--font-mono)" }}>
           {getRelativeFilePath(filePath, cwd)}
-        </span>
+        </span></Tooltip>
         <span style={{ marginLeft: "auto" }}>{data.language}</span>
         {viewMode === "source" && <span>{lines.length} {t("lines")}</span>}
         <span>{formatSize(data.size)}</span>
 
         {/* Live watch indicator */}
+        <Tooltip content={watching ? t("Live sync active") : t("Not watching")}>
         <span
-          title={watching ? t("Live sync active") : t("Not watching")}
           style={{ display: "flex", alignItems: "center", gap: 4, color: watching ? "#4ade80" : "var(--text-dim)" }}
         >
           <span
@@ -686,6 +689,7 @@ function TextFileViewer({ filePath, cwd }: Props) {
           />
           {watching ? t("live") : t("static")}
         </span>
+        </Tooltip>
 
         {/* Diff / Source toggle — shown only when there are changes */}
         {hasDiff && (
@@ -717,9 +721,9 @@ function TextFileViewer({ filePath, cwd }: Props) {
 
         {/* Word wrap toggle */}
         {viewMode === "source" && !previewMode && (
+          <Tooltip content={wrapLines ? t("Disable word wrap") : t("Enable word wrap")}>
           <button
             onClick={() => setWrapLines((v) => !v)}
-            title={wrapLines ? t("Disable word wrap") : t("Enable word wrap")}
             style={{
               padding: "2px 8px", fontSize: 11, cursor: "pointer",
               background: wrapLines ? "var(--bg-selected)" : "var(--bg-hover)",
@@ -730,6 +734,7 @@ function TextFileViewer({ filePath, cwd }: Props) {
           >
             {t("wrap")}
           </button>
+          </Tooltip>
         )}
 
         {/* HTML source/preview toggle */}
@@ -798,7 +803,6 @@ function TextFileViewer({ filePath, cwd }: Props) {
             srcDoc={data.content}
             sandbox="allow-scripts"
             style={{ width: "100%", height: "100%", border: "none", background: "var(--bg)" }}
-            title={t("HTML preview")}
           />
         ) : isMarkdown && previewMode ? (
           <div

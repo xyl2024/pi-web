@@ -8,6 +8,7 @@ import { FileViewer } from "./FileViewer";
 import { TabBar, type Tab } from "./TabBar";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
+import { Tooltip } from "./Tooltip";
 import { PromptsConfig } from "./PromptsConfig";
 import { BranchNavigator } from "./BranchNavigator";
 import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
@@ -330,11 +331,10 @@ export function AppShell() {
             ),
           },
         ] as { label: string; onClick: () => void; disabled: boolean; icon: React.ReactNode }[]).map(({ label, onClick, disabled, icon }) => (
+          <Tooltip key={label} content={label}>
           <button
-            key={label}
             onClick={onClick}
             disabled={disabled}
-            title={label}
             style={{
               flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
               height: 32, padding: 0, background: "none", border: "none",
@@ -348,6 +348,7 @@ export function AppShell() {
             {icon}
             {label}
           </button>
+          </Tooltip>
         ))}
       </div>
     </>
@@ -390,9 +391,9 @@ export function AppShell() {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
         {/* Top bar with sidebar toggle */}
         <div ref={topBarRef} style={{ display: "flex", alignItems: "center", flexShrink: 0, borderBottom: "1px solid var(--border)", height: 36, background: "var(--bg-panel)", overflow: "visible", zIndex: 45 }}>
+          <Tooltip content={sidebarOpen ? t("Hide sidebar") : t("Show sidebar")}>
           <button
             onClick={() => setSidebarOpen((v) => !v)}
-            title={sidebarOpen ? t("Hide sidebar") : t("Show sidebar")}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
@@ -412,13 +413,14 @@ export function AppShell() {
               </svg>
             )}
           </button>
+          </Tooltip>
           {/* Theme preset selector */}
           <div style={{ position: "relative", overflow: "visible" }}>
+            <Tooltip content={t("Switch theme")}>
             <button
               onClick={() => {
                 setThemeMenuOpen((v) => !v);
               }}
-              title={t("Switch theme")}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
                 width: 36, height: 36, padding: 0,
@@ -433,6 +435,7 @@ export function AppShell() {
                 <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
               </svg>
             </button>
+            </Tooltip>
             {themeMenuOpen && (
               <>
                 <div
@@ -481,9 +484,9 @@ export function AppShell() {
               </>
             )}
           </div>
+          <Tooltip content={t("Switch language")}>
           <button
             onClick={toggleLocale}
-            title={t("Switch language")}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
@@ -496,6 +499,7 @@ export function AppShell() {
           >
             {locale === "zh" ? "EN" : "中"}
           </button>
+          </Tooltip>
           {showChat && (
             <div style={{ display: "flex", alignItems: "stretch", height: "100%" }}>
               <BranchNavigator
@@ -533,6 +537,7 @@ export function AppShell() {
                 </svg>
                 <span>{t("System")}</span>
               </button>
+              <Tooltip content={agentsFiles.length > 0 ? `${agentsFiles.length} AGENTS.md file(s)` : t("No AGENTS.md files found")}>
               <button
                 onClick={() => toggleTopPanel("context")}
                 style={{
@@ -549,8 +554,7 @@ export function AppShell() {
                 }}
                 onMouseEnter={(e) => { if (agentsFiles.length > 0) e.currentTarget.style.color = "var(--text)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.color = agentsFiles.length > 0 ? (activeTopPanel === "context" ? "var(--text)" : "var(--text-muted)") : "var(--text-dim)"; }}
-                title={agentsFiles.length > 0 ? `${agentsFiles.length} AGENTS.md file(s)` : t("No AGENTS.md files found")}
-              >
+                >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                   <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
                   <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
@@ -562,6 +566,8 @@ export function AppShell() {
                   <span style={{ fontSize: 10, opacity: 0.7 }}>({agentsFiles.length})</span>
                 )}
               </button>
+              </Tooltip>
+              <Tooltip content={tools.length > 0 ? `${tools.filter((t) => t.active).length} / ${tools.length} ${t("Active").toLowerCase()}` : t("No tools available for this session")}>
               <button
                 ref={toolsBtnRef}
                 onClick={() => toggleTopPanel("tools")}
@@ -580,7 +586,6 @@ export function AppShell() {
                 }}
                 onMouseEnter={(e) => { if (tools.length > 0) e.currentTarget.style.color = "var(--text)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.color = tools.length > 0 ? (activeTopPanel === "tools" ? "var(--text)" : "var(--text-muted)") : "var(--text-dim)"; }}
-                title={tools.length > 0 ? `${tools.filter((t) => t.active).length} / ${tools.length} ${t("Active").toLowerCase()}` : t("No tools available for this session")}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                   <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
@@ -590,6 +595,7 @@ export function AppShell() {
                   <span style={{ fontSize: 10, opacity: 0.7 }}>{tools.filter((t) => t.active).length}</span>
                 )}
               </button>
+              </Tooltip>
             </div>
           )}
           {/* Session stats — right-aligned in top bar */}
@@ -623,8 +629,8 @@ export function AppShell() {
             const tooltip = tooltipParts.join("  |  ");
 
             return (
+              <Tooltip content={tooltip}>
               <div
-                title={tooltip}
                 style={{
                   marginLeft: "auto",
                   display: "flex", alignItems: "center", gap: 10,
@@ -674,6 +680,7 @@ export function AppShell() {
                   </span>
                 )}
               </div>
+              </Tooltip>
             );
           })()}
           {/* Top panel dropdown — shared, only one active at a time */}
@@ -889,9 +896,9 @@ export function AppShell() {
       </div>
     </div>
     {/* File panel toggle — always visible at top-right */}
+    <Tooltip content={rightPanelOpen ? t("Hide file panel") : t("Show file panel")}>
     <button
       onClick={() => setRightPanelOpen((v) => !v)}
-      title={rightPanelOpen ? t("Hide file panel") : t("Show file panel")}
       style={{
         position: "fixed", top: 0, right: 0, zIndex: 300,
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -907,6 +914,7 @@ export function AppShell() {
         <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="15" y1="3" x2="15" y2="21" />
       </svg>
     </button>
+    </Tooltip>
     {modelsConfigOpen && <ModelsConfig onClose={() => { setModelsConfigOpen(false); setModelsRefreshKey((k) => k + 1); }} />}
     {skillsConfigOpen && (activeCwd ?? selectedSession?.cwd ?? newSessionCwd) && (
       <SkillsConfig cwd={(activeCwd ?? selectedSession?.cwd ?? newSessionCwd)!} onClose={() => setSkillsConfigOpen(false)} />

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentMessage, SessionInfo, SessionTreeNode, AgentsFile } from "@/lib/types";
 import { MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
+import { Tooltip } from "./Tooltip";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
 import { useAudio } from "@/hooks/useAudio";
@@ -499,6 +500,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
 
         {/* To-bottom button — shown when user scrolls up */}
         {showToBottom && (
+          <Tooltip content={t("Scroll to bottom")}>
           <button
             onClick={handleToBottom}
             className="absolute bottom-4 right-12 z-10 flex h-9 w-9 items-center justify-center rounded-full border shadow-lg transition-all duration-200 hover:scale-110"
@@ -507,12 +509,12 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
               borderColor: "var(--border)",
               color: "var(--text-muted)",
             }}
-            title={t("Scroll to bottom")}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
+          </Tooltip>
         )}
 
         {/* Tool call stats drawer — jump to chat message on click */}

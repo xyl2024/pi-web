@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import type { SessionInfo } from "@/lib/types";
 import { FileExplorer } from "./FileExplorer";
 import { useI18n } from "@/hooks/useI18n";
+import { Tooltip } from "./Tooltip";
 
 interface Props {
   selectedSessionId: string | null;
@@ -425,6 +426,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <PiAgentTitle />
           <div style={{ display: "flex", gap: 6 }}>
+            <Tooltip content={selectedCwd ? `${t("New session")} ${selectedCwd}` : t("Select a project first")}>
             <button
               onClick={handleNewSession}
               disabled={!selectedCwd}
@@ -444,7 +446,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 flexShrink: 0,
                 transition: "background 0.12s, color 0.12s, border-color 0.12s",
               }}
-              title={selectedCwd ? `${t("New session")} ${selectedCwd}` : t("Select a project first")}
               onMouseEnter={(e) => {
                 if (!selectedCwd) return;
                 e.currentTarget.style.background = "var(--bg-selected)";
@@ -463,6 +464,8 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
               </svg>
               {t("New")}
             </button>
+            </Tooltip>
+            <Tooltip content={t("Refresh")}>
             <button
               onClick={() => loadSessions(false)}
               style={{
@@ -489,7 +492,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 e.currentTarget.style.color = "var(--text-muted)";
                 e.currentTarget.style.borderColor = "var(--border)";
               }}
-              title={t("Refresh")}
             >
               {sessionRefreshDone ? (
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -502,6 +504,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 </svg>
               )}
             </button>
+            </Tooltip>
           </div>
         </div>
 
@@ -534,7 +537,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 fontSize: 11,
                 color: selectedCwd ? "var(--text)" : "var(--text-dim)",
               }}
-              title={selectedCwd ?? ""}
             >
               {selectedCwd ? shortenCwd(selectedCwd, homeDir) : (initialSessionId && !restoredRef.current ? "" : t("Select project..."))}
             </span>
@@ -563,8 +565,8 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                       {t("Pinned")}
                     </div>
                     {pinnedCwds.map((cwd) => (
+                      <Tooltip key={`pinned-${cwd}`} content={cwd}>
                       <button
-                        key={`pinned-${cwd}`}
                         onClick={() => {
                           setSelectedCwd(cwd);
                           setCustomPathOpen(false);
@@ -592,19 +594,20 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
                         }}
-                        title={cwd}
                       >
+                        <Tooltip content="Unpin">
                         <span
                           onClick={(e) => { e.stopPropagation(); togglePin(cwd); }}
                           style={{ display: "flex", alignItems: "center", flexShrink: 0, cursor: "pointer", padding: 2 }}
-                          title="Unpin"
                         >
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="var(--accent)" stroke="none">
                             <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2Z" />
                           </svg>
                         </span>
+                        </Tooltip>
                         <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortenCwd(cwd, homeDir)}</span>
                       </button>
+                      </Tooltip>
                     ))}
                   </>
                 )}
@@ -616,8 +619,8 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                       {t("Recent")}
                     </div>
                     {unpinnedRecentCwds.map((cwd) => (
+                      <Tooltip key={`recent-${cwd}`} content={cwd}>
                       <button
-                        key={`recent-${cwd}`}
                         onClick={() => {
                           setSelectedCwd(cwd);
                           setCustomPathOpen(false);
@@ -645,19 +648,20 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
                         }}
-                        title={cwd}
                       >
+                        <Tooltip content="Pin">
                         <span
                           onClick={(e) => { e.stopPropagation(); togglePin(cwd); }}
                           style={{ display: "flex", alignItems: "center", flexShrink: 0, cursor: "pointer", padding: 2, opacity: 0.45 }}
-                          title="Pin"
                         >
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                             <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2Z" />
                           </svg>
                         </span>
+                        </Tooltip>
                         <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortenCwd(cwd, homeDir)}</span>
                       </button>
+                      </Tooltip>
                     ))}
                   </>
                 )}
@@ -972,6 +976,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
               </svg>
               {t("Explorer")}
             </button>
+            <Tooltip content={t("Refresh explorer")}>
             <button
               onClick={() => {
                 setExplorerKey((k) => k + 1);
@@ -979,7 +984,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 if (explorerRefreshTimerRef.current) clearTimeout(explorerRefreshTimerRef.current);
                 explorerRefreshTimerRef.current = setTimeout(() => setExplorerRefreshDone(false), 2000);
               }}
-              title={t("Refresh explorer")}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
                 width: 26, height: 26, padding: 0, marginRight: 6,
@@ -1005,6 +1009,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 </svg>
               )}
             </button>
+            </Tooltip>
           </div>
           {explorerOpen && (
             <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
@@ -1266,6 +1271,7 @@ function SessionItem({
             </svg>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
+            <Tooltip content={title}>
             <div
               style={{
                 fontSize: 12,
@@ -1276,21 +1282,21 @@ function SessionItem({
                 whiteSpace: "nowrap",
                 color: "var(--text)",
               }}
-              title={title}
             >
               {title}
             </div>
+            </Tooltip>
             <div style={{ marginTop: 2, display: "flex", gap: 8, color: "var(--text-dim)", fontSize: 11 }}>
-              <span title={session.modified}>{formatRelativeTime(session.modified, t)}</span>
+              <Tooltip content={session.modified}><span>{formatRelativeTime(session.modified, t)}</span></Tooltip>
               <span>{session.messageCount} {t("msgs")}</span>
             </div>
           </div>
 
           {/* Collapse toggle — always visible when has children */}
           {hasChildren && (
+            <Tooltip content={collapsed ? t("Expand forks") : t("Collapse forks")}>
             <button
               onClick={(e) => { e.stopPropagation(); onToggleCollapse?.(); }}
-              title={collapsed ? t("Expand forks") : t("Collapse forks")}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
                 width: 20, height: 20, padding: 0, flexShrink: 0,
@@ -1304,14 +1310,15 @@ function SessionItem({
                 <polyline points="2 3.5 5 6.5 8 3.5" />
               </svg>
             </button>
+            </Tooltip>
           )}
 
           {/* Action buttons — shown on hover */}
           {hovered && (
             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+              <Tooltip content={t("Rename")}>
               <button
                 onClick={startRename}
-                title={t("Rename")}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   width: 32, height: 32, padding: 0,
@@ -1335,9 +1342,10 @@ function SessionItem({
                   <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
                 </svg>
               </button>
+              </Tooltip>
+              <Tooltip content={t("Delete")}>
               <button
                 onClick={handleDeleteClick}
-                title={t("Delete")}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   width: 32, height: 32, padding: 0,
@@ -1364,6 +1372,7 @@ function SessionItem({
                   <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                 </svg>
               </button>
+              </Tooltip>
             </div>
           )}
         </>

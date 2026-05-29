@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { getFileIcon, FolderIcon } from "./FileIcons";
 import { encodeFilePathForApi, getRelativeFilePath, joinFilePath } from "@/lib/file-paths";
 import { useI18n } from "@/hooks/useI18n";
+import { Tooltip } from "./Tooltip";
 
 interface FileEntry {
   name: string;
@@ -140,6 +141,7 @@ function TreeNode({
         <span style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
           {node.isDir ? <FolderIcon size={14} open={open} /> : getFileIcon(node.name, 14)}
         </span>
+        <Tooltip content={node.fullPath}>
         <span
           style={{
             fontSize: 12,
@@ -149,22 +151,22 @@ function TreeNode({
             whiteSpace: "nowrap",
             flex: 1,
           }}
-          title={node.fullPath}
         >
           {node.name}
         </span>
+        </Tooltip>
         {loading && (
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2" strokeLinecap="round">
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4" />
           </svg>
         )}
         {onAtMention && hovered && (
+          <Tooltip content={t("Insert path into chat")}>
           <button
             onClick={(e) => {
               e.stopPropagation();
               onAtMention(getRelativeFilePath(node.fullPath, cwd));
             }}
-            title={t("Insert path into chat")}
             style={{
               position: "absolute",
               right: 4,
@@ -192,6 +194,7 @@ function TreeNode({
             </svg>
             {t("mention")}
           </button>
+          </Tooltip>
         )}
       </div>
       {node.isDir && open && (

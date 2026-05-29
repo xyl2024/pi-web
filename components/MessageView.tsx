@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vs } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import { Tooltip } from "./Tooltip";
 import { useTheme } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
 import type {
@@ -182,9 +183,9 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
             pointerEvents: hovered ? "auto" : "none",
             transition: "opacity 0.12s",
           }}>
+            <Tooltip content={t("Copy message")}>
             <button
               onClick={copyContent}
-              title={t("Copy message")}
               style={{
                 display: "flex", alignItems: "center", gap: 4,
                 padding: "3px 8px", height: 22,
@@ -211,6 +212,7 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
               )}
               {copied ? t("Copied") : t("Copy")}
             </button>
+            </Tooltip>
           </div>
           {(canFork || canNavigate) && (
             <div style={{
@@ -220,9 +222,9 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
               transition: "opacity 0.12s",
             }}>
               {canNavigate && (
+                <Tooltip content={t("Edit from here title")}>
                 <button
                   onClick={() => { onNavigate!(prevAssistantEntryId!); onEditContent?.(content); }}
-                  title={t("Edit from here title")}
                   style={{
                     display: "flex", alignItems: "center", gap: 4,
                     padding: "3px 8px", height: 22,
@@ -243,12 +245,13 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
                   </svg>
                   {t("Edit from here")}
                 </button>
+                </Tooltip>
               )}
               {canFork && (
+                <Tooltip content={forking ? t("Creating new session") : t("New session title")}>
                 <button
                   onClick={() => { onFork!(entryId!); }}
                   disabled={forking}
-                  title={forking ? t("Creating new session") : t("New session title")}
                   style={{
                     display: "flex", alignItems: "center", gap: 4,
                     padding: "3px 8px", height: 22,
@@ -271,6 +274,7 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
                   </svg>
                   {forking ? t("Creating...") : t("New session")}
                 </button>
+                </Tooltip>
               )}
             </div>
           )}
@@ -431,7 +435,7 @@ function AssistantMessageView({
             <>
 
               {est > 0 && (
-                <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text)" }} title={t("Estimated tokens while streaming")}>
+                <Tooltip content={t("Estimated tokens while streaming")}><span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text)" }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, fontWeight: 400 }}>
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="5" y1="1.5" x2="5" y2="8.5" /><polyline points="2 6 5 8.5 8 6" />
@@ -446,7 +450,7 @@ function AssistantMessageView({
                       </span>
                     );
                   })()}
-                </span>
+                </span></Tooltip>
               )}
             </>
           );
@@ -468,9 +472,9 @@ function AssistantMessageView({
           </div>
         )}
         {textContent && !isStreaming && (
+          <Tooltip content={t("Copy message")}>
           <button
             onClick={copyContent}
-            title={t("Copy message")}
             style={{
               display: "flex", alignItems: "center", gap: 4,
               padding: "3px 8px", height: 22,
@@ -499,6 +503,7 @@ function AssistantMessageView({
             )}
             {copied ? t("Copied") : t("Copy")}
           </button>
+          </Tooltip>
         )}
         {time && !isStreaming && (
           <span style={{ fontSize: 10, color: "var(--text-dim)", marginLeft: "auto" }}>{time}</span>

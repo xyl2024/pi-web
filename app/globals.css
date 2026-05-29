@@ -273,6 +273,11 @@ span.linenumber {
   to { transform: rotate(360deg); }
 }
 
+@keyframes tooltip-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
