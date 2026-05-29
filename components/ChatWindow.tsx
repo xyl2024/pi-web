@@ -28,6 +28,10 @@ interface Props {
   onAgentsFilesChange?: (files: AgentsFile[]) => void;
   onSessionStatsChange?: (stats: { tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null) => void;
   onContextUsageChange?: (usage: { percent: number | null; contextWindow: number; tokens: number | null } | null) => void;
+  /** If set, navigate to this entry after the session finishes loading */
+  scrollToEntryId?: string | null;
+  /** Called after the scroll-to-entry navigation completes */
+  onScrollComplete?: () => void;
 }
 
 function phaseLabel(phase: AgentPhase, t: ReturnType<typeof useI18n>["t"]): string {
@@ -119,7 +123,7 @@ function Typewriter({ phrases }: { phrases: string[] }) {
   );
 }
 
-function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onAgentsFilesChange, onSessionStatsChange, onContextUsageChange }: Props) {
+function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onAgentsFilesChange, onSessionStatsChange, onContextUsageChange, scrollToEntryId, onScrollComplete }: Props) {
   const { locale, t } = useI18n();
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
 
@@ -143,6 +147,8 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
     modelsRefreshKey, onBranchDataChange, onSystemPromptChange,
     statsEmit,
+    scrollToEntryId,
+    onScrollComplete,
   });
 
   // Tool call stats hook

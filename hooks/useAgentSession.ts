@@ -69,6 +69,10 @@ export interface UseAgentSessionOptions {
   setToolPreset?: (preset: "none" | "full") => void;
   /** Push tool lifecycle events to the stats panel */
   statsEmit?: ToolCallStatsDispatch;
+  /** If set, navigate to this entry after the session finishes loading */
+  scrollToEntryId?: string | null;
+  /** Called after the scroll-to-entry navigation completes */
+  onScrollComplete?: () => void;
 }
 
 export type ThinkingLevelOption = "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -95,6 +99,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const {
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
     modelsRefreshKey, onBranchDataChange, onSystemPromptChange, statsEmit,
+    scrollToEntryId, onScrollComplete,
   } = opts;
   const statsEmitRef = useRef(statsEmit);
   statsEmitRef.current = statsEmit;
@@ -132,6 +137,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const agentRunningRef = useRef(false);
   const handleAgentEventRef = useRef<((event: AgentEvent) => void) | null>(null);
   const initialScrollDoneRef = useRef(false);
+  const scrollToEntryIdRef = useRef(scrollToEntryId);
+  scrollToEntryIdRef.current = scrollToEntryId;
+  const onScrollCompleteRef = useRef(onScrollComplete);
+  onScrollCompleteRef.current = onScrollComplete;
   const lastUserMsgRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollToUserRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -212,6 +221,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       console.error("Failed to load context:", e);
     }
   }, []);
+
+  const loadContextRef = useRef(loadContext);
+  loadContextRef.current = loadContext;
 
   const loadTools = useCallback(async (sid: string) => {
     try {
@@ -594,7 +606,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       sessionIdRef.current = session.id;
       // Start both in parallel; agents files won't clobber if session.cwd changes mid-flight
       if (session.cwd) loadAgentsFiles(session.cwd);
-      loadSession(session.id, true, true).then((agentState) => {
+      loadSession(session.id, true, true).then(async (agentState) => {
         if (agentState?.running) {
           loadTools(session.id);
           if (agentState.state?.isStreaming) {
@@ -608,6 +620,19 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           if (agentState.state.contextUsage !== undefined) setContextUsage(agentState.state.contextUsage ?? null);
           if (agentState.state.systemPrompt !== undefined) setSystemPrompt(agentState.state.systemPrompt ?? null);
           if (agentState.state.thinkingLevel !== undefined) setThinkingLevel((agentState.state.thinkingLevel as ThinkingLevelOption) ?? "auto");
+        }
+
+        // If a specific entry was requested via search, navigate to it
+        const targetEntryId = scrollToEntryIdRef.current;
+        if (targetEntryId) {
+          setActiveLeafId(targetEntryId);
+          await loadContextRef.current(session.id, targetEntryId);
+          sendAgentCommand(session.id, { type: "navigate_tree", targetId: targetEntryId }).catch(() => {});
+          // Scroll to the matched message after React commits the new messages
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+          }, 100);
+          onScrollCompleteRef.current?.();
         }
       });
     } else if (newSessionCwd) {

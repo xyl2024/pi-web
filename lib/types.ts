@@ -202,6 +202,22 @@ export interface RpcSessionState {
   messageCount: number;
 }
 
+export interface SessionSearchResult {
+  id: string;
+  name?: string;
+  cwd: string;
+  modified: string;
+  matchCount: number;
+  snippet: string; // \u0000-delimited keyword markers for frontend highlighting
+  /** entry.id of the first matching message — used to jump to that message on open */
+  firstMatchEntryId?: string;
+}
+
+export interface SessionSearchResponse {
+  results: SessionSearchResult[];
+  hasMore: boolean;
+}
+
 export interface AgentsFile {
   path: string;
   content: string;

@@ -1,5 +1,8 @@
+import * as fs from "fs";
+import * as path from "path";
+import * as readline from "readline";
 import { SessionManager, buildSessionContext as piBuildSessionContext, getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { SessionEntry, SessionInfo, SessionContext, SessionTreeNode, AssistantMessage } from "./types";
+import type { SessionEntry, SessionInfo, SessionContext, SessionTreeNode, AssistantMessage, SessionSearchResult, SessionSearchResponse } from "./types";
 import type { SessionEntry as PiSessionEntry, SessionInfo as PiSessionInfo } from "@earendil-works/pi-coding-agent";
 import { normalizeToolCalls } from "./normalize";
 
@@ -186,6 +189,152 @@ export function buildSessionContext(entries: SessionEntry[], leafId?: string | n
 export function getLeafId(entries: SessionEntry[]): string | null {
   if (entries.length === 0) return null;
   return entries[entries.length - 1].id;
+}
+
+// ============================================================================
+// Session search: full-text search over user + assistant messages
+// ============================================================================
+
+function workspaceSlug(cwd: string): string {
+  return "--" + cwd.replace(/^\//, "").replace(/\//g, "-") + "--";
+}
+
+function extractMessageContent(msg: Record<string, unknown>): string {
+  const content = msg.content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return (content as Array<{ type: string; text?: string }>)
+      .filter((block) => block.type === "text")
+      .map((block) => block.text ?? "")
+      .join(" ");
+  }
+  return "";
+}
+
+function buildSnippet(content: string, lowerQuery: string): string {
+  const lowerContent = content.toLowerCase();
+  const idx = lowerContent.indexOf(lowerQuery);
+  if (idx === -1) return content.slice(0, 120) + "...";
+
+  const qlen = lowerQuery.length;
+  const start = Math.max(0, idx - 60);
+  const end = Math.min(content.length, idx + qlen + 60);
+
+  let snippet = "";
+  if (start > 0) snippet += "...";
+  snippet += content.slice(start, idx);
+  snippet += "\u0000" + content.slice(idx, idx + qlen) + "\u0000";
+  snippet += content.slice(idx + qlen, end);
+  if (end < content.length) snippet += "...";
+
+  return snippet;
+}
+
+async function searchFile(filePath: string, lowerQuery: string): Promise<SessionSearchResult | null> {
+  return new Promise((resolve, reject) => {
+    const rl = readline.createInterface({
+      input: fs.createReadStream(filePath),
+      crlfDelay: Infinity,
+    });
+
+    let sessionId = "";
+    let cwd = "";
+    let name: string | undefined;
+    let matchCount = 0;
+    let snippet = "";
+    let foundSnippet = false;
+    let firstMatchEntryId: string | undefined;
+
+    rl.on("line", (line) => {
+      try {
+        const entry = JSON.parse(line) as Record<string, unknown>;
+
+        if (entry.type === "session") {
+          sessionId = (entry.id as string) ?? "";
+          cwd = (entry.cwd as string) ?? "";
+        }
+
+        // Match session name
+        if (entry.type === "session_info" && entry.name) {
+          name = entry.name as string;
+          if (name.toLowerCase().includes(lowerQuery)) {
+            matchCount++;
+            if (!foundSnippet) {
+              snippet = buildSnippet(name, lowerQuery);
+              foundSnippet = true;
+            }
+          }
+        }
+
+        // Match user / assistant message content
+        if (entry.type === "message") {
+          const msg = entry.message as Record<string, unknown> | undefined;
+          if (msg && (msg.role === "user" || msg.role === "assistant")) {
+            const content = extractMessageContent(msg);
+            if (content && content.toLowerCase().includes(lowerQuery)) {
+              matchCount++;
+              if (!foundSnippet) {
+                snippet = buildSnippet(content, lowerQuery);
+                foundSnippet = true;
+                firstMatchEntryId = entry.id as string | undefined;
+              }
+            }
+          }
+        }
+      } catch {
+        // Skip malformed JSON lines
+      }
+    });
+
+    rl.on("close", () => {
+      if (matchCount === 0) {
+        resolve(null);
+        return;
+      }
+      const stat = fs.statSync(filePath);
+      resolve({
+        id: sessionId,
+        name,
+        cwd,
+        modified: stat.mtime.toISOString(),
+        matchCount,
+        snippet,
+        firstMatchEntryId,
+      });
+    });
+
+    rl.on("error", reject);
+  });
+}
+
+export async function searchSessions(cwd: string, query: string): Promise<SessionSearchResponse> {
+  const sessionsDir = getSessionsDir();
+  const slug = workspaceSlug(cwd);
+  const workspaceDir = path.join(sessionsDir, slug);
+
+  if (!fs.existsSync(workspaceDir)) {
+    return { results: [], hasMore: false };
+  }
+
+  const files = fs.readdirSync(workspaceDir).filter((f) => f.endsWith(".jsonl"));
+  const lowerQuery = query.toLowerCase();
+
+  const results: SessionSearchResult[] = [];
+  for (const file of files) {
+    const filePath = path.join(workspaceDir, file);
+    const result = await searchFile(filePath, lowerQuery);
+    if (result) results.push(result);
+  }
+
+  // Sort by modified descending (most recently active first)
+  results.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
+
+  const MAX_RESULTS = 20;
+  const hasMore = results.length > MAX_RESULTS;
+  return {
+    results: results.slice(0, MAX_RESULTS),
+    hasMore,
+  };
 }
 
 

@@ -11,9 +11,10 @@ import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
 import { PromptsConfig } from "./PromptsConfig";
 import { BranchNavigator } from "./BranchNavigator";
+import { CommandPalette } from "./CommandPalette";
 import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
-import type { SessionInfo, SessionTreeNode, AgentsFile } from "@/lib/types";
+import type { SessionInfo, SessionTreeNode, AgentsFile, SessionSearchResult } from "@/lib/types";
 import type { ChatInputHandle } from "./ChatInput";
 import { sendAgentCommand } from "@/lib/agent-client";
 
@@ -34,12 +35,14 @@ export function AppShell() {
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [sessionKey, setSessionKey] = useState(0);
+  const [pendingScrollEntryId, setPendingScrollEntryId] = useState<string | null>(null);
   const [explorerRefreshKey, setExplorerRefreshKey] = useState(0);
   const [modelsConfigOpen, setModelsConfigOpen] = useState(false);
   const [modelsRefreshKey, setModelsRefreshKey] = useState(0);
   const [skillsConfigOpen, setSkillsConfigOpen] = useState(false);
   const [promptsConfigOpen, setPromptsConfigOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
 
@@ -110,6 +113,18 @@ export function AppShell() {
 
   const toggleTopPanel = useCallback((panel: "branches" | "system" | "context" | "tools") => {
     setActiveTopPanel((cur) => cur === panel ? null : panel);
+  }, []);
+
+  // Command palette: keyboard shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, []);
 
   useEffect(() => {
@@ -184,6 +199,22 @@ export function AppShell() {
       router.replace(`?session=${encodeURIComponent(session.id)}`, { scroll: false });
     }
   }, [router]);
+
+  // Command palette: convert search result to SessionInfo and open it
+  const handleSelectSearchResult = useCallback((result: SessionSearchResult) => {
+    const sessionInfo: SessionInfo = {
+      path: "",
+      id: result.id,
+      cwd: result.cwd,
+      name: result.name,
+      created: result.modified,
+      modified: result.modified,
+      messageCount: 0,
+      firstMessage: "",
+    };
+    setPendingScrollEntryId(result.firstMatchEntryId ?? null);
+    handleSelectSession(sessionInfo);
+  }, [handleSelectSession]);
 
   const handleNewSession = useCallback((_sessionId: string, cwd: string) => {
     setSelectedSession(null);
@@ -289,6 +320,7 @@ export function AppShell() {
         onOpenFile={handleOpenFile}
         explorerRefreshKey={explorerRefreshKey}
         onAtMention={handleAtMention}
+        onOpenSearch={() => setPaletteOpen(true)}
       />
       <div style={{ padding: "8px", flexShrink: 0, display: "flex", justifyContent: "space-between", gap: 4 }}>
         {([
@@ -834,6 +866,8 @@ export function AppShell() {
               onBranchDataChange={handleBranchDataChange}
               onSystemPromptChange={handleSystemPromptChange}
               onAgentsFilesChange={handleAgentsFilesChange}
+              scrollToEntryId={pendingScrollEntryId}
+              onScrollComplete={() => setPendingScrollEntryId(null)}
               onSessionStatsChange={handleSessionStatsChange}
               onContextUsageChange={handleContextUsageChange}
             />
@@ -922,6 +956,13 @@ export function AppShell() {
     {promptsConfigOpen && (activeCwd ?? selectedSession?.cwd ?? newSessionCwd) && (
       <PromptsConfig cwd={(activeCwd ?? selectedSession?.cwd ?? newSessionCwd)!} onClose={() => setPromptsConfigOpen(false)} />
     )}
+    <CommandPalette
+      open={paletteOpen}
+      onClose={() => setPaletteOpen(false)}
+      cwd={activeCwd ?? selectedSession?.cwd ?? newSessionCwd ?? null}
+      onSelectSession={handleSelectSearchResult}
+      t={t}
+    />
     </>
   );
 }
