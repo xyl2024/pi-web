@@ -215,3 +215,14 @@ Location: `~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`
 --accent --user-bg --tool-bg
 --font-mono
 ```
+
+---
+
+## i18n for Frontend Text
+
+**All user-visible strings in new components must go through i18n — never hardcode display text.**
+
+When adding or modifying frontend components:
+- Extract every user-facing string (labels, placeholders, tooltips, aria-labels, status messages, error text) into the i18n dictionary.
+- Use the project's existing i18n mechanism (`t('key')` / `useTranslation()`) — don't invent a new pattern.
+- Key naming: follow the existing convention (e.g. `namespace.camelCase` or dot-separated). Look at nearby keys before creating new ones.
