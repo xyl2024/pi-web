@@ -59,56 +59,6 @@ function sourceLabel(skill: Skill): string {
   return "path";
 }
 
-function Toggle({
-  enabled,
-  loading,
-  onToggle,
-}: {
-  enabled: boolean;
-  loading: boolean;
-  onToggle: () => void;
-}) {
-  const { t } = useI18n();
-  return (
-    <button
-      onClick={onToggle}
-      disabled={loading}
-      title={
-        enabled
-          ? t("Visible in model prompt - click to disable")
-          : t("Hidden from model prompt - click to enable")
-      }
-      style={{
-        flexShrink: 0,
-        width: 40,
-        height: 22,
-        borderRadius: 11,
-        border: "none",
-        padding: 0,
-        cursor: loading ? "wait" : "pointer",
-        background: enabled ? "var(--accent)" : "var(--border)",
-        position: "relative",
-        transition: "background 0.18s",
-        outline: "none",
-      }}
-    >
-      <span
-        style={{
-          position: "absolute",
-          top: 3,
-          left: enabled ? 21 : 3,
-          width: 16,
-          height: 16,
-          borderRadius: "50%",
-          background: "var(--bg)",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.22)",
-          transition: "left 0.18s cubic-bezier(.4,0,.2,1)",
-        }}
-      />
-    </button>
-  );
-}
-
 // ── Types for skill detail data ──
 
 interface SkillDetailFile {
@@ -306,20 +256,13 @@ function SubFileRow({
 function SkillDetail({
   skill,
   cwd,
-  onToggle,
-  toggling,
-  saveError,
 }: {
   skill: Skill;
   cwd: string;
-  onToggle: (skill: Skill) => void;
-  toggling: boolean;
-  saveError: string | null;
 }) {
   const { t } = useI18n();
   const { isDark } = useTheme();
   const label = sourceLabel(skill);
-  const enabled = !skill.disableModelInvocation;
 
   // ── Detail data fetching ──
   const [detail, setDetail] = useState<SkillDetailData | null>(null);
@@ -450,16 +393,6 @@ function SkillDetail({
         >
           {displayPath(skill.filePath)}
         </span>
-        <Toggle
-          enabled={enabled}
-          loading={toggling}
-          onToggle={() => onToggle(skill)}
-        />
-        {saveError && (
-          <span style={{ fontSize: 12, color: "#f87171", flexShrink: 0 }}>
-            {saveError}
-          </span>
-        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -893,8 +826,6 @@ export function SkillsConfig({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [toggling, setToggling] = useState<Set<string>>(new Set());
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [addMode, setAddMode] = useState(false);
 
   const loadSkills = useCallback(() => {
@@ -918,42 +849,6 @@ export function SkillsConfig({
   useEffect(() => {
     loadSkills();
   }, [cwd]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const toggle = useCallback(async (skill: Skill) => {
-    const next = !skill.disableModelInvocation;
-    setToggling((s) => new Set(s).add(skill.filePath));
-    setSaveError(null);
-    try {
-      const res = await fetch("/api/skills", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filePath: skill.filePath,
-          disableModelInvocation: next,
-        }),
-      });
-      const d = (await res.json()) as { success?: boolean; error?: string };
-      if (!res.ok || d.error) {
-        setSaveError(d.error ?? `HTTP ${res.status}`);
-        return;
-      }
-      setSkills((prev) =>
-        prev.map((s) =>
-          s.filePath === skill.filePath
-            ? { ...s, disableModelInvocation: next }
-            : s,
-        ),
-      );
-    } catch (e) {
-      setSaveError(String(e));
-    } finally {
-      setToggling((s) => {
-        const n = new Set(s);
-        n.delete(skill.filePath);
-        return n;
-      });
-    }
-  }, []);
 
   const selectedSkill = skills.find((s) => s.filePath === selected) ?? null;
 
@@ -1235,9 +1130,6 @@ export function SkillsConfig({
                 key={selectedSkill.filePath}
                 skill={selectedSkill}
                 cwd={cwd}
-                onToggle={toggle}
-                toggling={toggling.has(selectedSkill.filePath)}
-                saveError={saveError}
               />
             ) : (
               <div
