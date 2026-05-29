@@ -136,6 +136,29 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
     modelsRefreshKey, onBranchDataChange, onSystemPromptChange,
   });
 
+  // ── Scroll-to-bottom: auto-track during streaming, pause on user scroll-up ──
+  const [showToBottom, setShowToBottom] = useState(false);
+  const userScrolledUpRef = useRef(false);
+  const isProgrammaticScrollRef = useRef(false);
+
+  const handleScroll = useCallback(() => {
+    if (isProgrammaticScrollRef.current) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = dist < 100;
+    userScrolledUpRef.current = !nearBottom;
+    setShowToBottom(!nearBottom);
+  }, []);
+
+  const handleToBottom = useCallback(() => {
+    userScrolledUpRef.current = false;
+    setShowToBottom(false);
+    isProgrammaticScrollRef.current = true;
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => { isProgrammaticScrollRef.current = false; }, 500);
+  }, [messagesEndRef]);
+
   const { soundEnabled, onSoundToggle, playDoneSound } = useAudio();
   const playDoneSoundRef = useRef(playDoneSound);
   playDoneSoundRef.current = playDoneSound;
@@ -152,6 +175,24 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
       origHandler?.(event);
     };
   }, [origHandler, handleAgentEventRef]);
+
+  // ── Auto-scroll to bottom during streaming ──
+  const prevStreamingRef = useRef(false);
+  useEffect(() => {
+    // Streaming just started → reset scroll tracking
+    if (streamState.isStreaming && !prevStreamingRef.current) {
+      userScrolledUpRef.current = false;
+      setShowToBottom(false);
+    }
+    prevStreamingRef.current = streamState.isStreaming;
+
+    // Auto-scroll on every streaming update (unless user paused)
+    if (streamState.isStreaming && !userScrolledUpRef.current) {
+      isProgrammaticScrollRef.current = true;
+      messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+      setTimeout(() => { isProgrammaticScrollRef.current = false; }, 150);
+    }
+  }, [streamState.streamingMessage, streamState.isStreaming]);
 
   // Push session stats up to AppShell for the top bar.
   // Compare scalar fields to avoid loops from new object identity each render.
@@ -351,7 +392,7 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
       ) : (
       <>
       <div className="relative flex flex-1 overflow-hidden">
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pt-4 [scrollbar-width:none]">
+        <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto pt-4 [scrollbar-width:none]">
           <div className="mx-auto max-w-[820px] px-4">
 
             {(() => {
@@ -424,7 +465,7 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
               </div>
             )}
 
-            {agentRunning && (
+            {agentRunning && !streamState.streamingMessage && (
               <div style={{ height: scrollContainerRef.current ? scrollContainerRef.current.clientHeight : "80vh" }} />
             )}
 
@@ -437,6 +478,24 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
           scrollContainer={scrollContainerRef}
           messageRefs={messageRefs}
         />
+
+        {/* To-bottom button — shown when user scrolls up */}
+        {showToBottom && (
+          <button
+            onClick={handleToBottom}
+            className="absolute bottom-4 right-12 z-10 flex h-9 w-9 items-center justify-center rounded-full border shadow-lg transition-all duration-200 hover:scale-110"
+            style={{
+              background: "var(--bg-panel)",
+              borderColor: "var(--border)",
+              color: "var(--text-muted)",
+            }}
+            title={t("Scroll to bottom")}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className="relative">
