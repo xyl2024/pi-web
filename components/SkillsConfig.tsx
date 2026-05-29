@@ -3,6 +3,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { SkillSearchResult } from "@/app/api/skills/search/route";
 import { useI18n } from "@/hooks/useI18n";
+import { useTheme } from "@/hooks/useTheme";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vs } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
 
 interface Skill {
   name: string;
@@ -19,6 +23,32 @@ interface Skill {
 function shortenPath(p: string): string {
   // Match common home dir patterns: /Users/xxx, /home/xxx
   return p.replace(/^\/(?:Users|home)\/[^/]+/, "~");
+}
+
+// ── File extension → syntax-highlighter language ──
+// Mirrors the EXT_TO_LANGUAGE map in app/api/files/[...path]/route.ts
+const EXT_TO_LANGUAGE: Record<string, string> = {
+  ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript",
+  mjs: "javascript", cjs: "javascript", py: "python", rb: "ruby",
+  go: "go", rs: "rust", java: "java", kt: "kotlin", swift: "swift",
+  c: "c", cpp: "cpp", h: "c", hpp: "cpp", cs: "csharp",
+  html: "html", htm: "html", css: "css", scss: "css", less: "css",
+  json: "json", jsonl: "json", yaml: "yaml", yml: "yaml",
+  toml: "toml", xml: "xml", md: "markdown", mdx: "markdown",
+  sh: "bash", bash: "bash", zsh: "bash", fish: "bash",
+  sql: "sql", graphql: "graphql", gql: "graphql",
+  dockerfile: "dockerfile", tf: "hcl", hcl: "hcl",
+  env: "bash", gitignore: "bash",
+};
+
+function fileLanguage(fileName: string): string {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  // Special-case filenames without extensions (Dockerfile, Makefile)
+  const base = fileName.toLowerCase();
+  if (base === "dockerfile") return "dockerfile";
+  if (base === "makefile") return "makefile";
+  if (base.startsWith(".env")) return "bash";
+  return EXT_TO_LANGUAGE[ext] || "text";
 }
 
 function sourceLabel(skill: Skill): string {
@@ -118,6 +148,7 @@ function SubFileRow({
   onToggle: () => void;
 }) {
   const { t } = useI18n();
+  const { isDark } = useTheme();
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -246,25 +277,25 @@ function SubFileRow({
                 : loadError}
             </span>
           ) : content != null ? (
-            <pre
-              style={{
+            <SyntaxHighlighter
+              language={fileLanguage(file.name)}
+              style={isDark ? vscDarkPlus : vs}
+              customStyle={{
                 margin: 0,
                 padding: 10,
                 borderRadius: 4,
                 border: "1px solid var(--border)",
                 background: "var(--bg-panel)",
-                color: "var(--text)",
-                fontFamily: "var(--font-mono)",
                 fontSize: 11,
                 lineHeight: 1.5,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
+                fontFamily: "var(--font-mono)",
                 maxHeight: 300,
                 overflow: "auto",
               }}
+              codeTagProps={{ style: { fontFamily: "var(--font-mono)" } }}
             >
               {content}
-            </pre>
+            </SyntaxHighlighter>
           ) : null}
         </div>
       )}
@@ -286,6 +317,7 @@ function SkillDetail({
   saveError: string | null;
 }) {
   const { t } = useI18n();
+  const { isDark } = useTheme();
   const label = sourceLabel(skill);
   const enabled = !skill.disableModelInvocation;
 
@@ -476,8 +508,10 @@ function SkillDetail({
           >
             SKILL.md
           </span>
-          <pre
-            style={{
+          <SyntaxHighlighter
+            language="markdown"
+            style={isDark ? vscDarkPlus : vs}
+            customStyle={{
               height: 280,
               overflow: "auto",
               margin: 0,
@@ -485,16 +519,14 @@ function SkillDetail({
               borderRadius: 6,
               border: "1px solid var(--border)",
               background: "var(--bg-panel)",
-              color: "var(--text)",
-              fontFamily: "var(--font-mono)",
               fontSize: 12,
               lineHeight: 1.55,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
+              fontFamily: "var(--font-mono)",
             }}
+            codeTagProps={{ style: { fontFamily: "var(--font-mono)" } }}
           >
             {skillContent}
-          </pre>
+          </SyntaxHighlighter>
         </div>
       )}
 
