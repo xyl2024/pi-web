@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vs } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
@@ -10,6 +11,13 @@ import { useTheme } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
 import { Tooltip } from "./Tooltip";
 import { encodeFilePathForApi, getFileName, getRelativeFilePath } from "@/lib/file-paths";
+
+import "@excalidraw/excalidraw/index.css";
+
+const Excalidraw = dynamic(
+  async () => (await import("@excalidraw/excalidraw")).Excalidraw,
+  { ssr: false },
+);
 
 interface Props {
   filePath: string;
@@ -24,6 +32,7 @@ interface FileData {
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif"]);
 const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "oga", "opus", "m4a", "aac", "flac", "weba", "webm"]);
+const EXCALIDRAW_EXT = "excalidraw";
 
 function isImagePath(filePath: string): boolean {
   const base = getFileName(filePath);
@@ -35,6 +44,12 @@ function isAudioPath(filePath: string): boolean {
   const base = getFileName(filePath);
   const ext = base.toLowerCase().split(".").pop() ?? "";
   return AUDIO_EXTS.has(ext);
+}
+
+function isExcalidrawPath(filePath: string): boolean {
+  const base = getFileName(filePath);
+  const ext = base.toLowerCase().split(".").pop() ?? "";
+  return ext === EXCALIDRAW_EXT;
 }
 
 type DiffLine =
@@ -528,12 +543,104 @@ function AudioViewer({ filePath, cwd }: { filePath: string; cwd?: string }) {
   );
 }
 
+function ExcalidrawViewer({ filePath, cwd }: Props) {
+  const { t } = useI18n();
+  const [initialData, setInitialData] = useState<object | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setInitialData(null);
+
+    const encoded = encodeFilePathForApi(filePath);
+
+    Promise.all([
+      fetch(`/api/files/${encoded}?type=read`).then((r) => r.json()),
+      import("@excalidraw/excalidraw").then((m) => m.restore),
+    ])
+      .then(([d, restore]) => {
+        if (cancelled) return;
+        if ((d as FileData & { error?: string }).error) {
+          setError((d as FileData & { error?: string }).error!);
+          return;
+        }
+        try {
+          const raw = JSON.parse(d.content);
+          const restored = restore(
+            { elements: raw.elements, appState: raw.appState, files: raw.files },
+            null,
+            null,
+          );
+          setInitialData(restored);
+        } catch (e) {
+          setError(t("Invalid Excalidraw file"));
+        }
+      })
+      .catch((e) => { if (!cancelled) setError(String(e)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [filePath, t]);
+
+  if (loading) {
+    return (
+      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 13 }}>
+        {t("Loading...")}
+      </div>
+    );
+  }
+
+  if (error || !initialData) {
+    return (
+      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#f87171", fontSize: 13 }}>
+        {error || t("Failed to load Excalidraw file")}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "4px 16px",
+          borderBottom: "1px solid var(--border)",
+          fontSize: 11,
+          color: "var(--text-dim)",
+          background: "var(--bg)",
+          flexShrink: 0,
+        }}
+      >
+        <Tooltip content={filePath}><span style={{ fontFamily: "var(--font-mono)" }}>
+          {getRelativeFilePath(filePath, cwd)}
+        </span></Tooltip>
+        <span style={{ marginLeft: "auto" }}>excalidraw</span>
+      </div>
+      <div style={{ flex: 1, overflow: "hidden" }}>
+        <Excalidraw
+          initialData={initialData}
+          viewModeEnabled
+          zenModeEnabled
+        />
+      </div>
+    </div>
+  );
+}
+
 export function FileViewer({ filePath, cwd }: Props) {
   if (isImagePath(filePath)) {
     return <ImageViewer filePath={filePath} cwd={cwd} />;
   }
   if (isAudioPath(filePath)) {
     return <AudioViewer filePath={filePath} cwd={cwd} />;
+  }
+  if (isExcalidrawPath(filePath)) {
+    return <ExcalidrawViewer filePath={filePath} cwd={cwd} />;
   }
   return <TextFileViewer filePath={filePath} cwd={cwd} />;
 }
