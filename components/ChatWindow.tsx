@@ -14,6 +14,7 @@ import type { SlashResource } from "./ChatInput";
 import { ToolCallStatsProvider, useToolCallStatsEmit } from "@/hooks/ToolCallStatsContext";
 import { useToolCallStats } from "@/hooks/useToolCallStats";
 import { ToolCallStatsDrawer } from "./ToolCallStatsDrawer";
+import { SessionSearch } from "./SessionSearch";
 
 interface Props {
   session: SessionInfo | null;
@@ -166,6 +167,13 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const userScrolledUpRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
 
+  // ── In-session search state ──
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchKeywords, setSearchKeywords] = useState<string[]>([]);
+  const [matchedEntryIds, setMatchedEntryIds] = useState<Set<string>>(new Set());
+  const [highlightEntryId, setHighlightEntryId] = useState<string | null>(null);
+  const [pendingJumpEntryId, setPendingJumpEntryId] = useState<string | null>(null);
+
   const handleScroll = useCallback(() => {
     if (isProgrammaticScrollRef.current) return;
     const el = scrollContainerRef.current;
@@ -183,6 +191,79 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     setTimeout(() => { isProgrammaticScrollRef.current = false; }, 500);
   }, [messagesEndRef]);
+
+  // ── In-session search: Ctrl+F toggle ──
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "f" && session) {
+        e.preventDefault();
+        setSearchVisible((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [session]);
+
+  // ── In-session search: close on session change ──
+  useEffect(() => {
+    setSearchVisible(false);
+    setSearchKeywords([]);
+    setMatchedEntryIds(new Set());
+    setHighlightEntryId(null);
+    setPendingJumpEntryId(null);
+  }, [session?.id]);
+
+  // ── In-session search: results change callback ──
+  const handleSearchResultsChange = useCallback((ids: string[], keyword: string) => {
+    setMatchedEntryIds(new Set(ids));
+    setSearchKeywords(keyword ? [keyword] : []);
+    if (!keyword) setHighlightEntryId(null);
+  }, []);
+
+  // ── In-session search: jump to a message ──
+  const handleSearchJumpTo = useCallback((entryId: string, leafId: string) => {
+    // Navigate to the branch containing this message
+    handleNavigate(leafId);
+    setPendingJumpEntryId(entryId);
+  }, [handleNavigate]);
+
+  // ── In-session search: close callback ──
+  const handleSearchClose = useCallback(() => {
+    setSearchVisible(false);
+    setSearchKeywords([]);
+    setMatchedEntryIds(new Set());
+    setHighlightEntryId(null);
+  }, []);
+
+  // ── In-session search: scroll to entry after branch switch ──
+  useEffect(() => {
+    if (!pendingJumpEntryId) return;
+    const idx = entryIds.indexOf(pendingJumpEntryId);
+    if (idx === -1) return;
+
+    // Compute visible message index
+    let visibleIdx = 0;
+    for (let i = 0; i < idx; i++) {
+      const m = messages[i];
+      if (m && (m.role === "user" || m.role === "assistant")) visibleIdx++;
+    }
+
+    const el = messageRefs.current[visibleIdx];
+    const container = scrollContainerRef.current;
+    if (el && container) {
+      userScrolledUpRef.current = false;
+      setShowToBottom(false);
+      const elTop = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+      container.scrollTo({ top: elTop - 20, behavior: "smooth" });
+    }
+
+    setHighlightEntryId(pendingJumpEntryId);
+    setPendingJumpEntryId(null);
+
+    // Flash highlight off after 2s
+    const timer = setTimeout(() => setHighlightEntryId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [pendingJumpEntryId, entryIds, messages]);
 
   const { soundEnabled, onSoundToggle, playDoneSound } = useAudio();
   const playDoneSoundRef = useRef(playDoneSound);
@@ -466,6 +547,9 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                     onEditContent={(content) => chatInputRef?.current?.insertIfEmpty(content)}
                     showTimestamp={showTimestamp}
                     prevTimestamp={idx > 0 ? (messages[idx - 1] as import("@/lib/types").AgentMessage & { timestamp?: number }).timestamp : undefined}
+                    keywords={searchKeywords}
+                    highlightEntryId={highlightEntryId}
+                    isSearchMatch={matchedEntryIds.has(entryIds[idx])}
                   />
                 );
                 if (!isVisible) return view;
@@ -564,6 +648,15 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       </div>
 
       <div className="relative">
+        {session && (
+          <SessionSearch
+            sessionId={session.id}
+            visible={searchVisible}
+            onJumpTo={handleSearchJumpTo}
+            onResultsChange={handleSearchResultsChange}
+            onClose={handleSearchClose}
+          />
+        )}
         {chatInputElement}
       </div>
       </>

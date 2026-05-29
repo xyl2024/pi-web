@@ -34,6 +34,12 @@ interface Props {
   onEditContent?: (content: string) => void;
   showTimestamp?: boolean;
   prevTimestamp?: number;
+  /** Keywords to highlight with <mark> (from in-session search) */
+  keywords?: string[];
+  /** If this entryId matches, apply a flash animation */
+  highlightEntryId?: string | null;
+  /** Whether this message contains a search match (for highlight) */
+  isSearchMatch?: boolean;
 }
 
 function formatTime(ts?: number): string | null {
@@ -68,21 +74,53 @@ function copyText(text: string): Promise<void> {
   }
 }
 
-export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, prevTimestamp }: Props) {
+/** Wrap occurrences of any keyword in <mark> tags. Returns React nodes. */
+function highlightKeywords(text: string, keywords?: string[], isSearchMatch?: boolean): React.ReactNode {
+  if (!keywords || keywords.length === 0 || !isSearchMatch) return text;
+  const escaped = keywords.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = escaped.join("|");
+  const regex = new RegExp(pattern, "gi");
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    parts.push(<mark key={key++} className="search-highlight">{match[0]}</mark>);
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts.length > 0 ? parts : text;
+}
+
+export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, prevTimestamp, keywords, highlightEntryId, isSearchMatch }: Props) {
+  const isFocused = !!(highlightEntryId && entryId === highlightEntryId);
+
   if (message.role === "user") {
-    return <UserMessageView message={message as UserMessage} entryId={entryId} onFork={onFork} forking={forking} onNavigate={onNavigate} prevAssistantEntryId={prevAssistantEntryId} onEditContent={onEditContent} />;
+    return (
+      <div className={isFocused ? "search-flash" : undefined}>
+        <UserMessageView message={message as UserMessage} entryId={entryId} onFork={onFork} forking={forking} onNavigate={onNavigate} prevAssistantEntryId={prevAssistantEntryId} onEditContent={onEditContent} keywords={keywords} isSearchMatch={isSearchMatch} />
+      </div>
+    );
   }
   if (message.role === "assistant") {
-    return <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} />;
+    return (
+      <div className={isFocused ? "search-flash" : undefined}>
+        <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} keywords={keywords} isSearchMatch={isSearchMatch} />
+      </div>
+    );
   }
   if (message.role === "toolResult") {
-    // Rendered inline under its toolCall — skip standalone rendering if paired
     return null;
   }
   return null;
 }
 
-function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent }: {
+function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, keywords, isSearchMatch }: {
   message: UserMessage;
   entryId?: string;
   onFork?: (entryId: string) => void;
@@ -90,6 +128,8 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
   onNavigate?: (entryId: string) => void;
   prevAssistantEntryId?: string;
   onEditContent?: (content: string) => void;
+  keywords?: string[];
+  isSearchMatch?: boolean;
 }) {
   const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
@@ -166,7 +206,7 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
               })}
             </div>
           )}
-          {content}
+          {highlightKeywords(content, keywords, isSearchMatch)}
         </div>
 
       </div>
@@ -292,6 +332,8 @@ function AssistantMessageView({
   modelNames,
   showTimestamp,
   prevTimestamp,
+  keywords,
+  isSearchMatch,
 }: {
   message: AssistantMessage;
   isStreaming?: boolean;
@@ -299,6 +341,8 @@ function AssistantMessageView({
   modelNames?: Record<string, string>;
   showTimestamp?: boolean;
   prevTimestamp?: number;
+  keywords?: string[];
+  isSearchMatch?: boolean;
 }) {
   const { t } = useI18n();
   const time = showTimestamp ? formatTime(message.timestamp) : null;
@@ -459,7 +503,7 @@ function AssistantMessageView({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {blocks.map((block, i) => (
-          <BlockView key={i} block={block} toolResults={toolResults} isStreaming={isStreaming} streamingDuration={streamingDurations.get(i) ?? (block.type === "thinking" ? thinkingDurationFromFile : undefined)} toolCallDurations={toolCallDurations} />
+          <BlockView key={i} block={block} toolResults={toolResults} isStreaming={isStreaming} streamingDuration={streamingDurations.get(i) ?? (block.type === "thinking" ? thinkingDurationFromFile : undefined)} toolCallDurations={toolCallDurations} keywords={keywords} isSearchMatch={isSearchMatch} />
         ))}
       </div>
 
@@ -513,12 +557,12 @@ function AssistantMessageView({
   );
 }
 
-function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCallDurations }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; streamingDuration?: number; toolCallDurations?: Map<string, number> }) {
+function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCallDurations, keywords, isSearchMatch }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; streamingDuration?: number; toolCallDurations?: Map<string, number>; keywords?: string[]; isSearchMatch?: boolean }) {
   if (block.type === "text") {
-    return <TextBlock block={block as TextContent} />;
+    return <TextBlock block={block as TextContent} keywords={keywords} isSearchMatch={isSearchMatch} />;
   }
   if (block.type === "thinking") {
-    return <ThinkingBlock block={block as ThinkingContent} duration={streamingDuration} />;
+    return <ThinkingBlock block={block as ThinkingContent} duration={streamingDuration} keywords={keywords} isSearchMatch={isSearchMatch} />;
   }
   if (block.type === "toolCall") {
     const tc = block as ToolCallContent;
@@ -529,7 +573,17 @@ function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCal
   return null;
 }
 
-function TextBlock({ block }: { block: TextContent }) {
+/** Wrap keywords in <mark> HTML tags (for use with ReactMarkdown which renders HTML) */
+function highlightTextAsHtml(text: string, keywords?: string[], isSearchMatch?: boolean): string {
+  if (!keywords || keywords.length === 0 || !isSearchMatch) return text;
+  const escaped = keywords.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = escaped.join("|");
+  const regex = new RegExp(pattern, "gi");
+  return text.replace(regex, (match) => `<mark class="search-highlight">${match}</mark>`);
+}
+
+function TextBlock({ block, keywords, isSearchMatch }: { block: TextContent; keywords?: string[]; isSearchMatch?: boolean }) {
+  const text = highlightTextAsHtml(block.text, keywords, isSearchMatch);
   return (
     <div className="markdown-body">
       <ReactMarkdown
@@ -563,13 +617,13 @@ function TextBlock({ block }: { block: TextContent }) {
           },
         }}
       >
-        {block.text}
+        {text}
       </ReactMarkdown>
     </div>
   );
 }
 
-function ThinkingBlock({ block, duration }: { block: ThinkingContent; duration?: number }) {
+function ThinkingBlock({ block, duration, keywords, isSearchMatch }: { block: ThinkingContent; duration?: number; keywords?: string[]; isSearchMatch?: boolean }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(true);
   return (
@@ -614,7 +668,7 @@ function ThinkingBlock({ block, duration }: { block: ThinkingContent; duration?:
             borderTop: "1px solid var(--border)",
           }}
         >
-          {block.thinking}
+          {highlightKeywords(block.thinking, keywords, isSearchMatch)}
         </div>
       )}
     </div>

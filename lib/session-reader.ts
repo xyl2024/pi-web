@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 import { SessionManager, buildSessionContext as piBuildSessionContext, getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { SessionEntry, SessionInfo, SessionContext, SessionTreeNode, AssistantMessage, SessionSearchResult, SessionSearchResponse } from "./types";
+import type { SessionEntry, SessionInfo, SessionContext, SessionTreeNode, AssistantMessage, SessionSearchResult, SessionSearchResponse, SessionMessageSearchResult, SessionMessageSearchResponse } from "./types";
 import type { SessionEntry as PiSessionEntry, SessionInfo as PiSessionInfo } from "@earendil-works/pi-coding-agent";
 import { normalizeToolCalls } from "./normalize";
 
@@ -334,6 +334,140 @@ export async function searchSessions(cwd: string, query: string): Promise<Sessio
   return {
     results: results.slice(0, MAX_RESULTS),
     hasMore,
+  };
+}
+
+// ============================================================================
+// In-session message search: full-text over all messages in a single JSONL file
+// ============================================================================
+
+/**
+ * Build an adjacency table for session entries.
+ * Returns maps: children (parentId → childIds) and a leaf-cache for quick lookup.
+ */
+function buildAdjacency(entries: Array<{ id: string; parentId: string | null }>): {
+  children: Map<string, string[]>;
+  findLeaf: (entryId: string) => string;
+} {
+  const children = new Map<string, string[]>();
+  for (const e of entries) {
+    if (e.parentId) {
+      const list = children.get(e.parentId);
+      if (list) list.push(e.id);
+      else children.set(e.parentId, [e.id]);
+    }
+  }
+
+  const leafCache = new Map<string, string>();
+
+  function findLeaf(entryId: string, visited: Set<string> = new Set()): string {
+    const cached = leafCache.get(entryId);
+    if (cached) return cached;
+    if (visited.has(entryId)) return entryId; // cycle guard
+    visited.add(entryId);
+    const kids = children.get(entryId);
+    if (!kids || kids.length === 0) {
+      leafCache.set(entryId, entryId);
+      return entryId;
+    }
+    // Follow the last child (chronologically most recent branch)
+    const leaf = findLeaf(kids[kids.length - 1], visited);
+    leafCache.set(entryId, leaf);
+    return leaf;
+  }
+
+  return { children, findLeaf };
+}
+
+/** Extract searchable text from any message type (user / assistant / toolResult) */
+function extractMessageSearchContent(msg: Record<string, unknown>): string {
+  const content = msg.content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return (content as Array<{ type: string; text?: string; thinking?: string }>)
+      .filter((block) => block.type === "text" || block.type === "thinking")
+      .map((block) => (block as { text?: string; thinking?: string }).text ?? (block as { thinking?: string }).thinking ?? "")
+      .join(" ");
+  }
+  return "";
+}
+
+/** Check if a message role is searchable */
+function isSearchableRole(role: unknown): boolean {
+  return role === "user" || role === "assistant" || role === "toolResult";
+}
+
+export async function searchSessionMessages(
+  filePath: string,
+  query: string,
+): Promise<SessionMessageSearchResponse> {
+  const lowerQuery = query.toLowerCase();
+
+  // Pass 1: read all entries and collect ids for adjacency building
+  interface RawEntry {
+    entry: Record<string, unknown>;
+    id: string;
+    parentId: string | null;
+    type: string;
+  }
+  const entries: RawEntry[] = [];
+
+  const rl = readline.createInterface({
+    input: fs.createReadStream(filePath),
+    crlfDelay: Infinity,
+  });
+
+  for await (const line of rl) {
+    try {
+      const entry = JSON.parse(line) as Record<string, unknown>;
+      entries.push({
+        entry,
+        id: entry.id as string,
+        parentId: (entry.parentId as string) ?? null,
+        type: entry.type as string,
+      });
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  // Build adjacency table + leaf finder
+  const { findLeaf } = buildAdjacency(entries);
+
+  // Pass 2: search matching messages
+  const allMatchedEntryIds: string[] = [];
+  const results: SessionMessageSearchResult[] = [];
+
+  for (const { entry, id, type } of entries) {
+    if (type !== "message") continue;
+
+    const msg = entry.message as Record<string, unknown> | undefined;
+    if (!msg) continue;
+
+    const role = msg.role;
+    if (!isSearchableRole(role)) continue;
+
+    const content = extractMessageSearchContent(msg);
+    if (!content || !content.toLowerCase().includes(lowerQuery)) continue;
+
+    allMatchedEntryIds.push(id);
+
+    const leafId = findLeaf(id);
+
+    results.push({
+      entryId: id,
+      role: role as string,
+      snippet: buildSnippet(content, lowerQuery),
+      leafId,
+      timestamp: entry.timestamp as string | undefined,
+    });
+  }
+
+  const MAX_SNIPPETS = 20;
+  return {
+    results: results.slice(0, MAX_SNIPPETS),
+    matchedEntryIds: allMatchedEntryIds,
+    totalMatches: allMatchedEntryIds.length,
   };
 }
 

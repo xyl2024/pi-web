@@ -218,6 +218,29 @@ export interface SessionSearchResponse {
   hasMore: boolean;
 }
 
+/** A single message-level match within a session file */
+export interface SessionMessageSearchResult {
+  /** entry.id of the matching message */
+  entryId: string;
+  /** message role: user | assistant | toolResult */
+  role: string;
+  /** \u0000-delimited snippet for frontend <mark> highlighting */
+  snippet: string;
+  /** leaf entry id reachable from this message — used to switch branch when jumping */
+  leafId: string;
+  /** message timestamp if available */
+  timestamp?: string;
+}
+
+export interface SessionMessageSearchResponse {
+  /** First N results with snippets (for the result list) */
+  results: SessionMessageSearchResult[];
+  /** All matching entryIds (for <mark> highlighting in messages) */
+  matchedEntryIds: string[];
+  /** Total number of matching entryIds */
+  totalMatches: number;
+}
+
 export interface AgentsFile {
   path: string;
   content: string;

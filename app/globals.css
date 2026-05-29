@@ -258,6 +258,24 @@ span.linenumber {
   50%       { opacity: 1;   transform: scale(1.06); }
 }
 
+/* ── In-session search highlight ──────────────────────────── */
+.search-highlight {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+@keyframes search-flash {
+  0%   { background: rgba(108, 140, 255, 0.25); }
+  100% { background: transparent; }
+}
+
+.search-flash {
+  animation: search-flash 1.5s ease-out;
+  border-radius: 8px;
+}
+
 @keyframes drop-ripple {
   0%   { transform: scale(0); opacity: 0.6; }
   100% { transform: scale(1); opacity: 0; }
