@@ -231,6 +231,16 @@ const ZH_TRANSLATIONS = {
   "Timeline": "时间线",
   "No tool calls yet": "暂无工具调用",
   "{n} running \u00b7 {m} total": "{n} 运行中 \u00b7 共 {m} 次",
+  // Settings / system prompt replacements
+  "Settings": "设置",
+  "System Prompt Replacements": "系统提示词替换",
+  "Replace literal strings in the system prompt. Changes take effect on new sessions. Existing sessions are unaffected.": "替换系统提示词中的字面量字符串。对新建会话生效，已有会话不受影响。",
+  "Enable replacements": "启用替换",
+  "Delete rule": "删除规则",
+  "+ Add rule": "＋ 添加规则",
+  "Failed to load settings": "加载设置失败",
+  "search": "搜索字符串",
+  "replace": "替换为",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
