@@ -124,7 +124,7 @@ async function getAllowedRoots(): Promise<Set<string>> {
   const workspace = path.join(home, ".pi-web", "workspace");
   try {
     for (const name of readdirSync(workspace)) {
-      if (/^pi-cwd-\d{8}$/.test(name)) {
+      if (/^pi-cwd-(\d{8}|default)$/.test(name)) {
         roots.add(path.join(workspace, name));
       }
     }
@@ -413,6 +413,60 @@ export async function GET(
     return NextResponse.json({ entries, path: filePath });
   } catch (error) {
     log.error("file request failed", { error, durationMs: elapsedMs(startedAt) });
+    return NextResponse.json({ error: String(error) }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const startedAt = Date.now();
+  try {
+    const { path: segments } = await params;
+    const filePath = filePathFromSegments(segments);
+    log.debug("file write request received", { path: filePath });
+
+    const allowedRoots = await getAllowedRoots();
+    if (!isPathAllowed(filePath, allowedRoots)) {
+      log.warn("file write denied", { path: filePath, durationMs: elapsedMs(startedAt) });
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      log.warn("file write target not found", { path: filePath, durationMs: elapsedMs(startedAt) });
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (!stat.isFile()) {
+      log.warn("file write rejected", { path: filePath, reason: "not a file", durationMs: elapsedMs(startedAt) });
+      return NextResponse.json({ error: "Not a file" }, { status: 400 });
+    }
+
+    let body: { content?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    if (typeof body.content !== "string") {
+      return NextResponse.json({ error: "Missing or invalid 'content' field" }, { status: 400 });
+    }
+
+    fs.writeFileSync(filePath, body.content, "utf-8");
+
+    log.info("file written", {
+      path: filePath,
+      size: body.content.length,
+      durationMs: elapsedMs(startedAt),
+    });
+    return NextResponse.json({ ok: true, size: body.content.length });
+  } catch (error) {
+    log.error("file write failed", { error, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }

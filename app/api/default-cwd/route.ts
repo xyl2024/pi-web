@@ -10,20 +10,12 @@ declare global {
   var __piAllowedRootsCache: { roots: Set<string>; expiresAt: number } | undefined;
 }
 
-function formatLocalDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}${month}${day}`;
-}
-
 // POST /api/default-cwd
-// Creates ~/.pi-web/workspace/pi-cwd-<YYYYMMDD> if it doesn't exist and returns the path.
+// Creates ~/.pi-web/workspace/pi-cwd-default if it doesn't exist and returns the path.
 export async function POST() {
   const startedAt = Date.now();
   try {
-    const date = formatLocalDate(new Date());
-    const dir = join(homedir(), ".pi-web", "workspace", `pi-cwd-${date}`);
+    const dir = join(homedir(), ".pi-web", "workspace", "pi-cwd-default");
     mkdirSync(dir, { recursive: true });
     globalThis.__piAllowedRootsCache?.roots.add(dir);
     log.info("default cwd created", { cwd: dir, durationMs: elapsedMs(startedAt) });
