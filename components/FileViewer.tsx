@@ -793,7 +793,12 @@ function TextFileViewer({ filePath, cwd }: Props) {
   const [wrapLines, setWrapLines] = useState(false);
   const [watching, setWatching] = useState(false);
   const [changeCount, setChangeCount] = useState(0);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [externalChangeWhileEditing, setExternalChangeWhileEditing] = useState(false);
   const esRef = useRef<EventSource | null>(null);
+  const editingRef = useRef(false);
 
   const fetchContent = useCallback((filePath: string, isRefresh = false) => {
     const encoded = encodeFilePathForApi(filePath);
@@ -821,6 +826,63 @@ function TextFileViewer({ filePath, cwd }: Props) {
       });
   }, []);
 
+  const handleEdit = useCallback(() => {
+    if (!data) return;
+    setEditContent(data.content);
+    setExternalChangeWhileEditing(false);
+    editingRef.current = true;
+    setIsEditing(true);
+  }, [data]);
+
+  const handleCancel = useCallback(() => {
+    editingRef.current = false;
+    setIsEditing(false);
+    setExternalChangeWhileEditing(false);
+    // Reload from file to discard any local edits
+    fetchContent(filePath);
+  }, [filePath, fetchContent]);
+
+  const handleSave = useCallback(async () => {
+    if (!data) return;
+    setSaving(true);
+    try {
+      const encoded = encodeFilePathForApi(filePath);
+      const res = await fetch(`/api/files/${encoded}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: editContent }),
+      });
+      if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+      // Optimistic local update — avoids full re-fetch
+      setData({ ...data, content: editContent, size: new Blob([editContent]).size });
+      setPrevContent(data.content);
+      setChangeCount((c) => c + 1);
+      editingRef.current = false;
+      setIsEditing(false);
+      setExternalChangeWhileEditing(false);
+    } catch (e) {
+      console.error("Text file save failed", e);
+    } finally {
+      setSaving(false);
+    }
+  }, [data, editContent, filePath]);
+
+  const handleTextareaKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const ta = e.currentTarget;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      setEditContent((prev) => prev.substring(0, start) + "  " + prev.substring(end));
+      requestAnimationFrame(() => {
+        ta.selectionStart = ta.selectionEnd = start + 2;
+      });
+    } else if (e.key === "s" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      handleSave();
+    }
+  }, [handleSave]);
+
   // Initial load + SSE watch setup
   useEffect(() => {
     setLoading(true);
@@ -832,6 +894,9 @@ function TextFileViewer({ filePath, cwd }: Props) {
     setWrapLines(false);
     setChangeCount(0);
     setWatching(false);
+    setIsEditing(false);
+    setExternalChangeWhileEditing(false);
+    editingRef.current = false;
 
     if (esRef.current) {
       esRef.current.close();
@@ -852,7 +917,11 @@ function TextFileViewer({ filePath, cwd }: Props) {
     });
 
     es.addEventListener("change", () => {
-      fetchContent(filePath, true);
+      if (editingRef.current) {
+        setExternalChangeWhileEditing(true);
+      } else {
+        fetchContent(filePath, true);
+      }
     });
 
     es.addEventListener("error", () => {
@@ -891,6 +960,7 @@ function TextFileViewer({ filePath, cwd }: Props) {
   const isMarkdown = data.language === "markdown";
   const lines = data.content.split("\n");
   const hasDiff = prevContent !== null && prevContent !== data.content;
+  const isDirty = editContent !== data.content;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -912,134 +982,202 @@ function TextFileViewer({ filePath, cwd }: Props) {
           {getRelativeFilePath(filePath, cwd)}
         </span></Tooltip>
         <span style={{ marginLeft: "auto" }}>{data.language}</span>
-        {viewMode === "source" && <span>{lines.length} {t("lines")}</span>}
-        <span>{formatSize(data.size)}</span>
 
-        {/* Live watch indicator */}
-        <Tooltip content={watching ? t("Live sync active") : t("Not watching")}>
-        <span
-          style={{ display: "flex", alignItems: "center", gap: 4, color: watching ? "#4ade80" : "var(--text-dim)" }}
-        >
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: watching ? "#4ade80" : "var(--border)",
-              display: "inline-block",
-              boxShadow: watching ? "0 0 4px #4ade80" : "none",
-            }}
-          />
-          {watching ? t("live") : t("static")}
-        </span>
-        </Tooltip>
+        {isEditing ? (
+          <>
+            {isDirty && <span style={{ color: "#fbbf24", fontWeight: 600 }}>● unsaved</span>}
+            {externalChangeWhileEditing && (
+              <Tooltip content={t("File changed externally. Save to overwrite or Cancel to reload.")}>
+                <span style={{ color: "#f87171", fontWeight: 600 }}>⚠ external</span>
+              </Tooltip>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={saving || !isDirty}
+              style={{
+                padding: "2px 10px", fontSize: 11, fontWeight: 600,
+                cursor: saving || !isDirty ? "default" : "pointer",
+                background: isDirty ? "var(--accent)" : "var(--bg-hover)",
+                color: isDirty ? "#fff" : "var(--text-muted)",
+                border: "1px solid var(--border)", borderRadius: 5,
+                opacity: saving || !isDirty ? 0.5 : 1,
+              }}
+            >
+              {saving ? t("Saving...") : t("Save")}
+            </button>
+            <button
+              onClick={handleCancel}
+              style={{
+                padding: "2px 10px", fontSize: 11, cursor: "pointer",
+                background: "var(--bg-hover)", color: "var(--text)",
+                border: "1px solid var(--border)", borderRadius: 5,
+              }}
+            >
+              {t("Cancel")}
+            </button>
+          </>
+        ) : (
+          <>
+            {viewMode === "source" && <span>{lines.length} {t("lines")}</span>}
+            <span>{formatSize(data.size)}</span>
 
-        {/* Diff / Source toggle — shown only when there are changes */}
-        {hasDiff && (
-          <div style={{ display: "flex", borderRadius: 5, overflow: "hidden", border: "1px solid var(--border)" }}>
-            <button
-              onClick={() => setViewMode("source")}
-              style={{
-                padding: "2px 8px", fontSize: 11, border: "none", cursor: "pointer",
-                background: viewMode === "source" ? "var(--bg-selected)" : "var(--bg-hover)",
-                color: viewMode === "source" ? "var(--text)" : "var(--text-muted)",
-                fontWeight: viewMode === "source" ? 600 : 400,
-              }}
+            {/* Live watch indicator */}
+            <Tooltip content={watching ? t("Live sync active") : t("Not watching")}>
+            <span
+              style={{ display: "flex", alignItems: "center", gap: 4, color: watching ? "#4ade80" : "var(--text-dim)" }}
             >
-              {t("Source")}
-            </button>
-            <button
-              onClick={() => setViewMode("diff")}
-              style={{
-                padding: "2px 8px", fontSize: 11, border: "none", borderLeft: "1px solid var(--border)", cursor: "pointer",
-                background: viewMode === "diff" ? "var(--bg-selected)" : "var(--bg-hover)",
-                color: viewMode === "diff" ? "var(--text)" : "var(--text-muted)",
-                fontWeight: viewMode === "diff" ? 600 : 400,
-              }}
-            >
-              {t("Diff")} {changeCount > 0 && <span style={{ color: "#4ade80", marginLeft: 2 }}>+{changeCount}</span>}
-            </button>
-          </div>
-        )}
+              <span
+                style={{
+                  width: 7, height: 7, borderRadius: "50%",
+                  background: watching ? "#4ade80" : "var(--border)",
+                  display: "inline-block",
+                  boxShadow: watching ? "0 0 4px #4ade80" : "none",
+                }}
+              />
+              {watching ? t("live") : t("static")}
+            </span>
+            </Tooltip>
 
-        {/* Word wrap toggle */}
-        {viewMode === "source" && !previewMode && (
-          <Tooltip content={wrapLines ? t("Disable word wrap") : t("Enable word wrap")}>
-          <button
-            onClick={() => setWrapLines((v) => !v)}
-            style={{
-              padding: "2px 8px", fontSize: 11, cursor: "pointer",
-              background: wrapLines ? "var(--bg-selected)" : "var(--bg-hover)",
-              color: wrapLines ? "var(--text)" : "var(--text-muted)",
-              border: "1px solid var(--border)", borderRadius: 5,
-              fontWeight: wrapLines ? 600 : 400,
-            }}
-          >
-            {t("wrap")}
-          </button>
-          </Tooltip>
-        )}
+            {/* Diff / Source toggle — shown only when there are changes */}
+            {hasDiff && (
+              <div style={{ display: "flex", borderRadius: 5, overflow: "hidden", border: "1px solid var(--border)" }}>
+                <button
+                  onClick={() => setViewMode("source")}
+                  style={{
+                    padding: "2px 8px", fontSize: 11, border: "none", cursor: "pointer",
+                    background: viewMode === "source" ? "var(--bg-selected)" : "var(--bg-hover)",
+                    color: viewMode === "source" ? "var(--text)" : "var(--text-muted)",
+                    fontWeight: viewMode === "source" ? 600 : 400,
+                  }}
+                >
+                  {t("Source")}
+                </button>
+                <button
+                  onClick={() => setViewMode("diff")}
+                  style={{
+                    padding: "2px 8px", fontSize: 11, border: "none", borderLeft: "1px solid var(--border)", cursor: "pointer",
+                    background: viewMode === "diff" ? "var(--bg-selected)" : "var(--bg-hover)",
+                    color: viewMode === "diff" ? "var(--text)" : "var(--text-muted)",
+                    fontWeight: viewMode === "diff" ? 600 : 400,
+                  }}
+                >
+                  {t("Diff")} {changeCount > 0 && <span style={{ color: "#4ade80", marginLeft: 2 }}>+{changeCount}</span>}
+                </button>
+              </div>
+            )}
 
-        {/* HTML source/preview toggle */}
-        {isHtml && viewMode === "source" && (
-          <div style={{ display: "flex", borderRadius: 5, overflow: "hidden", border: "1px solid var(--border)" }}>
-            <button
-              onClick={() => setPreviewMode(false)}
-              style={{
-                padding: "2px 8px", fontSize: 11, border: "none", cursor: "pointer",
-                background: !previewMode ? "var(--bg-selected)" : "var(--bg-hover)",
-                color: !previewMode ? "var(--text)" : "var(--text-muted)",
-                fontWeight: !previewMode ? 600 : 400,
-              }}
-            >
-              {t("Code")}
-            </button>
-            <button
-              onClick={() => setPreviewMode(true)}
-              style={{
-                padding: "2px 8px", fontSize: 11, border: "none", borderLeft: "1px solid var(--border)", cursor: "pointer",
-                background: previewMode ? "var(--bg-selected)" : "var(--bg-hover)",
-                color: previewMode ? "var(--text)" : "var(--text-muted)",
-                fontWeight: previewMode ? 600 : 400,
-              }}
-            >
-              {t("Preview")}
-            </button>
-          </div>
-        )}
+            {/* Word wrap toggle */}
+            {viewMode === "source" && !previewMode && (
+              <Tooltip content={wrapLines ? t("Disable word wrap") : t("Enable word wrap")}>
+              <button
+                onClick={() => setWrapLines((v) => !v)}
+                style={{
+                  padding: "2px 8px", fontSize: 11, cursor: "pointer",
+                  background: wrapLines ? "var(--bg-selected)" : "var(--bg-hover)",
+                  color: wrapLines ? "var(--text)" : "var(--text-muted)",
+                  border: "1px solid var(--border)", borderRadius: 5,
+                  fontWeight: wrapLines ? 600 : 400,
+                }}
+              >
+                {t("wrap")}
+              </button>
+              </Tooltip>
+            )}
 
-        {/* Markdown preview/raw toggle */}
-        {isMarkdown && viewMode === "source" && (
-          <div style={{ display: "flex", borderRadius: 5, overflow: "hidden", border: "1px solid var(--border)" }}>
+            {/* HTML source/preview toggle */}
+            {isHtml && viewMode === "source" && (
+              <div style={{ display: "flex", borderRadius: 5, overflow: "hidden", border: "1px solid var(--border)" }}>
+                <button
+                  onClick={() => setPreviewMode(false)}
+                  style={{
+                    padding: "2px 8px", fontSize: 11, border: "none", cursor: "pointer",
+                    background: !previewMode ? "var(--bg-selected)" : "var(--bg-hover)",
+                    color: !previewMode ? "var(--text)" : "var(--text-muted)",
+                    fontWeight: !previewMode ? 600 : 400,
+                  }}
+                >
+                  {t("Code")}
+                </button>
+                <button
+                  onClick={() => setPreviewMode(true)}
+                  style={{
+                    padding: "2px 8px", fontSize: 11, border: "none", borderLeft: "1px solid var(--border)", cursor: "pointer",
+                    background: previewMode ? "var(--bg-selected)" : "var(--bg-hover)",
+                    color: previewMode ? "var(--text)" : "var(--text-muted)",
+                    fontWeight: previewMode ? 600 : 400,
+                  }}
+                >
+                  {t("Preview")}
+                </button>
+              </div>
+            )}
+
+            {/* Markdown preview/raw toggle */}
+            {isMarkdown && viewMode === "source" && (
+              <div style={{ display: "flex", borderRadius: 5, overflow: "hidden", border: "1px solid var(--border)" }}>
+                <button
+                  onClick={() => setPreviewMode(true)}
+                  style={{
+                    padding: "2px 8px", fontSize: 11, border: "none", cursor: "pointer",
+                    background: previewMode ? "var(--bg-selected)" : "var(--bg-hover)",
+                    color: previewMode ? "var(--text)" : "var(--text-muted)",
+                    fontWeight: previewMode ? 600 : 400,
+                  }}
+                >
+                  {t("Preview")}
+                </button>
+                <button
+                  onClick={() => setPreviewMode(false)}
+                  style={{
+                    padding: "2px 8px", fontSize: 11, border: "none", borderLeft: "1px solid var(--border)", cursor: "pointer",
+                    background: !previewMode ? "var(--bg-selected)" : "var(--bg-hover)",
+                    color: !previewMode ? "var(--text)" : "var(--text-muted)",
+                    fontWeight: !previewMode ? 600 : 400,
+                  }}
+                >
+                  {t("Raw")}
+                </button>
+              </div>
+            )}
+
+            {/* Edit button */}
             <button
-              onClick={() => setPreviewMode(true)}
+              onClick={handleEdit}
               style={{
-                padding: "2px 8px", fontSize: 11, border: "none", cursor: "pointer",
-                background: previewMode ? "var(--bg-selected)" : "var(--bg-hover)",
-                color: previewMode ? "var(--text)" : "var(--text-muted)",
-                fontWeight: previewMode ? 600 : 400,
+                padding: "2px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                background: "var(--bg-hover)", color: "var(--text)",
+                border: "1px solid var(--border)", borderRadius: 5,
               }}
             >
-              {t("Preview")}
+              {t("Edit")}
             </button>
-            <button
-              onClick={() => setPreviewMode(false)}
-              style={{
-                padding: "2px 8px", fontSize: 11, border: "none", borderLeft: "1px solid var(--border)", cursor: "pointer",
-                background: !previewMode ? "var(--bg-selected)" : "var(--bg-hover)",
-                color: !previewMode ? "var(--text)" : "var(--text-muted)",
-                fontWeight: !previewMode ? 600 : 400,
-              }}
-            >
-              {t("Raw")}
-            </button>
-          </div>
+          </>
         )}
       </div>
 
       {/* Content area */}
       <div style={{ flex: 1, overflow: "auto", background: "var(--bg)" }}>
-        {viewMode === "diff" && hasDiff ? (
+        {isEditing ? (
+          <textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            onKeyDown={handleTextareaKeyDown}
+            style={{
+              width: "100%",
+              height: "100%",
+              border: "none",
+              resize: "none",
+              padding: "12px 16px",
+              fontFamily: "var(--font-mono)",
+              fontSize: 13,
+              lineHeight: 1.6,
+              background: "var(--bg)",
+              color: "var(--text)",
+              outline: "none",
+              tabSize: 2,
+            }}
+          />
+        ) : viewMode === "diff" && hasDiff ? (
           <DiffView oldContent={prevContent!} newContent={data.content} language={data.language} />
         ) : isHtml && previewMode ? (
           <iframe
