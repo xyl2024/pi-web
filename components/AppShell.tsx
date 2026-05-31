@@ -248,6 +248,16 @@ export function AppShell() {
     router.replace("/", { scroll: false });
   }, [router]);
 
+  // Called when /new slash command is triggered
+  const handleSlashNew = useCallback(() => {
+    const cwd = selectedSession?.cwd ?? activeCwd;
+    if (!cwd) return;
+    const tempId = typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    handleNewSession(tempId, cwd);
+  }, [selectedSession?.cwd, activeCwd, handleNewSession]);
+
   // Called by ChatWindow when a new session gets its real id from pi
   const handleSessionCreated = useCallback((session: SessionInfo) => {
     setNewSessionCwd(null);
@@ -900,6 +910,7 @@ export function AppShell() {
               onScrollComplete={() => setPendingScrollEntryId(null)}
               onSessionStatsChange={handleSessionStatsChange}
               onContextUsageChange={handleContextUsageChange}
+              onNewSessionRequest={handleSlashNew}
             />
           ) : showPlaceholder ? (
             activeCwd ? (

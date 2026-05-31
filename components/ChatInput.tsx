@@ -17,7 +17,7 @@ interface ModelOption {
 }
 
 export interface SlashResource {
-  source: "prompt" | "skill";
+  source: "prompt" | "skill" | "action";
   name: string;
   command: string;
   description: string;
@@ -52,6 +52,7 @@ interface Props {
   onSoundToggle?: () => void;
   slashResources?: SlashResource[];
   slashResourceKey?: string;
+  onSlashAction?: (action: string) => void;
 }
 
 export interface ChatInputHandle {
@@ -66,6 +67,15 @@ const TOOL_PRESET_MAP: Record<"off" | "full", "none" | "full"> = { off: "none", 
 
 const THINKING_LEVELS = ["auto", "off", "minimal", "low", "medium", "high", "xhigh"] as const;
 const SLASH_PAGE_SIZE = 5;
+
+const BUILTIN_NEW_SESSION: SlashResource = {
+  source: "action",
+  name: "New session",
+  command: "new",
+  description: "新建会话",
+  path: "",
+  content: "",
+};
 
 function getSlashQuery(value: string, cursor: number): { start: number; query: string } | null {
   const beforeCursor = value.slice(0, cursor);
@@ -156,6 +166,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   retryInfo,
   soundEnabled, onSoundToggle,
   slashResources = [], slashResourceKey,
+  onSlashAction,
 }: Props, ref) {
   const { t } = useI18n();
   const [value, setValue] = useState("");
@@ -181,11 +192,16 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const filteredSlashResources = useMemo(() => {
     if (!slashMenuOpen || !slashQuery) return [];
     const q = slashQuery.query.toLowerCase();
-    return slashResources.filter((item) => {
+    const builtinMatch =
+      BUILTIN_NEW_SESSION.command.toLowerCase().includes(q) ||
+      BUILTIN_NEW_SESSION.name.toLowerCase().includes(q) ||
+      BUILTIN_NEW_SESSION.description.toLowerCase().includes(q);
+    const matches = slashResources.filter((item) => {
       return item.command.toLowerCase().includes(q) ||
         item.name.toLowerCase().includes(q) ||
         item.description.toLowerCase().includes(q);
     });
+    return builtinMatch ? [BUILTIN_NEW_SESSION, ...matches] : matches;
   }, [slashMenuOpen, slashQuery, slashResources]);
   const slashPageCount = Math.max(1, Math.ceil(filteredSlashResources.length / SLASH_PAGE_SIZE));
   const slashCurrentPage = Math.min(slashPage, slashPageCount - 1);
@@ -351,6 +367,21 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   }, [value, attachedImages, onSteer, onFollowUp, clearImages, buildMessage]);
 
   const selectSlashResource = useCallback((item: SlashResource) => {
+    if (item.source === "action") {
+      onSlashAction?.(item.command);
+      setValue("");
+      setCursorPosition(0);
+      setSlashMenuOpen(false);
+      setSlashActiveIndex(0);
+      setSlashPage(0);
+      setSelectedSlashResource(null);
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+        textareaRef.current.focus();
+      }
+      return;
+    }
+
     const ta = textareaRef.current;
     const cursor = ta?.selectionStart ?? cursorPosition;
     const query = getSlashQuery(value, cursor);
@@ -373,7 +404,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       ta.style.height = "auto";
       ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
     });
-  }, [cursorPosition, value]);
+  }, [cursorPosition, value, onSlashAction]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -419,6 +450,16 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       }
       if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
+        // /new as a bare message triggers the action directly
+        if (value.trim() === "/new") {
+          onSlashAction?.("new");
+          setValue("");
+          setCursorPosition(0);
+          setSelectedSlashResource(null);
+          setSlashMenuOpen(false);
+          if (textareaRef.current) textareaRef.current.style.height = "auto";
+          return;
+        }
         if (isStreaming && (onSteer || onFollowUp)) {
           // Default Enter sends as steer if available, else followup
           sendQueued(onSteer ? "steer" : "followup");
@@ -427,7 +468,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         }
       }
     },
-    [isStreaming, onSteer, onFollowUp, sendQueued, handleSend, slashMenuOpen, slashQuery, visibleSlashResources, slashActiveIndex, slashPageCount, selectSlashResource, selectedSlashResource]
+    [isStreaming, onSteer, onFollowUp, sendQueued, handleSend, slashMenuOpen, slashQuery, visibleSlashResources, slashActiveIndex, slashPageCount, selectSlashResource, selectedSlashResource, value, onSlashAction]
   );
 
   const handleInput = useCallback(() => {
@@ -825,8 +866,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                           <span style={{
                             alignSelf: "start", justifySelf: "start",
                             padding: "2px 6px", borderRadius: 5,
-                            background: item.source === "skill" ? "rgba(5,150,105,0.10)" : "rgba(37,99,235,0.10)",
-                            color: item.source === "skill" ? "#059669" : "var(--accent)",
+                            background: item.source === "skill" ? "rgba(5,150,105,0.10)" : item.source === "action" ? "rgba(234,179,8,0.10)" : "rgba(37,99,235,0.10)",
+                            color: item.source === "skill" ? "#059669" : item.source === "action" ? "rgba(180,130,0,0.9)" : "var(--accent)",
                             fontSize: 10, fontWeight: 700, textTransform: "uppercase",
                           }}>
                             {item.source}

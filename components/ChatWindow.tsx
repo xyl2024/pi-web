@@ -33,6 +33,7 @@ interface Props {
   scrollToEntryId?: string | null;
   /** Called after the scroll-to-entry navigation completes */
   onScrollComplete?: () => void;
+  onNewSessionRequest?: () => void;
 }
 
 function phaseLabel(phase: AgentPhase, t: ReturnType<typeof useI18n>["t"]): string {
@@ -124,7 +125,7 @@ function Typewriter({ phrases }: { phrases: string[] }) {
   );
 }
 
-function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onAgentsFilesChange, onSessionStatsChange, onContextUsageChange, scrollToEntryId, onScrollComplete }: Props) {
+function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onAgentsFilesChange, onSessionStatsChange, onContextUsageChange, scrollToEntryId, onScrollComplete, onNewSessionRequest }: Props) {
   const { locale, t } = useI18n();
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
 
@@ -402,6 +403,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       onSoundToggle={onSoundToggle}
       slashResources={slashResources}
       slashResourceKey={slashResourceKey}
+      onSlashAction={(action) => { if (action === "new") onNewSessionRequest?.(); }}
     />
   );
 
