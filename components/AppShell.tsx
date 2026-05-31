@@ -117,12 +117,27 @@ export function AppShell() {
     setActiveTopPanel((cur) => cur === panel ? null : panel);
   }, []);
 
-  // Command palette: keyboard shortcut
+  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      const mod = e.metaKey || e.ctrlKey;
+      // Ctrl+B — toggle left sidebar
+      if (mod && e.key === "b" && !e.altKey) {
+        e.preventDefault();
+        setSidebarOpen((v) => !v);
+        return;
+      }
+      // Ctrl+Alt+B — toggle right sidebar
+      if (mod && e.altKey && e.key === "b") {
+        e.preventDefault();
+        setRightPanelState((v) => v === "closed" ? "normal" : "closed");
+        return;
+      }
+      // Ctrl+K — command palette
+      if (mod && e.key === "k") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
+        return;
       }
       // Space — focus chat input when not already focused
       if (
