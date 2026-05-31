@@ -17,6 +17,9 @@ const PI_URL = `http://localhost:${PI_PORT}`;
 const MAX_RETRIES = 30;       // 30 attempts
 const RETRY_INTERVAL = 2000;  // 2 seconds between retries
 
+// ── CLI flags ────────────────────────────────────────────────────────
+const startHidden = process.argv.includes("--hidden");
+
 // ── State ───────────────────────────────────────────────────────────
 let win = null;
 let tray = null;
@@ -134,6 +137,7 @@ function createWindow() {
     minHeight: 400,
     title: "Pi Agent",
     autoHideMenuBar: true,
+    show: !startHidden,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
