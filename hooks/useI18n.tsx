@@ -37,6 +37,7 @@ const ZH_TRANSLATIONS = {
   "Hide file panel": "隐藏文件面板",
   "Show file panel": "显示文件面板",
   "Expand file panel": "展开文件面板",
+  "Collapse file panel": "收缩文件面板",
   "Context": "上下文",
   "No AGENTS.md files found for this project": "该项目未找到 AGENTS.md 文件",
   "No AGENTS.md files found": "未找到 AGENTS.md 文件",
