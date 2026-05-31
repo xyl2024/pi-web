@@ -135,7 +135,8 @@ function createWindow() {
 
 // ── System Tray ─────────────────────────────────────────────────────
 function createTray() {
-  tray = new Tray(createAppIcon(16));
+  const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  tray = new Tray(trayIcon);
   tray.setToolTip("Pi Agent");
 
   const contextMenu = Menu.buildFromTemplate([
