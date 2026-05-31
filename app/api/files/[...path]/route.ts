@@ -14,6 +14,7 @@ const IGNORED_SUFFIXES = [".pyc"];
 
 const TEXT_PREVIEW_MAX_BYTES = 10 * 1024 * 1024;
 const IMAGE_PREVIEW_MAX_BYTES = 10 * 1024 * 1024;
+const PDF_PREVIEW_MAX_BYTES = 50 * 1024 * 1024;
 const log = createLogger("api/files");
 
 const IMAGE_EXT_TO_MIME: Record<string, string> = {
@@ -41,6 +42,10 @@ const AUDIO_EXT_TO_MIME: Record<string, string> = {
   webm: "audio/webm",
 };
 
+const PDF_EXT_TO_MIME: Record<string, string> = {
+  pdf: "application/pdf",
+};
+
 function getExt(filePath: string): string {
   const ext = path.basename(filePath).toLowerCase().split(".").pop() ?? "";
   return ext;
@@ -52,6 +57,10 @@ function getImageMime(filePath: string): string | null {
 
 function getAudioMime(filePath: string): string | null {
   return AUDIO_EXT_TO_MIME[getExt(filePath)] ?? null;
+}
+
+function getPdfMime(filePath: string): string | null {
+  return PDF_EXT_TO_MIME[getExt(filePath)] ?? null;
 }
 
 const EXT_TO_LANGUAGE: Record<string, string> = {
@@ -306,6 +315,21 @@ export async function GET(
           durationMs: elapsedMs(startedAt),
         });
         return streamFile(filePath, stat, audioMime, request.headers.get("range"));
+      }
+      const pdfMime = getPdfMime(filePath);
+      if (pdfMime) {
+        if (stat.size > PDF_PREVIEW_MAX_BYTES) {
+          log.warn("pdf read rejected", { path: filePath, size: stat.size, durationMs: elapsedMs(startedAt) });
+          return NextResponse.json({ error: "PDF too large (>50MB)" }, { status: 413 });
+        }
+        log.info("pdf read streamed", {
+          path: filePath,
+          size: stat.size,
+          contentType: pdfMime,
+          range: request.headers.get("range") ?? undefined,
+          durationMs: elapsedMs(startedAt),
+        });
+        return streamFile(filePath, stat, pdfMime, request.headers.get("range"));
       }
       if (stat.size > TEXT_PREVIEW_MAX_BYTES) {
         log.warn("text read rejected", { path: filePath, size: stat.size, durationMs: elapsedMs(startedAt) });
