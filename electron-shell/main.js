@@ -8,6 +8,7 @@ const {
   Menu,
   globalShortcut,
   nativeImage,
+  ipcMain,
 } = require("electron");
 const path = require("path");
 
@@ -43,7 +44,7 @@ button:hover{background:#3a7bc8}
 </style></head><body><div class="container">
 <h1>Pi 服务未连接</h1>
 <p>请确保 WSL2 中 Pi Agent Web 已启动（端口 ${PI_PORT}）</p>
-<button onclick="window.location.href='${PI_URL}'">手动重试</button>
+<button onclick="window.piShell.retry()">手动重试</button>
 </div></body></html>`)}`;
 }
 
@@ -69,6 +70,16 @@ function createWindow() {
   win.webContents.on("did-fail-load", (_event, _code, _desc, validatedURL, isMainFrame) => {
     if (isMainFrame && validatedURL === PI_URL) {
       win.loadURL(errorPage()).catch(() => {});
+    }
+  });
+
+  // IPC: manual retry from error page
+  ipcMain.on("retry-connection", () => {
+    if (win) {
+      console.log("[Pi Shell] Manual retry...");
+      win.loadURL(PI_URL).catch(() => {
+        win.loadURL(errorPage()).catch(() => {});
+      });
     }
   });
 
