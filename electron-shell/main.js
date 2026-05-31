@@ -26,27 +26,39 @@ let tray = null;
 let isQuitting = false;
 let retryTimer = null;
 
-// ── Tray icon (generated programmatically — no asset file needed) ──
-function createTrayIcon() {
-  const size = 16;
+// ── App icon (generated programmatically — no asset file needed) ────
+// Draws a blue "P" letter on transparent background at any resolution.
+// Original glyph designed on a 16-unit grid; scaled up for larger sizes.
+function createAppIcon(size) {
   const buf = Buffer.alloc(size * size * 4);
+  const s = size / 16; // scale factor from the 16x16 design grid
+
+  // "P" glyph bounding box on the 16-unit grid
+  const LX = 2, RX = 4;       // left vertical bar x-range
+  const TX = 2, TX2 = 11;     // top horizontal bar
+  const MX = 2, MX2 = 11;     // middle horizontal bar
+  const RV = 11;              // right vertical bar x
+  const TY = 1, MY = 7;       // top bar y, middle bar y
+  const RY1 = 1, RY2 = 7;     // right bar y-range
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = (y * size + x) * 4;
-      // Simple "P" letter shape in blue (#4A90D9)
+      const gx = x / s; // grid-x
+      const gy = y / s; // grid-y
+
       const inP =
-        (x >= 2 && x <= 4) ||               // left vertical bar
-        (y === 1 && x >= 2 && x <= 11) ||   // top bar
-        (y === 7 && x >= 2 && x <= 11) ||   // middle bar
-        (y >= 1 && y <= 7 && x === 11);     // right bar (upper half)
+        (gx >= LX && gx < RX + 1) ||                              // left bar
+        (gy >= TY && gy < TY + 1 && gx >= TX && gx < TX2 + 1) || // top bar
+        (gy >= MY && gy < MY + 1 && gx >= MX && gx < MX2 + 1) || // middle bar
+        (gy >= RY1 && gy < RY2 + 1 && gx >= RV && gx < RV + 1);  // right bar
+
       if (inP) {
         buf[i] = 0x4a;     // R
         buf[i + 1] = 0x90; // G
         buf[i + 2] = 0xd9; // B
-        buf[i + 3] = 255;  // A (opaque)
+        buf[i + 3] = 255;  // A
       } else {
-        // transparent
         buf[i] = 0;
         buf[i + 1] = 0;
         buf[i + 2] = 0;
@@ -138,6 +150,7 @@ function createWindow() {
     title: "Pi Agent",
     autoHideMenuBar: true,
     show: !startHidden,
+    icon: createAppIcon(64),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -162,7 +175,7 @@ function createWindow() {
 
 // ── System Tray ─────────────────────────────────────────────────────
 function createTray() {
-  tray = new Tray(createTrayIcon());
+  tray = new Tray(createAppIcon(16));
   tray.setToolTip("Pi Agent");
 
   const contextMenu = Menu.buildFromTemplate([
