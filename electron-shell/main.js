@@ -1,5 +1,5 @@
 // main.js — Pi Agent Electron Shell
-// Phase 1: window + tray + global shortcut + single-instance + auto-retry
+// Phase 1: window + tray + global shortcut + single-instance + manual retry
 
 const {
   app,
@@ -14,8 +14,6 @@ const path = require("path");
 // ── Config ──────────────────────────────────────────────────────────
 const PI_PORT = process.env.PI_PORT || "14514";
 const PI_URL = `http://localhost:${PI_PORT}`;
-const MAX_RETRIES = 30;       // 30 attempts
-const RETRY_INTERVAL = 2000;  // 2 seconds between retries
 
 // ── CLI flags ────────────────────────────────────────────────────────
 const startHidden = process.argv.includes("--hidden");
@@ -24,13 +22,12 @@ const startHidden = process.argv.includes("--hidden");
 let win = null;
 let tray = null;
 let isQuitting = false;
-let retryTimer = null;
 
 // ── App icon ─────────────────────────────────────────────────────────
 const iconPath = path.join(__dirname, "pi.png");
 
-// ── HTML pages for waiting / timeout ────────────────────────────────
-function waitingHtml(attempt) {
+// ── Error page (shown when Pi server is unreachable) ─────────────────
+function errorPage() {
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -39,65 +36,15 @@ display:flex;justify-content:center;align-items:center;height:100vh;
 background:#0f0f1a;color:#c8c8d0}
 .container{text-align:center;max-width:400px}
 h1{font-size:22px;font-weight:500;margin-bottom:12px;color:#e0e0e8}
-p{font-size:14px;color:#787888}
-.dots{display:inline-block;width:24px;text-align:left}
-.spinner{margin:20px auto;width:32px;height:32px;border:3px solid #2a2a3a;
-border-top-color:#4a90d9;border-radius:50%;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-</style></head><body><div class="container">
-<div class="spinner"></div>
-<h1>等待 Pi 服务启动<span class="dots" id="dots"></span></h1>
-<p id="status">正在连接 localhost:${PI_PORT}（第 ${attempt}/${MAX_RETRIES} 次）</p>
-</div>
-<script>
-let n=0;setInterval(()=>{n=(n+1)%4;document.getElementById('dots').textContent='.'.repeat(n)},500)
-</script></body></html>`)}`;
-}
-
-function timeoutHtml() {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-display:flex;justify-content:center;align-items:center;height:100vh;
-background:#0f0f1a;color:#c8c8d0}
-.container{text-align:center;max-width:400px}
-h1{font-size:22px;font-weight:500;margin-bottom:12px;color:#e74c3c}
 p{font-size:14px;color:#787888;margin-bottom:6px}
 button{margin-top:16px;padding:10px 24px;font-size:15px;border:none;
 border-radius:6px;background:#4a90d9;color:#fff;cursor:pointer}
 button:hover{background:#3a7bc8}
 </style></head><body><div class="container">
-<h1>无法连接到 Pi 服务</h1>
-<p>请确保 WSL2 中 Pi Agent Web 已启动</p>
-<p>端口：localhost:${PI_PORT}</p>
-<button onclick="location.reload()">手动重试</button>
+<h1>Pi 服务未连接</h1>
+<p>请确保 WSL2 中 Pi Agent Web 已启动（端口 ${PI_PORT}）</p>
+<button onclick="window.location.href='${PI_URL}'">手动重试</button>
 </div></body></html>`)}`;
-}
-
-// ── Load Pi with retry logic ────────────────────────────────────────
-async function loadPiWithRetry() {
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      console.log(
-        `[Pi Shell] Connecting to ${PI_URL} (${attempt}/${MAX_RETRIES})`
-      );
-      await win.loadURL(PI_URL);
-      console.log("[Pi Shell] Connected!");
-      return; // success
-    } catch (_err) {
-      // Show waiting page, update on each retry
-      if (attempt < MAX_RETRIES) {
-        await win.loadURL(waitingHtml(attempt));
-        await new Promise((resolve) => {
-          retryTimer = setTimeout(resolve, RETRY_INTERVAL);
-        });
-      }
-    }
-  }
-
-  // All retries exhausted
-  await win.loadURL(timeoutHtml());
 }
 
 // ── BrowserWindow ───────────────────────────────────────────────────
@@ -118,7 +65,19 @@ function createWindow() {
     },
   });
 
-  loadPiWithRetry();
+  // Catch navigation failures to the Pi URL → show error page
+  win.webContents.on("did-fail-load", (_event, _code, _desc, validatedURL, isMainFrame) => {
+    if (isMainFrame && validatedURL === PI_URL) {
+      win.loadURL(errorPage()).catch(() => {});
+    }
+  });
+
+  // Try connecting once
+  console.log(`[Pi Shell] Connecting to ${PI_URL}`);
+  win.loadURL(PI_URL).catch(() => {
+    // Initial failure → show error page (did-fail-load will also fire)
+    win.loadURL(errorPage()).catch(() => {});
+  });
 
   // Hide to tray instead of closing
   win.on("close", (e) => {
@@ -163,7 +122,6 @@ function createTray() {
 
   tray.setContextMenu(contextMenu);
 
-  // Double-click tray icon to show window
   tray.on("double-click", () => {
     if (win) {
       win.show();
@@ -181,7 +139,6 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    // Focus existing window when a second instance is launched
     if (win) {
       if (win.isMinimized()) win.restore();
       win.show();
@@ -193,7 +150,6 @@ if (!gotTheLock) {
     createWindow();
     createTray();
 
-    // Global shortcut: Ctrl+Shift+P to toggle window
     const registered = globalShortcut.register(
       "CommandOrControl+Shift+P",
       () => {
@@ -217,7 +173,6 @@ if (!gotTheLock) {
 
   app.on("before-quit", () => {
     isQuitting = true;
-    if (retryTimer) clearTimeout(retryTimer);
   });
 
   app.on("will-quit", () => {
