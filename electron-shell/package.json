@@ -1,0 +1,13 @@
+{
+  "name": "pi-agent-shell",
+  "version": "1.0.0",
+  "description": "Electron shell for Pi Agent Web",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}
