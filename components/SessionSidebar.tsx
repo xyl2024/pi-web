@@ -20,6 +20,7 @@ interface Props {
   explorerRefreshKey?: number;
   onAtMention?: (relativePath: string) => void;
   onOpenSearch?: () => void;
+  onFileDeleted?: (filePath: string) => void;
 }
 
 function formatRelativeTime(dateStr: string, t: ReturnType<typeof useI18n>["t"]): string {
@@ -197,7 +198,7 @@ function PiAgentTitle() {
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch }: Props) {
+export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted }: Props) {
   const { t } = useI18n();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -221,6 +222,13 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const [explorerRefreshDone, setExplorerRefreshDone] = useState(false);
   const sessionRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const explorerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerExplorerRefresh = useCallback(() => {
+    setExplorerKey((k) => k + 1);
+    setExplorerRefreshDone(true);
+    if (explorerRefreshTimerRef.current) clearTimeout(explorerRefreshTimerRef.current);
+    explorerRefreshTimerRef.current = setTimeout(() => setExplorerRefreshDone(false), 2000);
+  }, []);
 
   const loadSessions = useCallback(async (showLoading = false) => {
     try {
@@ -1010,12 +1018,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
             </button>
             <Tooltip content={t("Refresh explorer")}>
             <button
-              onClick={() => {
-                setExplorerKey((k) => k + 1);
-                setExplorerRefreshDone(true);
-                if (explorerRefreshTimerRef.current) clearTimeout(explorerRefreshTimerRef.current);
-                explorerRefreshTimerRef.current = setTimeout(() => setExplorerRefreshDone(false), 2000);
-              }}
+              onClick={triggerExplorerRefresh}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
                 width: 26, height: 26, padding: 0, marginRight: 6,
@@ -1050,6 +1053,8 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 onOpenFile={onOpenFile ?? (() => {})}
                 refreshKey={explorerKey}
                 onAtMention={onAtMention}
+                onFileMutated={triggerExplorerRefresh}
+                onFileDeleted={onFileDeleted}
               />
             </div>
           )}

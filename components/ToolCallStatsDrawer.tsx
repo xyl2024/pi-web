@@ -53,7 +53,7 @@ export function ToolCallStatsDrawer({ snapshot, open, onToggle, runningSummary, 
         style={{
           position: "absolute",
           top: 12,
-          right: open ? 328 : 12,
+          right: open ? 364 : 48,
           zIndex: 20,
           display: "flex",
           alignItems: "center",

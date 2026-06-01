@@ -341,6 +341,10 @@ export function AppShell() {
     });
   }, [fileTabs]);
 
+  const handleFileDeleted = useCallback((filePath: string) => {
+    handleCloseFileTab(`file:${filePath}`);
+  }, [handleCloseFileTab]);
+
   // Show chat area if a session is selected, or if we have a cwd to start a new session in
   const effectiveNewSessionCwd = newSessionCwd ?? (selectedSession === null && activeCwd ? activeCwd : null);
   const showChat = selectedSession !== null || effectiveNewSessionCwd !== null;
@@ -365,6 +369,7 @@ export function AppShell() {
         explorerRefreshKey={explorerRefreshKey}
         onAtMention={handleAtMention}
         onOpenSearch={() => setPaletteOpen(true)}
+        onFileDeleted={handleFileDeleted}
       />
       <div style={{ padding: "8px", flexShrink: 0, display: "flex", justifyContent: "space-between", gap: 4 }}>
         {([

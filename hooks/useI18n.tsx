@@ -242,6 +242,27 @@ const ZH_TRANSLATIONS = {
   "Failed to load settings": "加载设置失败",
   "search": "搜索字符串",
   "replace": "替换为",
+  // File explorer (first batch: new/rename/delete/copy/search/context menu)
+  "New file": "新建文件",
+  "New folder": "新建文件夹",
+  "Delete file?": "删除文件？",
+  "Delete folder?": "删除文件夹？",
+  "Delete failed": "删除失败",
+  "Deleted": "已删除",
+  "File created": "已新建文件",
+  "Folder created": "已新建文件夹",
+  "Renamed": "已重命名",
+  "Create failed": "创建失败",
+  "Rename failed": "重命名失败",
+  "Network error": "网络错误",
+  "Copy failed": "复制失败",
+  "Copy absolute path": "复制绝对路径",
+  "Copy relative path": "复制相对路径",
+  "Copy as @-mention": "复制为 @-引用",
+  "Search files…": "搜索文件…",
+  "No matches": "无匹配项",
+  "Name already exists": "名称已存在",
+  "Directory not empty": "目录非空",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
