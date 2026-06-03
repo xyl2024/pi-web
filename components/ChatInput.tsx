@@ -78,12 +78,13 @@ const BUILTIN_NEW_SESSION: SlashResource = {
 };
 
 function getSlashQuery(value: string, cursor: number): { start: number; query: string } | null {
+  if (cursor === 0 || value[0] !== "/") return null;
   const beforeCursor = value.slice(0, cursor);
-  const match = beforeCursor.match(/(^|\s)\/([^\s/]*)$/);
+  const match = beforeCursor.match(/^\/([^\s/]*)$/);
   if (!match) return null;
   return {
-    start: beforeCursor.length - match[2].length - 1,
-    query: match[2],
+    start: 0,
+    query: match[1],
   };
 }
 
