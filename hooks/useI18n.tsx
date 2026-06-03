@@ -216,6 +216,9 @@ const ZH_TRANSLATIONS = {
   "Save": "保存",
   "Pinned": "已固定",
   "Recent": "最近使用",
+  "Pin session": "置顶会话",
+  "Unpin session": "取消置顶",
+  "Pinned sessions": "已置顶会话",
   // Tool call stats drawer
   "Tool call statistics": "工具调用统计",
   "Tool Calls": "工具调用",
