@@ -670,11 +670,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       } else if (!initialScrollDoneRef.current) {
         initialScrollDoneRef.current = true;
         scrollToBottom("instant");
-      } else if (!agentRunningRef.current) {
-        scrollToBottom("smooth");
       }
     }
-  }, [messages.length, agentRunning, scrollToBottom, scrollUserMsgToTop]);
+  }, [messages.length, scrollToBottom, scrollUserMsgToTop]);
 
   // Load model list
   useEffect(() => {
