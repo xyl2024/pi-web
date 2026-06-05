@@ -266,6 +266,31 @@ const ZH_TRANSLATIONS = {
   "No matches": "无匹配项",
   "Name already exists": "名称已存在",
   "Directory not empty": "目录非空",
+
+  // WeChat demo panel
+  "WeChat": "微信",
+  "WeChat Demo": "微信演示",
+  "Loading…": "加载中…",
+  "Not logged in": "未登录",
+  "Start QR login": "开始扫码登录",
+  "Pairing code": "配对码",
+  "Submit": "提交",
+  "Refresh QR": "刷新二维码",
+  "Log out": "退出登录",
+  "Send a test message": "发送测试消息",
+  "Enter the recipient's WeChat id (must end with @im.wechat) and a message body.":
+    "输入收件人的微信 ID（必须以 @im.wechat 结尾）和消息内容。",
+  "Scan with WeChat, or open the URL on your phone:": "用手机微信扫一扫，或在浏览器中打开以下链接：",
+  "WeChat account linked": "微信账号已绑定",
+  "WeChat account logged out": "微信账号已退出",
+  "Message sent": "消息已发送",
+  "Hello from pi-web!": "你好，这是来自 pi-web 的消息！",
+  "Account": "账号",
+  "Known contacts": "已联系过的用户",
+  "No contacts yet. Ask a friend to scan the QR above and send you a message — they'll appear here.":
+    "暂无联系人。让朋友扫一下上面的二维码给你发条消息，他们就会出现在这里。",
+  "New contact: {userId}": "新联系人：{userId}",
+  "(no text)": "（无文本）",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
