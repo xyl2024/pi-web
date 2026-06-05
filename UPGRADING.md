@@ -9,7 +9,17 @@
 ## 升级前
 
 1. 查阅 [pi releases](https://github.com/earendil-works/pi/releases)，看 release notes 中的 breaking changes。
-2. 关注和本项目直接相关的部分：session 文件格式、RPC 接口、ToolCall 结构。
+2. 关注和本项目直接相关的部分：session 文件格式、RPC 接口、ToolCall 结构等。
+
+查 release notes 和 commit / 文件 diff 用 `gh`：
+
+```bash
+# release notes
+gh release view v0.78.1 --repo earendil-works/pi
+
+# commit 列表 + 文件改动
+gh api "repos/earendil-works/pi/compare/v0.78.0...v0.78.1" --paginate
+```
 
 ## 升级步骤
 
