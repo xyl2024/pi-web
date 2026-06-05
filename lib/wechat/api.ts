@@ -208,6 +208,31 @@ export async function notifyStop(params: { baseUrl: string; token: string }): Pr
   return postJson<NotifyResp>(params.baseUrl, "ilink/bot/msg/notifystop", { base_info: baseInfo() }, params.token);
 }
 
+/**
+ * Send a typing indicator to a user. Best-effort — failures are swallowed by
+ * the caller (the user will still see their own message; this is just a UX
+ * hint that the bot is alive).
+ */
+export async function sendTyping(params: {
+  baseUrl: string;
+  token: string;
+  to: string;
+  contextToken?: string;
+  typingTicket?: string;
+}): Promise<NotifyResp> {
+  return postJson<NotifyResp>(
+    params.baseUrl,
+    "ilink/bot/sendtyping",
+    {
+      to_user_id: params.to,
+      context_token: params.contextToken,
+      typing_ticket: params.typingTicket,
+      base_info: baseInfo(),
+    },
+    params.token,
+  );
+}
+
 const GET_UPDATES_DEFAULT_TIMEOUT_MS = 35_000;
 
 /**

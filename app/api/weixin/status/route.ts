@@ -21,5 +21,8 @@ export async function GET() {
     userId: account.userId ?? null,
     baseUrl: account.baseUrl,
     savedAt: account.savedAt,
+    status: account.status ?? "ok",
+    currentWorkspaceId: account.currentWorkspaceId ?? null,
+    currentSessionId: account.currentSessionId ?? null,
   });
 }

@@ -121,6 +121,22 @@ export interface WeChatAccount {
   baseUrl: string;
   userId?: string;
   savedAt: string;
+  /**
+   * Currently active workspace (absolute cwd). Set via the workspace
+   * dropdown in WeChatPanel. Switching workspace clears currentSessionId
+   * (L2 cold-start semantics — next inbound message spawns a new session).
+   */
+  currentWorkspaceId?: string;
+  /**
+   * Currently active session within the current workspace. null/undefined
+   * means "no session yet — next inbound message will cold-start a new one".
+   */
+  currentSessionId?: string;
+  /**
+   * "ok" by default. Set to "expired" when an outbound request fails with
+   * 401 / token-expired — the panel reads this to surface a re-scan banner.
+   */
+  status?: "ok" | "expired";
 }
 
 /** Per-login session state (in-memory only). */

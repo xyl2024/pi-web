@@ -138,6 +138,7 @@ function advancePhase(
         baseUrl: status.baseurl || session.baseUrl,
         userId: status.ilink_user_id,
         savedAt: new Date().toISOString(),
+        status: "ok" as const,
       };
       state.saveAccount(account);
       // Best-effort notify start so the bot shows online immediately.

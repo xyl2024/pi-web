@@ -42,6 +42,46 @@ export function loadAccount(): WeChatAccount | null {
   return null;
 }
 
+/**
+ * Patch a subset of fields on the persisted account, preserving the rest.
+ * Returns the merged account, or null if there is no account on disk.
+ */
+export function patchAccount(patch: Partial<WeChatAccount>): WeChatAccount | null {
+  const cur = loadAccount();
+  if (!cur) return null;
+  const next: WeChatAccount = { ...cur, ...patch };
+  saveAccount(next);
+  return next;
+}
+
+/** Mark the account as expired (token rejected upstream). */
+export function markAccountExpired(): WeChatAccount | null {
+  return patchAccount({ status: "expired" });
+}
+
+/** Clear the expired flag — called after a successful re-login. */
+export function markAccountHealthy(): WeChatAccount | null {
+  return patchAccount({ status: "ok" });
+}
+
+/**
+ * Set the current workspace (L2: also clears currentSessionId, so the
+ * next inbound message will cold-start a new session in this workspace).
+ */
+export function setCurrentWorkspace(workspaceId: string | null): WeChatAccount | null {
+  return patchAccount({ currentWorkspaceId: workspaceId ?? undefined, currentSessionId: undefined });
+}
+
+/**
+ * Set the current session id (called after cold-start). Pass `null` to
+ * clear it — used by the WeChat `/new` command, which resets the binding
+ * without spawning a new session itself. The next inbound message will
+ * then cold-start on its own and become the first turn.
+ */
+export function setCurrentSession(sessionId: string | null): WeChatAccount | null {
+  return patchAccount({ currentSessionId: sessionId ?? undefined });
+}
+
 export function saveAccount(account: WeChatAccount): void {
   const dir = wechatDir();
   mkdirSync(dir, { recursive: true });

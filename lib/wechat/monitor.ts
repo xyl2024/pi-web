@@ -18,6 +18,7 @@
  */
 import { api, state } from "@/lib/wechat";
 import type { WeixinMessage } from "@/lib/wechat";
+import { handleInbound } from "@/lib/wechat/inbound";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("wechat/monitor");
@@ -103,6 +104,20 @@ async function tick(): Promise<void> {
       if (!userId) continue;
       const preview = extractPreview(msg);
       state.recordContact(account.accountId, userId, preview, msg.context_token);
+      // Fire-and-forget inbound handler for text messages. Non-text
+      // (image/voice/file) is recorded as a contact only — no reply path
+      // exists yet. The handler is fully self-contained: it picks the
+      // current session (or cold-starts), runs the agent, and sends the
+      // reply back to WeChat. Errors are reported to the user by the
+      // handler itself, so we don't need to await or surface anything
+      // back into the poller.
+      if (preview) {
+        void handleInbound({
+          fromUserId: userId,
+          text: preview,
+          contextToken: msg.context_token,
+        });
+      }
     }
 
     if (msgs.length > 0) {

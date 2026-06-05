@@ -291,6 +291,15 @@ const ZH_TRANSLATIONS = {
     "暂无联系人。让朋友扫一下上面的二维码给你发条消息，他们就会出现在这里。",
   "New contact: {userId}": "新联系人：{userId}",
   "(no text)": "（无文本）",
+  // WeChat channel — workspace/session status bar
+  "Current workspace": "当前 Workspace",
+  "Current session": "当前 Session",
+  "Not started": "未启动",
+  "Not set": "未设置",
+  "Switch workspace": "切换 Workspace",
+  "Workspace switched": "Workspace 已切换",
+  "No workspaces yet": "暂无 Workspace",
+  "Account expired — please scan again": "账号已过期，请重新扫码",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
