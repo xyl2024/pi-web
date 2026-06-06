@@ -5,6 +5,22 @@
  *   - `app/api/weixin/inbound/route.ts` — HTTP entry, for external triggers
  *   - `lib/wechat/monitor.ts`           — background poller, internal call
  *
+ * Concurrency: calls are serialized per-account via an in-memory FIFO
+ * chain (see `inboundChains` below). The monitor fires `void handleInbound`
+ * for every message in a getUpdates batch, and without the chain those
+ * calls would race on the same AgentSessionWrapper in two ways:
+ *   1. Cold-start race — two parallel calls both see currentSessionId
+ *      null and call coldStart with different tempKeys, creating two
+ *      orphan sessions. Serialized, the second call sees the first's
+ *      setCurrentSession and reuses that session.
+ *   2. Wrong-reply race — two parallel calls each subscribe to onEvent
+ *      on the same wrapper. The first agent_end fires for both, both
+ *      resolve with the same reply text, and the second call's actual
+ *      reply is lost (no one listening for the second agent_end).
+ *      Serialized, the second call's waitForAgentReply subscribes only
+ *      after the first call's agent_end has already fired and been
+ *      unsubscribed from.
+ *
  * Flow per message (R3 / B2 / L2 / N1):
  *   1. If text === "/new": clear currentSessionId, log the command, and
  *      reply "session reset". The next real WeChat message will see no
@@ -43,6 +59,20 @@ const log = createLogger("wechat/inbound");
 
 /** A 5min safety net — even if the agent misbehaves we won't wait forever. */
 const AGENT_END_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * Per-account FIFO chain of in-flight handleInbound calls.
+ *
+ * The monitor loop fires `void handleInbound(...)` for every message in a
+ * getUpdates batch, and those calls must be processed strictly in arrival
+ * order. See the file-top docstring's "Concurrency" section for the two
+ * specific races this prevents.
+ *
+ * A failure (rejection) in the previous call is caught here so the chain
+ * doesn't poison itself — the impl reports errors to WeChat via safeReply,
+ * so a rejection in this module would be a bug, not a user-facing condition.
+ */
+const inboundChains = new Map<string, Promise<unknown>>();
 
 // Minimal local types — we only need to walk the well-known shape returned
 // on agent_end. They are compatible with @earendil-works/pi-ai's
@@ -167,11 +197,31 @@ export interface InboundMessage {
 }
 
 /**
- * Main entry. Resolves once the reply has been sent to WeChat (or attempts
- * have been exhausted). Never throws — all errors are logged and surfaced
- * to the user via a best-effort failure message.
+ * Main entry. Resolves once this call's reply has been sent to WeChat
+ * (or attempts have been exhausted), after awaiting any earlier in-flight
+ * call on the same account (see the file-top docstring's "Concurrency"
+ * section).
+ *
+ * Never throws — all errors are logged and surfaced to the user via a
+ * best-effort failure message, and the chain catches rejections so one
+ * failed call doesn't poison the next.
  */
 export async function handleInbound(msg: InboundMessage): Promise<void> {
+  // Key by accountId so different accounts (in principle) don't block
+  // each other. The impl re-reads loadAccount() because the account may
+  // have changed (login/logout) by the time the chain actually runs.
+  const account = state.loadAccount();
+  const key = account?.accountId ?? "__no_account__";
+  const prev = inboundChains.get(key) ?? Promise.resolve();
+  // Catch on the previous promise so a rejection doesn't break the
+  // chain. The impl itself shouldn't reject (it reports via safeReply),
+  // but the .catch is belt-and-suspenders against an unexpected throw.
+  const next = prev.catch(() => undefined).then(() => handleInboundImpl(msg));
+  inboundChains.set(key, next);
+  return next;
+}
+
+async function handleInboundImpl(msg: InboundMessage): Promise<void> {
   const startedAt = Date.now();
   logSessionEvent({
     kind: "inbound",
