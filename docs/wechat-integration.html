@@ -1,0 +1,1546 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pi-Web 微信集成 · 深度探索</title>
+<style>
+  /* ---------- Base ---------- */
+  :root {
+    --bg: #0e0f12;
+    --bg-panel: #16181d;
+    --bg-panel-2: #1c1f26;
+    --bg-hover: #232730;
+    --bg-code: #11131a;
+    --border: #2a2d35;
+    --border-soft: #1f2229;
+    --text: #e4e6eb;
+    --text-muted: #9ba0ab;
+    --text-dim: #6b6f7a;
+    --accent: #1aad19;          /* WeChat green */
+    --accent-dim: #0e7c43;
+    --user: #5b9dff;
+    --tool: #f59e0b;
+    --danger: #ef4444;
+    --good: #10b981;
+    --pink: #ec4899;
+    --purple: #a78bfa;
+    --font-sans: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Cascadia Code", "Source Code Pro", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 15px; line-height: 1.7; }
+  body { background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(26,173,25,0.10), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 100% 30%, rgba(91,141,255,0.08), transparent 70%),
+      var(--bg);
+    min-height: 100vh;
+  }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px dashed transparent; transition: border-color .15s; }
+  a:hover { border-bottom-color: var(--accent); }
+
+  /* ---------- Layout ---------- */
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  @media (max-width: 900px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    padding: 88px 0 56px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    background: rgba(26,173,25,0.10); color: var(--accent);
+    border: 1px solid rgba(26,173,25,0.25);
+    font-size: 12px; font-weight: 500; letter-spacing: .3px;
+  }
+  .badge::before { content: "●"; font-size: 8px; }
+  h1 {
+    font-size: 48px; line-height: 1.15; margin: 18px 0 14px;
+    font-weight: 700; letter-spacing: -0.02em;
+  }
+  h1 .grad {
+    background: linear-gradient(135deg, #1aad19 0%, #5b9dff 60%, #a78bfa 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .subtitle { font-size: 18px; color: var(--text-muted); max-width: 720px; margin: 0 0 32px; }
+  .stats { display: flex; gap: 36px; flex-wrap: wrap; margin-top: 36px; padding-top: 28px; border-top: 1px solid var(--border-soft); }
+  .stat .num { font-size: 28px; font-weight: 700; color: var(--text); font-family: var(--font-mono); }
+  .stat .lbl { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+  /* ---------- TOC / Sidebar ---------- */
+  .layout { display: grid; grid-template-columns: 220px 1fr; gap: 56px; padding: 60px 0; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } .toc { display: none; } }
+  .toc { position: sticky; top: 32px; align-self: start; max-height: calc(100vh - 64px); overflow-y: auto; }
+  .toc h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin: 0 0 14px; font-weight: 600; }
+  .toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+  .toc li { counter-increment: toc; margin: 2px 0; }
+  .toc a {
+    display: block; padding: 6px 10px 6px 30px; position: relative;
+    color: var(--text-muted); font-size: 13px; border-radius: 6px;
+    border: none; transition: all .15s;
+  }
+  .toc a::before {
+    content: counter(toc, decimal-leading-zero);
+    position: absolute; left: 8px; top: 6px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+  }
+  .toc a:hover { background: var(--bg-hover); color: var(--text); }
+  .toc a.active { background: rgba(26,173,25,0.08); color: var(--accent); }
+  .toc a.active::before { color: var(--accent); }
+
+  /* ---------- Sections ---------- */
+  section { margin: 0 0 88px; scroll-margin-top: 32px; }
+  section .anchor { display: block; position: relative; top: -32px; visibility: hidden; }
+  h2 { font-size: 32px; margin: 0 0 14px; letter-spacing: -0.01em; font-weight: 700; }
+  h2 .num { color: var(--accent); font-family: var(--font-mono); font-size: 20px; margin-right: 12px; vertical-align: 4px; }
+  h3 { font-size: 19px; margin: 28px 0 12px; font-weight: 600; color: var(--text); }
+  h4 { font-size: 14px; margin: 20px 0 8px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+  p { margin: 0 0 14px; color: var(--text); }
+  p.lead { font-size: 16px; color: var(--text-muted); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 6px 0; color: var(--text); }
+  li::marker { color: var(--text-dim); }
+  em.code { font-family: var(--font-mono); font-size: 13px; background: var(--bg-panel); padding: 1px 6px; border-radius: 4px; color: var(--pink); border: 1px solid var(--border-soft); }
+  strong { color: var(--text); font-weight: 600; }
+
+  /* ---------- Cards / callouts ---------- */
+  .card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 24px;
+  }
+  .card.tinted { background: linear-gradient(135deg, rgba(26,173,25,0.04), var(--bg-panel)); border-color: rgba(26,173,25,0.2); }
+  .card.purple { background: linear-gradient(135deg, rgba(167,139,250,0.05), var(--bg-panel)); border-color: rgba(167,139,250,0.2); }
+  .card.blue { background: linear-gradient(135deg, rgba(91,141,255,0.05), var(--bg-panel)); border-color: rgba(91,141,255,0.2); }
+  .card h3 { margin-top: 0; }
+  .card .icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 8px;
+    background: rgba(26,173,25,0.12); color: var(--accent);
+    margin-bottom: 10px; font-size: 16px;
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: rgba(26,173,25,0.05);
+    padding: 14px 18px; border-radius: 0 8px 8px 0;
+    margin: 18px 0;
+  }
+  .callout.warn { border-color: var(--tool); background: rgba(245,158,11,0.06); }
+  .callout.info { border-color: var(--user); background: rgba(91,141,255,0.06); }
+  .callout strong { color: var(--accent); }
+  .callout.warn strong { color: var(--tool); }
+  .callout.info strong { color: var(--user); }
+
+  /* ---------- Code blocks ---------- */
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.65;
+    margin: 14px 0;
+  }
+  pre .c { color: #5b6470; font-style: italic; }     /* comment */
+  pre .k { color: #c084fc; }                          /* keyword */
+  pre .s { color: #86efac; }                          /* string */
+  pre .n { color: #f0b67f; }                          /* number */
+  pre .v { color: #93c5fd; }                          /* variable */
+  pre .t { color: #f0e7d8; }                          /* type */
+  pre .f { color: #67e8f9; }                          /* function */
+  pre .h { color: #fb7185; }                          /* highlight */
+  code.inline {
+    font-family: var(--font-mono); font-size: 12.5px;
+    background: var(--bg-code); color: #f0b67f;
+    padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border-soft);
+  }
+  pre .hl { background: rgba(26,173,25,0.12); display: block; margin: 0 -18px; padding: 0 18px; border-left: 2px solid var(--accent); }
+
+  /* ---------- Tables ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border-soft); }
+  th { color: var(--text-dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: 0; }
+  td code.inline { font-size: 12px; }
+
+  /* ---------- SVG diagrams ---------- */
+  .diagram {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 18px 0;
+    overflow-x: auto;
+  }
+  .diagram svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+  .diagram .caption { text-align: center; color: var(--text-dim); font-size: 12px; margin-top: 12px; font-style: italic; }
+
+  /* ---------- Steps / process ---------- */
+  .steps { display: flex; flex-direction: column; gap: 0; margin: 18px 0; }
+  .step {
+    display: grid; grid-template-columns: 36px 1fr; gap: 14px;
+    padding: 14px 0; position: relative;
+  }
+  .step::before {
+    content: ""; position: absolute; left: 17px; top: 50px; bottom: -10px;
+    width: 2px; background: var(--border);
+  }
+  .step:last-child::before { display: none; }
+  .step .num {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--bg-panel); border: 2px solid var(--accent);
+    color: var(--accent); font-family: var(--font-mono); font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1; position: relative; font-size: 14px;
+  }
+  .step .body strong { display: block; margin-bottom: 4px; color: var(--text); }
+  .step .body p { margin: 0; color: var(--text-muted); font-size: 14px; }
+
+  /* ---------- Animations ---------- */
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .7s ease-out, transform .7s ease-out; }
+  .reveal.in { opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
+
+  /* ---------- Footer ---------- */
+  footer { border-top: 1px solid var(--border-soft); padding: 40px 0 60px; color: var(--text-dim); font-size: 13px; text-align: center; }
+  footer code.inline { color: var(--text-muted); }
+
+  /* ---------- Pill / Tag ---------- */
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-family: var(--font-mono); border: 1px solid; }
+  .tag.green { color: var(--accent); border-color: rgba(26,173,25,0.4); background: rgba(26,173,25,0.08); }
+  .tag.blue { color: var(--user); border-color: rgba(91,141,255,0.4); background: rgba(91,141,255,0.08); }
+  .tag.amber { color: var(--tool); border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.08); }
+  .tag.purple { color: var(--purple); border-color: rgba(167,139,250,0.4); background: rgba(167,139,250,0.08); }
+  .tag.pink { color: var(--pink); border-color: rgba(236,72,153,0.4); background: rgba(236,72,153,0.08); }
+  .tag.red { color: var(--danger); border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.08); }
+
+  /* ---------- Sequence diagram ---------- */
+  .seq { font-family: var(--font-mono); font-size: 12.5px; }
+  .seq table { width: 100%; border-collapse: collapse; }
+  .seq td { vertical-align: top; padding: 4px 8px; }
+  .seq .actor { color: var(--text-muted); font-weight: 600; }
+  .seq .msg { padding-left: 24px; position: relative; }
+  .seq .msg::before { content: "→"; position: absolute; left: 8px; color: var(--text-dim); }
+  .seq .msg.back::before { content: "←"; color: var(--accent); }
+  .seq .msg .lbl { color: var(--text); }
+  .seq .msg .note { color: var(--text-dim); font-size: 11.5px; }
+  .seq .group { background: var(--bg-panel-2); border: 1px solid var(--border-soft); border-radius: 8px; padding: 10px 14px; margin: 8px 0; }
+  .seq .group .title { color: var(--accent); font-weight: 600; margin-bottom: 6px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<!-- =========================== HERO =========================== -->
+<header class="hero">
+  <div class="wrap">
+    <div class="badge">微信渠道深度探索 · WeChat Channel Deep-Dive</div>
+    <h1>把微信变成<br/><span class="grad">pi 编码 agent</span> 的聊天前端</h1>
+    <p class="subtitle">
+      pi-web 项目内置的微信演示模块，让一个 <strong>个人微信</strong> 账号通过腾讯 iLink Bot CGI
+      协议，直接收发消息、跑 coding agent、读写本地代码、调用工具 —— 全部在 1,722 行代码之内完成。
+    </p>
+    <div class="stats">
+      <div class="stat"><div class="num">1,722</div><div class="lbl">行核心代码</div></div>
+      <div class="stat"><div class="num">8</div><div class="lbl">个 HTTP 路由</div></div>
+      <div class="stat"><div class="num">8</div><div class="lbl">个后端模块</div></div>
+      <div class="stat"><div class="num">3s</div><div class="lbl">消息轮询周期</div></div>
+      <div class="stat"><div class="num">~5min</div><div class="lbl">agent 回复超时</div></div>
+      <div class="stat"><div class="num">0</div><div class="lbl">外部 npm 聊天依赖</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- =========================== LAYOUT =========================== -->
+<div class="wrap">
+<div class="layout">
+
+  <!-- ====== TOC ====== -->
+  <aside class="toc">
+    <h4>目录</h4>
+    <ol>
+      <li><a href="#s-tldr">TL;DR · 一分钟看懂</a></li>
+      <li><a href="#s-why">为什么要做这个</a></li>
+      <li><a href="#s-arch">整体架构</a></li>
+      <li><a href="#s-login">登录流程 · QR 状态机</a></li>
+      <li><a href="#s-monitor">消息轮询 Monitor</a></li>
+      <li><a href="#s-inbound">入站消息处理</a></li>
+      <li><a href="#s-semantic">Session / Workspace 语义</a></li>
+      <li><a href="#s-modules">关键模块剖析</a></li>
+      <li><a href="#s-storage">数据存到哪儿</a></li>
+      <li><a href="#s-decisions">关键设计决策</a></li>
+      <li><a href="#s-timeline">端到端时序图</a></li>
+      <li><a href="#s-howto">如何亲自动手</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+    <!-- ============================================== -->
+    <!-- 1. TL;DR                                       -->
+    <!-- ============================================== -->
+    <section id="s-tldr" class="reveal">
+      <span class="anchor"></span>
+      <h2><span class="num">01</span>TL;DR · 一分钟看懂</h2>
+      <p class="lead">
+        <strong>把微信变成 pi 的命令行前端</strong>。用户在微信里发一条消息 → 微信消息落到腾讯 iLink 服务器
+        → pi-web 后台 3 秒一次的轮询把消息拉回来 → 喂给本地的 pi coding agent → 把 agent 的回复发回微信。
+        整个过程不经过任何第三方服务器中转（除了腾讯自己）。
+      </p>
+
+      <div class="grid-3" style="margin-top: 22px;">
+        <div class="card tinted">
+          <div class="icon">⌬</div>
+          <h3>协议</h3>
+          <p>腾讯 <code class="inline">ilinkai.weixin.qq.com</code> 的 iLink Bot CGI
+             （<code class="inline">/ilink/bot/*</code>），Bearer Token + 随机 X-WECHAT-UIN。</p>
+        </div>
+        <div class="card blue">
+          <div class="icon">∞</div>
+          <h3>模型</h3>
+          <p>不绑定模型 —— 复用 <code class="inline">lib/rpc-manager.ts</code>
+             启动 AgentSession，模型、工具、思考级别全部从 <code class="inline">settings.json</code> / 入参继承。</p>
+        </div>
+        <div class="card purple">
+          <div class="icon">◍</div>
+          <h3>职责</h3>
+          <p>仅做 <strong>消息搬运工</strong> + 微信账号托管；不实现鉴权配额、不做媒体处理
+             （图片/语音只记录联系人，没有回复通路）。</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <strong>关键事实</strong>：pi-web <em>不依赖</em> 任何微信第三方库。
+        <code class="inline">third/openclaw-weixin/</code> 是一份完整的腾讯 <code class="inline">@tencent-weixin/openclaw-weixin</code> v2.4.3
+        源码拷贝（用于参考协议），但 <strong>运行时根本没引用</strong>。
+        <code class="inline">lib/wechat/</code> 是按需重新实现的精简版。
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 2. Why                                        -->
+    <!-- ============================================== -->
+    <section id="s-why" class="reveal">
+      <span class="anchor"></span>
+      <h2><span class="num">02</span>为什么要做这个</h2>
+      <p>
+        pi-web 本来是个 <strong>浏览器里的 pi 聊天 UI</strong>。要做到"在微信里跑 agent"，需要解决三件事：
+      </p>
+      <ol>
+        <li><strong>消息通道</strong> —— 个人微信没有官方 Bot API，但腾讯为 OpenClaw 平台开放了 iLink Bot CGI 协议。
+            pi-web 直接对接这套 CGI，把"扫码登录 → 收发消息"做成自家后端。</li>
+        <li><strong>会话连续性</strong> —— 同一个发信人在微信里连发 3 条消息，应该在 <em>同一个</em> coding session 里
+            （同一个 <code class="inline">.jsonl</code> 文件）。否则每次发消息都开新会话，agent 完全没有上下文。</li>
+        <li><strong>超时与重试</strong> —— LLM 跑长任务可能 30 秒 ~ 几分钟，微信的同步会话不允许挂那么久。
+            必须 fire-and-forget：先回个"正在处理"，跑完再单独发一条。</li>
+      </ol>
+
+      <h3>三个核心问题对应的设计选择</h3>
+      <table>
+        <thead>
+          <tr><th>问题</th><th>设计选择</th><th>落在哪个文件</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>消息从哪儿进</td>
+            <td>3 秒短轮询 <code class="inline">getUpdates</code>，配 sync_buf 游标</td>
+            <td><code class="inline">lib/wechat/monitor.ts</code></td>
+          </tr>
+          <tr>
+            <td>会话怎么绑定</td>
+            <td>account.json 持久化 <code class="inline">currentSessionId</code>，<code class="inline">/new</code> 主动重置</td>
+            <td><code class="inline">lib/wechat/state.ts</code> + <code class="inline">inbound.ts</code></td>
+          </tr>
+          <tr>
+            <td>同步回微信</td>
+            <td>订阅 <code class="inline">agent_end</code> 事件 → 5 分钟超时兜底 → 取最终 assistant 文本</td>
+            <td><code class="inline">lib/wechat/inbound.ts</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 3. Architecture                               -->
+    <!-- ============================================== -->
+    <section id="s-arch" class="reveal">
+      <span class="anchor"></span>
+      <h2><span class="num">03</span>整体架构</h2>
+      <p class="lead">
+        左边是用户手机，右边是腾讯 iLink 服务器，中间是 pi-web（Next.js）。
+        三方之间的 <strong>唯一通道</strong> 是 HTTPS POST —— 微信在浏览器侧只负责一个 QR 扫码。
+      </p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 1080 460" xmlns="http://www.w3.org/2000/svg" style="font-family: var(--font-sans);">
+          <defs>
+            <linearGradient id="boxWeixin" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#1aad19" stop-opacity="0.18"/>
+              <stop offset="100%" stop-color="#1aad19" stop-opacity="0.04"/>
+            </linearGradient>
+            <linearGradient id="boxServer" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#5b9dff" stop-opacity="0.18"/>
+              <stop offset="100%" stop-color="#5b9dff" stop-opacity="0.04"/>
+            </linearGradient>
+            <linearGradient id="boxAgent" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#a78bfa" stop-opacity="0.18"/>
+              <stop offset="100%" stop-color="#a78bfa" stop-opacity="0.04"/>
+            </linearGradient>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#9ba0ab"/>
+            </marker>
+            <marker id="arrowAccent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#1aad19"/>
+            </marker>
+          </defs>
+
+          <!-- User phone -->
+          <rect x="20" y="30" width="180" height="400" rx="14" fill="url(#boxWeixin)" stroke="#1aad19" stroke-opacity="0.5"/>
+          <text x="110" y="60" fill="#1aad19" font-size="13" font-weight="600" text-anchor="middle">用户手机</text>
+          <text x="110" y="80" fill="#9ba0ab" font-size="11" text-anchor="middle">WeChat App</text>
+          <rect x="50" y="110" width="120" height="180" rx="10" fill="#0e0f12" stroke="#2a2d35"/>
+          <text x="110" y="160" fill="#e4e6eb" font-size="11" text-anchor="middle">微信聊天窗口</text>
+          <text x="110" y="190" fill="#9ba0ab" font-size="10" text-anchor="middle">👤 帮我重构 lib/</text>
+          <line x1="60" y1="210" x2="160" y2="210" stroke="#2a2d35"/>
+          <text x="110" y="232" fill="#1aad19" font-size="10" text-anchor="middle">🤖 正在处理...</text>
+          <line x1="60" y1="252" x2="160" y2="252" stroke="#2a2d35"/>
+          <text x="110" y="274" fill="#e4e6eb" font-size="10" text-anchor="middle">🤖 重构完成 ✓</text>
+          <text x="110" y="340" fill="#9ba0ab" font-size="10" text-anchor="middle">QR 扫码登录</text>
+          <rect x="80" y="350" width="60" height="60" fill="#fff" rx="4"/>
+          <text x="110" y="386" fill="#0e0f12" font-size="10" text-anchor="middle" font-weight="700">QR</text>
+
+          <!-- iLink server -->
+          <rect x="290" y="30" width="180" height="400" rx="14" fill="url(#boxServer)" stroke="#5b9dff" stroke-opacity="0.5"/>
+          <text x="380" y="60" fill="#5b9dff" font-size="13" font-weight="600" text-anchor="middle">iLink Bot CGI</text>
+          <text x="380" y="80" fill="#9ba0ab" font-size="11" text-anchor="middle">ilinkai.weixin.qq.com</text>
+          <g font-family="var(--font-mono)" font-size="10" fill="#9ba0ab">
+            <rect x="310" y="110" width="140" height="22" rx="4" fill="#11131a" stroke="#2a2d35"/>
+            <text x="320" y="125">get_bot_qrcode</text>
+            <rect x="310" y="138" width="140" height="22" rx="4" fill="#11131a" stroke="#2a2d35"/>
+            <text x="320" y="153">get_qrcode_status</text>
+            <rect x="310" y="166" width="140" height="22" rx="4" fill="#11131a" stroke="#2a2d35"/>
+            <text x="320" y="181">msg/notifystart</text>
+            <rect x="310" y="194" width="140" height="22" rx="4" fill="#11131a" stroke="#2a2d35"/>
+            <text x="320" y="209">getupdates</text>
+            <rect x="310" y="222" width="140" height="22" rx="4" fill="#11131a" stroke="#2a2d35"/>
+            <text x="320" y="237">sendmessage</text>
+            <rect x="310" y="250" width="140" height="22" rx="4" fill="#11131a" stroke="#2a2d35"/>
+            <text x="320" y="265">sendtyping</text>
+          </g>
+          <text x="380" y="305" fill="#5b9dff" font-size="11" text-anchor="middle" font-weight="600">↑ ↓ HTTPS POST</text>
+          <text x="380" y="322" fill="#9ba0ab" font-size="10" text-anchor="middle">Bearer + X-WECHAT-UIN</text>
+          <text x="380" y="400" fill="#9ba0ab" font-size="10" text-anchor="middle">腾讯官方</text>
+
+          <!-- pi-web server -->
+          <rect x="560" y="30" width="240" height="400" rx="14" fill="url(#boxAgent)" stroke="#a78bfa" stroke-opacity="0.5"/>
+          <text x="680" y="60" fill="#a78bfa" font-size="13" font-weight="600" text-anchor="middle">pi-web (Next.js)</text>
+          <text x="680" y="80" fill="#9ba0ab" font-size="11" text-anchor="middle">in-process</text>
+
+          <g font-family="var(--font-mono)" font-size="10">
+            <rect x="580" y="100" width="200" height="32" rx="5" fill="#11131a" stroke="#1aad19" stroke-opacity="0.5"/>
+            <text x="592" y="120" fill="#1aad19">lib/wechat/api.ts</text>
+            <text x="770" y="120" fill="#9ba0ab" text-anchor="end">iLink HTTP 客户端</text>
+
+            <rect x="580" y="138" width="200" height="32" rx="5" fill="#11131a" stroke="#1aad19" stroke-opacity="0.5"/>
+            <text x="592" y="158" fill="#1aad19">lib/wechat/monitor.ts</text>
+            <text x="770" y="158" fill="#9ba0ab" text-anchor="end">3s 轮询</text>
+
+            <rect x="580" y="176" width="200" height="32" rx="5" fill="#11131a" stroke="#1aad19" stroke-opacity="0.5"/>
+            <text x="592" y="196" fill="#1aad19">lib/wechat/inbound.ts</text>
+            <text x="770" y="196" fill="#9ba0ab" text-anchor="end">消息处理</text>
+
+            <rect x="580" y="214" width="200" height="32" rx="5" fill="#11131a" stroke="#1aad19" stroke-opacity="0.5"/>
+            <text x="592" y="234" fill="#1aad19">lib/wechat/state.ts</text>
+            <text x="770" y="234" fill="#9ba0ab" text-anchor="end">account.json</text>
+
+            <rect x="580" y="252" width="200" height="32" rx="5" fill="#11131a" stroke="#a78bfa" stroke-opacity="0.6"/>
+            <text x="592" y="272" fill="#a78bfa">lib/rpc-manager.ts</text>
+            <text x="770" y="272" fill="#9ba0ab" text-anchor="end">AgentSession 包装</text>
+
+            <rect x="580" y="290" width="200" height="32" rx="5" fill="#11131a" stroke="#5b9dff" stroke-opacity="0.5"/>
+            <text x="592" y="310" fill="#5b9dff">app/api/weixin/*</text>
+            <text x="770" y="310" fill="#9ba0ab" text-anchor="end">8 个 HTTP 路由</text>
+
+            <rect x="580" y="328" width="200" height="32" rx="5" fill="#11131a" stroke="#5b9dff" stroke-opacity="0.5"/>
+            <text x="592" y="348" fill="#5b9dff">components/WeChatPanel.tsx</text>
+            <text x="770" y="348" fill="#9ba0ab" text-anchor="end">前端 UI</text>
+          </g>
+
+          <!-- AgentSession box -->
+          <rect x="860" y="30" width="200" height="400" rx="14" fill="url(#boxAgent)" stroke="#a78bfa" stroke-opacity="0.5"/>
+          <text x="960" y="60" fill="#a78bfa" font-size="13" font-weight="600" text-anchor="middle">AgentSession</text>
+          <text x="960" y="80" fill="#9ba0ab" font-size="11" text-anchor="middle">@earendil-works/pi-coding-agent</text>
+          <text x="960" y="120" fill="#9ba0ab" font-size="10" text-anchor="middle">┌─ prompt: "帮我重构" ─┐</text>
+          <text x="960" y="140" fill="#9ba0ab" font-size="10" text-anchor="middle">│  思考 / 工具调用    │</text>
+          <text x="960" y="160" fill="#9ba0ab" font-size="10" text-anchor="middle">│  读写本地文件      │</text>
+          <text x="960" y="180" fill="#9ba0ab" font-size="10" text-anchor="middle">│  bash / 搜索        │</text>
+          <text x="960" y="200" fill="#9ba0ab" font-size="10" text-anchor="middle">└─ agent_end event ─┘</text>
+
+          <text x="960" y="240" fill="#a78bfa" font-size="10" text-anchor="middle" font-weight="600">events:</text>
+          <g font-family="var(--font-mono)" font-size="9" fill="#9ba0ab">
+            <text x="960" y="260" text-anchor="middle">turn_start</text>
+            <text x="960" y="276" text-anchor="middle">message_update</text>
+            <text x="960" y="292" text-anchor="middle">tool_execution_start</text>
+            <text x="960" y="308" text-anchor="middle">tool_execution_end</text>
+            <text x="960" y="324" text-anchor="middle" fill="#1aad19">agent_end ← 我们只听这个</text>
+          </g>
+
+          <text x="960" y="400" fill="#9ba0ab" font-size="10" text-anchor="middle">in-process 调用</text>
+          <text x="960" y="416" fill="#9ba0ab" font-size="10" text-anchor="middle">（不走 HTTP）</text>
+
+          <!-- Arrows -->
+          <line x1="200" y1="200" x2="285" y2="200" stroke="#9ba0ab" stroke-width="1.5" marker-end="url(#arrow)"/>
+          <text x="242" y="194" fill="#9ba0ab" font-size="10" text-anchor="middle">用户消息</text>
+
+          <line x1="285" y1="250" x2="200" y2="250" stroke="#1aad19" stroke-width="1.5" marker-end="url(#arrowAccent)"/>
+          <text x="242" y="244" fill="#1aad19" font-size="10" text-anchor="middle">bot 回复</text>
+
+          <line x1="470" y1="220" x2="575" y2="220" stroke="#9ba0ab" stroke-width="1.5" marker-end="url(#arrow)"/>
+          <text x="522" y="214" fill="#9ba0ab" font-size="10" text-anchor="middle">pull</text>
+
+          <line x1="575" y1="270" x2="470" y2="270" stroke="#9ba0ab" stroke-width="1.5" marker-end="url(#arrow)"/>
+          <text x="522" y="264" fill="#9ba0ab" font-size="10" text-anchor="middle">push</text>
+
+          <line x1="800" y1="300" x2="855" y2="300" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow)"/>
+          <line x1="855" y1="320" x2="800" y2="320" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow)"/>
+        </svg>
+        <div class="caption">图 1 · 三方交互全景 —— 微信 ⇄ 腾讯 iLink ⇄ pi-web ⇄ AgentSession</div>
+      </div>
+
+      <div class="callout info">
+        <strong>为什么要 in-process 调用 rpc-manager</strong>？inbound.ts 直接 import
+        <code class="inline">lib/rpc-manager</code> 而 <em>不</em>走 HTTP <code class="inline">/api/agent/*</code>，
+        注释里说得很直白：dev 端口是 30141、prod 是 14514，硬编码兜底在两者不一致时
+        <em>静默</em> 断了微信渠道。
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 4. Login                                     -->
+    <!-- ============================================== -->
+    <section id="s-login" class="reveal">
+      <span class="anchor"></span>
+      <h2><span class="num">04</span>登录流程 · QR 状态机</h2>
+      <p>
+        登录用 <strong>客户端轮询</strong> 而不是 WebSocket：用户点"开始登录" → 后端拉一张 QR →
+        前端 2 秒一次问后端"扫上了没" → 后端去问 iLink → 状态推进。
+      </p>
+
+      <h3>时序</h3>
+      <div class="seq">
+        <table>
+          <tr>
+            <td class="actor" style="width: 110px;">用户 (UI)</td>
+            <td class="msg"><span class="lbl">点 "开始登录"</span> <span class="note">→ POST /api/weixin/login</span></td>
+          </tr>
+          <tr>
+            <td class="actor">pi-web 后端</td>
+            <td class="msg"><span class="lbl">get_bot_qrcode</span> <span class="note">→ iLink (固定 base URL)</span></td>
+          </tr>
+          <tr>
+            <td class="actor">iLink</td>
+            <td class="msg back"><span class="lbl">返回 { qrcode, qrcode_img_content: "weixin://..." }</span></td>
+          </tr>
+          <tr>
+            <td class="actor">pi-web 后端</td>
+            <td class="msg"><span class="lbl">QR.toDataURL(weixin://)</span> <span class="note">→ base64 PNG</span></td>
+          </tr>
+          <tr>
+            <td class="actor">pi-web 后端</td>
+            <td class="msg"><span class="lbl">state.createSession({qrcode, baseUrl, ...})</span> <span class="note">→ 内存中保留 6min</span></td>
+          </tr>
+          <tr>
+            <td class="actor">用户 (UI)</td>
+            <td class="msg back"><span class="lbl">拿到 PNG → 展示</span></td>
+          </tr>
+          <tr>
+            <td class="actor">用户 (UI)</td>
+            <td class="msg"><span class="lbl">每 2s 轮询</span> <span class="note">→ GET /api/weixin/login?sessionKey=...</span></td>
+          </tr>
+          <tr>
+            <td class="actor">pi-web 后端</td>
+            <td class="msg"><span class="lbl">get_qrcode_status</span> <span class="note">→ iLink</span></td>
+          </tr>
+          <tr>
+            <td class="actor">iLink</td>
+            <td class="msg back"><span class="lbl">返回 { status: "wait" | "scaned" | "need_verifycode" | "confirmed" | ... }</span></td>
+          </tr>
+          <tr>
+            <td class="actor">pi-web 后端</td>
+            <td class="msg"><span class="lbl">advancePhase()</span> <span class="note">→ LoginSession.phase 状态机</span></td>
+          </tr>
+          <tr>
+            <td class="actor">用户 (UI)</td>
+            <td class="msg back"><span class="lbl">前端根据 phase 切换 UI</span></td>
+          </tr>
+        </table>
+      </div>
+
+      <h3>前端 phase 状态机</h3>
+      <div class="diagram">
+        <svg viewBox="0 0 980 360" xmlns="http://www.w3.org/2000/svg" style="font-family: var(--font-mono); font-size: 11px;">
+          <defs>
+            <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#9ba0ab"/>
+            </marker>
+          </defs>
+
+          <!-- start -->
+          <rect x="20" y="20" width="120" height="38" rx="19" fill="#1aad19" fill-opacity="0.15" stroke="#1aad19"/>
+          <text x="80" y="44" fill="#1aad19" text-anchor="middle" font-weight="600">点击登录</text>
+
+          <!-- waiting -->
+          <rect x="180" y="20" width="140" height="38" rx="6" fill="#11131a" stroke="#2a2d35"/>
+          <text x="250" y="44" fill="#e4e6eb" text-anchor="middle">waiting (QR 已展示)</text>
+
+          <!-- scanned -->
+          <rect x="360" y="20" width="140" height="38" rx="6" fill="#11131a" stroke="#2a2d35"/>
+          <text x="430" y="44" fill="#e4e6eb" text-anchor="middle">scanned</text>
+
+          <!-- verifying -->
+          <rect x="540" y="20" width="180" height="38" rx="6" fill="#11131a" stroke="#f59e0b"/>
+          <text x="630" y="44" fill="#f59e0b" text-anchor="middle">verifying (需配对码)</text>
+
+          <!-- redirected -->
+          <rect x="540" y="100" width="180" height="38" rx="6" fill="#11131a" stroke="#5b9dff"/>
+          <text x="630" y="124" fill="#5b9dff" text-anchor="middle">redirected (切 IDC)</text>
+
+          <!-- confirmed -->
+          <rect x="760" y="20" width="180" height="50" rx="6" fill="#1aad19" fill-opacity="0.18" stroke="#1aad19" stroke-width="2"/>
+          <text x="850" y="44" fill="#1aad19" text-anchor="middle" font-weight="700">confirmed ✓</text>
+          <text x="850" y="60" fill="#9ba0ab" font-size="10" text-anchor="middle">saveAccount() + notifyStart</text>
+
+          <!-- verify_blocked -->
+          <rect x="180" y="100" width="180" height="38" rx="6" fill="#11131a" stroke="#ef4444"/>
+          <text x="270" y="124" fill="#ef4444" text-anchor="middle">verify_blocked (重试过多)</text>
+
+          <!-- already_bound -->
+          <rect x="360" y="100" width="180" height="38" rx="6" fill="#11131a" stroke="#ef4444"/>
+          <text x="450" y="124" fill="#ef4444" text-anchor="middle">already_bound</text>
+
+          <!-- expired -->
+          <rect x="20" y="180" width="180" height="38" rx="6" fill="#11131a" stroke="#6b6f7a" stroke-dasharray="3,2"/>
+          <text x="110" y="204" fill="#9ba0ab" text-anchor="middle">expired (QR 失效)</text>
+
+          <!-- error -->
+          <rect x="240" y="180" width="180" height="38" rx="6" fill="#11131a" stroke="#ef4444" stroke-dasharray="3,2"/>
+          <text x="330" y="204" fill="#ef4444" text-anchor="middle">error (终端错误)</text>
+
+          <!-- arrows -->
+          <line x1="140" y1="40" x2="178" y2="40" stroke="#9ba0ab" stroke-width="1.4" marker-end="url(#a2)"/>
+          <line x1="320" y1="40" x2="358" y2="40" stroke="#9ba0ab" stroke-width="1.4" marker-end="url(#a2)"/>
+          <line x1="500" y1="40" x2="538" y2="40" stroke="#9ba0ab" stroke-width="1.4" marker-end="url(#a2)"/>
+          <line x1="720" y1="40" x2="758" y2="40" stroke="#1aad19" stroke-width="1.5" marker-end="url(#a2)"/>
+          <text x="739" y="32" fill="#1aad19" font-size="10">配对码通过</text>
+
+          <line x1="500" y1="58" x2="540" y2="100" stroke="#9ba0ab" stroke-width="1.4" marker-end="url(#a2)"/>
+          <text x="490" y="86" fill="#9ba0ab" font-size="10">redirected</text>
+
+          <line x1="720" y1="58" x2="760" y2="80" stroke="#1aad19" stroke-width="1.5" marker-end="url(#a2)"/>
+          <text x="722" y="74" fill="#1aad19" font-size="10">重定向后</text>
+          <line x1="850" y1="70" x2="850" y2="80" stroke="#1aad19"/>
+          <line x1="850" y1="80" x2="720" y2="100" stroke="#1aad19" stroke-width="1.5" marker-end="url(#a2)"/>
+
+          <line x1="430" y1="58" x2="450" y2="100" stroke="#9ba0ab" stroke-width="1.4" marker-end="url(#a2)"/>
+
+          <line x1="500" y1="58" x2="270" y2="100" stroke="#9ba0ab" stroke-width="1.4" marker-end="url(#a2)" stroke-dasharray="3,2"/>
+
+          <line x1="180" y1="58" x2="110" y2="180" stroke="#6b6f7a" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a2)"/>
+          <line x1="360" y1="138" x2="330" y2="180" stroke="#9ba0ab" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a2)"/>
+
+          <!-- Note -->
+          <text x="20" y="270" fill="#9ba0ab" font-size="11" font-family="var(--font-sans)">
+            关键点：<tspan fill="#1aad19">confirmed</tspan> 是唯一会写磁盘的节点 —— state.saveAccount() 落 ~/.pi-web/wechat/account.json (chmod 600)
+          </text>
+          <text x="20" y="290" fill="#9ba0ab" font-size="11" font-family="var(--font-sans)">
+            之后 monitor 才会被 ensureMonitor() 拉起，否则永远空转。
+          </text>
+          <text x="20" y="320" fill="#9ba0ab" font-size="11" font-family="var(--font-sans)" font-style="italic">
+            LoginSession 是 in-memory（不写盘），TTL 6 分钟 —— 客户端断网重连就重头来。
+          </text>
+        </svg>
+        <div class="caption">图 2 · 登录状态机（实线 = iLink 主动推进；虚线 = 异常终止）</div>
+      </div>
+
+      <h3>关键代码 · advancePhase 状态推进</h3>
+      <pre><span class="c">// app/api/weixin/login/route.ts:107</span>
+<span class="k">function</span> <span class="f">advancePhase</span>(session, status) {
+  <span class="k">switch</span> (status.status) {
+    <span class="k">case</span> <span class="s">"wait"</span>:            <span class="k">return</span> set({ phase: <span class="s">"waiting"</span> });
+    <span class="k">case</span> <span class="s">"scaned"</span>:          <span class="k">return</span> set({ phase: <span class="s">"scanned"</span> });
+    <span class="k">case</span> <span class="s">"need_verifycode"</span>: <span class="k">return</span> set({ phase: <span class="s">"verifying"</span>, message: <span class="s">"需要输入配对码"</span> });
+    <span class="k">case</span> <span class="s">"scaned_but_redirect"</span>: {
+      <span class="k">const</span> newBase = status.redirect_host
+        ? <span class="s">`https://<span class="h">${status.redirect_host}</span>`</span> : session.baseUrl;
+      <span class="k">return</span> set({ phase: <span class="s">"redirected"</span>, baseUrl: newBase });
+    }
+    <span class="k">case</span> <span class="s">"confirmed"</span>: {
+      <span class="k">const</span> account = {
+        accountId: status.ilink_bot_id, token: status.bot_token,
+        baseUrl:   status.baseurl || session.baseUrl,
+        userId:    status.ilink_user_id,
+        savedAt:   <span class="k">new</span> <span class="t">Date</span>().toISOString(),
+        status:    <span class="s">"ok"</span> <span class="k">as const</span>,
+      };
+      state.<span class="f">saveAccount</span>(account);
+      api.<span class="f">notifyStart</span>({ baseUrl, token }).<span class="f">catch</span>(() =&gt; {});
+      <span class="k">return</span> set({ phase: <span class="s">"confirmed"</span>, account });
+    }
+    <span class="k">case</span> <span class="s">"expired"</span>: <span class="k">return</span> set({ phase: <span class="s">"expired"</span>, message: <span class="s">"二维码已过期"</span> });
+    <span class="k">default</span>:       <span class="k">return</span> session;  <span class="c">// 未知状态保留旧值</span>
+  }
+}</pre>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 5. Monitor                                   -->
+    <!-- ============================================== -->
+    <section id="s-monitor" class="reveal">
+      <span class="anchor"></span>
+      <h2><span class="num">05</span>消息轮询 Monitor</h2>
+      <p>
+        登录完成后，后台默默跑一个 3 秒一次的轮询器。设计极其克制：<strong>refcount-free 单例</strong>，
+        没有线程，没有锁，3 秒一 setTimeout。
+      </p>
+
+      <h3>tick 循环伪代码</h3>
+      <pre><span class="c">// lib/wechat/monitor.ts</span>
+<span class="hl"><span class="k">async function</span> <span class="f">tick</span>() {
+  timer = <span class="k">null</span>;
+  <span class="k">if</span> (inFlight) { scheduleNext(<span class="n">1000</span>); <span class="k">return</span>; }   <span class="c">// 上一轮还没回来？跳过</span>
+  inFlight = <span class="k">true</span>;
+  <span class="k">try</span> {
+    <span class="k">const</span> account = state.<span class="f">loadAccount</span>();
+    <span class="k">if</span> (!account) <span class="k">return</span>;   <span class="c">// logout 后自停</span>
+
+    <span class="k">const</span> resp = <span class="k">await</span> api.<span class="f">getUpdates</span>({
+      baseUrl: account.baseUrl, token: account.token,
+      getUpdatesBuf: syncBufs.<span class="f">get</span>(account.accountId) ?? <span class="s">""</span>,
+      timeoutMs: <span class="n">3000</span>,
+    });
+
+    <span class="k">if</span> (resp.get_updates_buf) syncBufs.<span class="f">set</span>(account.accountId, resp.get_updates_buf);
+
+    <span class="k">for</span> (<span class="k">const</span> msg <span class="k">of</span> (resp.msgs ?? [])) {
+      <span class="k">const</span> preview = <span class="f">extractPreview</span>(msg);   <span class="c">// 从 item_list 里抠第一条 text</span>
+      state.<span class="f">recordContact</span>(account.accountId, msg.from_user_id, preview, msg.context_token);
+      <span class="k">if</span> (preview) {
+        <span class="hl"><span class="k">void</span> <span class="f">handleInbound</span>({ fromUserId, text: preview, contextToken });  <span class="c">// fire-and-forget</span></span>
+      }
+    }
+  } <span class="k">catch</span> (err) { log.<span class="f">warn</span>(<span class="s">"tick failed"</span>, err); }
+  <span class="k">finally</span> {
+    inFlight = <span class="k">false</span>;
+    scheduleNext(<span class="n">1000</span>);   <span class="c">// 1s 间隔 + 3s 长轮询 = 平均 ~4s/轮</span>
+  }
+}</span></pre>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>🎯 为什么不长轮询？</h3>
+          <p>腾讯 iLink 支持 <code class="inline">longpolling_timeout_ms</code> 最多 35s。
+          选 3s 短轮询是 <em>故意的</em>：连接生命周期短，方便热重载和进程重启后秒级恢复。
+          真正"零消息时也在轮询"而已，CPU/带宽都可忽略。</p>
+        </div>
+        <div class="card">
+          <h3>🧠 sync_buf 游标</h3>
+          <p>服务端返回的 <code class="inline">get_updates_buf</code> 是不可见的不透明字符串，
+          每次带回去就行。存 <code class="inline">Map&lt;accountId, buf&gt;</code>，<strong>只在内存</strong>，
+          进程重启会丢 —— 但 iLink 端似乎能容忍短暂丢游标，新一轮拉空后会再发。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 6. Inbound                                   -->
+    <!-- ============================================== -->
+    <section id="s-inbound" class="reveal">
+      <span class="anchor"></span>
+      <h2><span class="num">06</span>入站消息处理（核心）</h2>
+      <p class="lead">
+        <code class="inline">handleInbound()</code> 是整个微信渠道的灵魂。315 行代码，把一条微信消息变成 agent 回复。
+      </p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 1080 720" xmlns="http://www.w3.org/2000/svg" style="font-family: var(--font-mono); font-size: 11px;">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#9ba0ab"/>
+            </marker>
+            <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#1aad19"/>
+            </marker>
+            <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#a78bfa"/>
+            </marker>
+            <marker id="arrR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444"/>
+            </marker>
+          </defs>
+
+          <!-- Swim lanes -->
+          <rect x="20" y="20" width="1040" height="680" fill="none" stroke="#2a2d35"/>
+          <line x1="20" y1="60" x2="1060" y2="60" stroke="#2a2d35"/>
+          <text x="40" y="48" fill="#9ba0ab" font-size="11" font-family="var(--font-sans)">入站消息流（一条 WeChat 文本消息从 iLink 抵达 pi-web）</text>
+
+          <!-- Lane labels -->
+          <g font-family="var(--font-sans)" font-size="11" font-weight="600">
+            <rect x="20" y="60" width="160" height="640" fill="#11131a" fill-opacity="0.5"/>
+            <text x="100" y="80" text-anchor="middle" fill="#1aad19">iLink Server</text>
+
+            <rect x="180" y="60" width="180" height="640" fill="#11131a" fill-opacity="0.3"/>
+            <text x="270" y="80" text-anchor="middle" fill="#1aad19">monitor.tick()</text>
+
+            <rect x="360" y="60" width="200" height="640" fill="#11131a" fill-opacity="0.3"/>
+            <text x="460" y="80" text-anchor="middle" fill="#1aad19">handleInbound()</text>
+
+            <rect x="560" y="60" width="200" height="640" fill="#11131a" fill-opacity="0.5"/>
+            <text x="660" y="80" text-anchor="middle" fill="#a78bfa">rpc-manager</text>
+            <text x="660" y="95" text-anchor="middle" fill="#9ba0ab" font-weight="400" font-size="10">AgentSessionWrapper</text>
+
+            <rect x="760" y="60" width="200" height="640" fill="#11131a" fill-opacity="0.5"/>
+            <text x="860" y="80" text-anchor="middle" fill="#a78bfa">pi Agent</text>
+            <text x="860" y="95" text-anchor="middle" fill="#9ba0ab" font-weight="400" font-size="10">thinking + tools</text>
+
+            <rect x="960" y="60" width="100" height="640" fill="#11131a" fill-opacity="0.3"/>
+            <text x="1010" y="80" text-anchor="middle" fill="#9ba0ab">State</text>
+          </g>
+
+          <!-- Steps -->
+          <!-- Step 1: iLink -> monitor -->
+          <rect x="200" y="130" width="140" height="32" rx="4" fill="#1aad19" fill-opacity="0.12" stroke="#1aad19"/>
+          <text x="270" y="150" fill="#1aad19" text-anchor="middle">1. getUpdates 返回 msgs[]</text>
+
+          <!-- Step 2: extract -->
+          <rect x="200" y="180" width="140" height="32" rx="4" fill="#11131a" stroke="#2a2d35"/>
+          <text x="270" y="200" fill="#e4e6eb" text-anchor="middle">2. extractPreview() &amp; recordContact</text>
+
+          <!-- Step 3: handleInbound -->
+          <rect x="380" y="240" width="160" height="32" rx="4" fill="#1aad19" fill-opacity="0.12" stroke="#1aad19"/>
+          <text x="460" y="260" fill="#1aad19" text-anchor="middle">3. void handleInbound()</text>
+
+          <!-- Decision: /new? -->
+          <polygon points="460,295 530,330 460,365 390,330" fill="#11131a" stroke="#f59e0b" stroke-width="1.5"/>
+          <text x="460" y="328" fill="#f59e0b" text-anchor="middle" font-weight="600">text == /new ?</text>
+          <text x="460" y="343" fill="#9ba0ab" font-size="9" text-anchor="middle">↑ 先判断</text>
+
+          <!-- /new branch -->
+          <rect x="220" y="305" width="140" height="32" rx="4" fill="#11131a" stroke="#2a2d35"/>
+          <text x="290" y="325" fill="#e4e6eb" text-anchor="middle">setCurrentSession(null)</text>
+          <line x1="390" y1="330" x2="360" y2="321" stroke="#9ba0ab" stroke-width="1.4" marker-end="url(#arr)"/>
+          <text x="378" y="316" fill="#9ba0ab" font-size="10">yes</text>
+
+          <rect x="220" y="350" width="140" height="32" rx="4" fill="#1aad19" fill-opacity="0.12" stroke="#1aad19"/>
+          <text x="290" y="370" fill="#1aad19" text-anchor="middle">safeReply "✅ 已重置"</text>
+          <line x1="290" y1="337" x2="290" y2="350" stroke="#9ba0ab" stroke-width="1.4" marker-end="url(#arr)"/>
+
+          <!-- No branch: continue -->
+          <line x1="530" y1="330" x2="570" y2="330" stroke="#9ba0ab" stroke-width="1.4"/>
+          <text x="550" y="324" fill="#9ba0ab" font-size="10">no</text>
+
+          <!-- Step 4: fireTyping -->
+          <rect x="380" y="395" width="160" height="32" rx="4" fill="#11131a" stroke="#2a2d35"/>
+          <text x="460" y="415" fill="#e4e6eb" text-anchor="middle">4. void fireTyping()</text>
+          <text x="460" y="427" fill="#9ba0ab" font-size="9" text-anchor="middle">B2 · best-effort</text>
+          <line x1="380" y1="411" x2="360" y2="411" stroke="#9ba0ab" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#arr)"/>
+          <text x="372" y="405" fill="#9ba0ab" font-size="10">↩ to iLink</text>
+
+          <!-- Decision: currentSessionId? -->
+          <polygon points="460,445 530,480 460,515 390,480" fill="#11131a" stroke="#f59e0b" stroke-width="1.5"/>
+          <text x="460" y="478" fill="#f59e0b" text-anchor="middle" font-weight="600">sessionId ?</text>
+          <text x="460" y="493" fill="#9ba0ab" font-size="9" text-anchor="middle">↑ account.currentSessionId</text>
+          <line x1="460" y1="427" x2="460" y2="445" stroke="#9ba0ab" stroke-width="1.4" marker-end="url(#arr)"/>
+
+          <!-- Cold start branch -->
+          <line x1="390" y1="480" x2="370" y2="480" stroke="#9ba0ab" stroke-width="1.4"/>
+          <text x="382" y="474" fill="#9ba0ab" font-size="10">no</text>
+          <rect x="600" y="460" width="160" height="32" rx="4" fill="#a78bfa" fill-opacity="0.15" stroke="#a78bfa"/>
+          <text x="680" y="478" fill="#a78bfa" text-anchor="middle">startRpcSession("__new__...")</text>
+          <text x="680" y="490" fill="#9ba0ab" font-size="9" text-anchor="middle">+ session.send(prompt)</text>
+
+          <line x1="530" y1="480" x2="598" y2="478" stroke="#a78bfa" stroke-width="1.4" marker-end="url(#arrA)"/>
+
+          <!-- Continue branch -->
+          <line x1="530" y1="480" x2="600" y2="510" stroke="#9ba0ab" stroke-width="1.4"/>
+          <text x="568" y="498" fill="#9ba0ab" font-size="10">yes</text>
+          <rect x="600" y="510" width="160" height="32" rx="4" fill="#a78bfa" fill-opacity="0.15" stroke="#a78bfa"/>
+          <text x="680" y="528" fill="#a78bfa" text-anchor="middle">session.send(prompt)</text>
+          <text x="680" y="540" fill="#9ba0ab" font-size="9" text-anchor="middle">getRpcSession() / reload</text>
+
+          <!-- save sessionId -->
+          <line x1="760" y1="478" x2="960" y2="478" stroke="#a78bfa" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#arrA)"/>
+          <rect x="970" y="465" width="80" height="28" rx="4" fill="#11131a" stroke="#1aad19" stroke-opacity="0.5"/>
+          <text x="1010" y="483" fill="#1aad19" text-anchor="middle" font-size="10">setCurrentSession</text>
+          <line x1="760" y1="528" x2="960" y2="528" stroke="#9ba0ab" stroke-width="1.4" stroke-dasharray="3,2"/>
+
+          <!-- Step 5: waitForAgentReply -->
+          <rect x="380" y="555" width="160" height="32" rx="4" fill="#1aad19" fill-opacity="0.12" stroke="#1aad19"/>
+          <text x="460" y="575" fill="#1aad19" text-anchor="middle">5. waitForAgentReply()</text>
+          <text x="460" y="587" fill="#9ba0ab" font-size="9" text-anchor="middle">session.onEvent → agent_end</text>
+
+          <!-- Subscribe to events -->
+          <line x1="540" y1="571" x2="760" y2="571" stroke="#a78bfa" stroke-width="1.4" marker-end="url(#arrA)"/>
+          <text x="650" y="565" fill="#a78bfa" font-size="10">subscribe</text>
+
+          <!-- Pi agent runs -->
+          <rect x="780" y="555" width="160" height="32" rx="4" fill="#a78bfa" fill-opacity="0.15" stroke="#a78bfa"/>
+          <text x="860" y="575" fill="#a78bfa" text-anchor="middle">turn + tools + think</text>
+          <text x="860" y="587" fill="#9ba0ab" font-size="9" text-anchor="middle">可能 30s ~ 几分钟</text>
+
+          <!-- agent_end -->
+          <line x1="860" y1="587" x2="460" y2="630" stroke="#a78bfa" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#arrA)"/>
+          <rect x="380" y="615" width="160" height="32" rx="4" fill="#a78bfa" fill-opacity="0.15" stroke="#a78bfa"/>
+          <text x="460" y="635" fill="#a78bfa" text-anchor="middle">walk messages[] 倒序</text>
+          <text x="460" y="647" fill="#9ba0ab" font-size="9" text-anchor="middle">取最后一个 assistant 的 text</text>
+
+          <!-- 5min safety net -->
+          <rect x="20" y="615" width="160" height="32" rx="4" fill="#11131a" stroke="#ef4444" stroke-dasharray="3,2"/>
+          <text x="100" y="635" fill="#ef4444" text-anchor="middle" font-size="10">5min timeout</text>
+          <line x1="180" y1="631" x2="378" y2="631" stroke="#ef4444" stroke-width="1.2" stroke-dasharray="3,2" marker-end="url(#arrR)"/>
+
+          <!-- Step 6: reply -->
+          <rect x="380" y="665" width="160" height="32" rx="4" fill="#1aad19" fill-opacity="0.12" stroke="#1aad19"/>
+          <text x="460" y="685" fill="#1aad19" text-anchor="middle">6. safeReply(replyText)</text>
+
+          <line x1="540" y1="681" x2="960" y2="681" stroke="#9ba0ab" stroke-width="1.4" stroke-dasharray="3,2"/>
+          <line x1="220" y1="681" x2="100" y2="681" stroke="#1aad19" stroke-width="1.4" marker-end="url(#arrG)"/>
+          <text x="160" y="675" fill="#1aad19" font-size="10">sendmessage → iLink</text>
+        </svg>
+        <div class="caption">图 3 · handleInbound 的 6 步流水线</div>
+      </div>
+
+      <h3>为什么只看 agent_end？</h3>
+      <p>
+        pi 编码 agent 在一次 turn 里会喷出 <em>几十个</em> 事件：<code class="inline">turn_start</code>、
+        <code class="inline">message_update</code>（每个 token）、<code class="inline">tool_execution_start</code>、
+        <code class="inline">tool_execution_end</code>... 不同 LLM provider（Anthropic / OpenAI / Google）
+        喷出的 <code class="inline">message_update</code> 形状还不一样。
+        <strong>agent_end 是唯一一个跨 provider 稳定的"回合结束"信号</strong>，且必带完整 <code class="inline">messages[]</code> 快照。
+        所以代码里只监听它，从 messages 末尾倒着找最后一个 assistant message，把所有 text 块 join 起来 —— 完事。
+      </p>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 7. Session semantics                          -->
+    <!-- ============================================== -->
+    <section id="s-semantic" class="reveal">
+      <span class="anchor"></span>
+      <h2><span class="num">07</span>Session / Workspace 语义</h2>
+
+      <h3>三件需要记住的事</h3>
+      <div class="grid-3">
+        <div class="card tinted">
+          <h3>L2 · 切 Workspace 必开新会话</h3>
+          <p>用户从下拉框选了一个新 <code class="inline">cwd</code>，后端
+             <code class="inline">setCurrentWorkspace(id)</code> 时 <strong>同时清掉</strong> <code class="inline">currentSessionId</code>。
+             下一条微信消息落到新目录里，<em>没有旧上下文</em>。</p>
+        </div>
+        <div class="card blue">
+          <h3>B2 · 越早发"正在输入"越好</h3>
+          <p>进 <code class="inline">handleInbound</code> 的第一时间就 <code class="inline">void fireTyping()</code>，
+             <em>不 await</em>。微信 UX 上能看到"对方正在输入"，避免用户以为没收到。</p>
+        </div>
+        <div class="card purple">
+          <h3>N1 · /new 不冷启动</h3>
+          <p><code class="inline">/new</code> 只清 <code class="inline">currentSessionId</code> + 回"✅ 已重置"。
+             <em>不</em> 立即开新会话 —— 下一条消息才冷启动，并成为新会话的 <strong>第一条</strong>。
+             这样 <code class="inline">/new</code> 本身永远不会被 agent 看到。</p>
+        </div>
+      </div>
+
+      <h3>状态机：会话生命周期</h3>
+      <div class="diagram">
+        <svg viewBox="0 0 980 220" xmlns="http://www.w3.org/2000/svg" style="font-family: var(--font-mono); font-size: 11px;">
+          <defs>
+            <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#9ba0ab"/>
+            </marker>
+            <marker id="arr3g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#1aad19"/>
+            </marker>
+          </defs>
+          <!-- null session -->
+          <rect x="20" y="80" width="180" height="60" rx="8" fill="#11131a" stroke="#6b6f7a" stroke-dasharray="4,3"/>
+          <text x="110" y="105" fill="#9ba0ab" text-anchor="middle" font-weight="600">currentSessionId = null</text>
+          <text x="110" y="122" fill="#6b6f7a" text-anchor="middle" font-size="10">// 冷启动候选</text>
+
+          <!-- cold start -->
+          <rect x="240" y="80" width="180" height="60" rx="8" fill="#a78bfa" fill-opacity="0.15" stroke="#a78bfa" stroke-width="2"/>
+          <text x="330" y="105" fill="#a78bfa" text-anchor="middle" font-weight="600">coldStart()</text>
+          <text x="330" y="122" fill="#9ba0ab" text-anchor="middle" font-size="10">startRpcSession + send</text>
+
+          <!-- bound -->
+          <rect x="460" y="80" width="180" height="60" rx="8" fill="#1aad19" fill-opacity="0.15" stroke="#1aad19" stroke-width="2"/>
+          <text x="550" y="105" fill="#1aad19" text-anchor="middle" font-weight="600">currentSessionId = X</text>
+          <text x="550" y="122" fill="#9ba0ab" text-anchor="middle" font-size="10">// 持续追加到同一 .jsonl</text>
+
+          <!-- continue -->
+          <rect x="680" y="80" width="180" height="60" rx="8" fill="#11131a" stroke="#2a2d35"/>
+          <text x="770" y="105" fill="#e4e6eb" text-anchor="middle" font-weight="600">sendPrompt(X, msg)</text>
+          <text x="770" y="122" fill="#9ba0ab" text-anchor="middle" font-size="10">// 后续消息继续该会话</text>
+
+          <!-- arrows -->
+          <line x1="200" y1="110" x2="238" y2="110" stroke="#a78bfa" stroke-width="1.6" marker-end="url(#arr3)"/>
+          <text x="218" y="100" fill="#a78bfa" font-size="10" text-anchor="middle">第 1 条消息</text>
+
+          <line x1="420" y1="110" x2="458" y2="110" stroke="#1aad19" stroke-width="1.6" marker-end="url(#arr3g)"/>
+          <text x="439" y="100" fill="#1aad19" font-size="10" text-anchor="middle">setCurrent</text>
+
+          <line x1="640" y1="110" x2="678" y2="110" stroke="#9ba0ab" stroke-width="1.4" marker-end="url(#arr3)"/>
+          <text x="659" y="100" fill="#9ba0ab" font-size="10" text-anchor="middle">第 2..N 条</text>
+
+          <line x1="770" y1="140" x2="770" y2="180" stroke="#9ba0ab" stroke-width="1.4"/>
+          <line x1="770" y1="180" x2="110" y2="180" stroke="#9ba0ab" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#arr3)"/>
+          <text x="440" y="172" fill="#9ba0ab" font-size="10" text-anchor="middle">"重置" (用户发 /new)</text>
+          <line x1="110" y1="180" x2="110" y2="142" stroke="#9ba0ab" stroke-width="1.4"/>
+
+          <line x1="550" y1="140" x2="550" y2="180" stroke="#9ba0ab" stroke-width="1.4"/>
+          <line x1="550" y1="180" x2="110" y2="180" stroke="#9ba0ab" stroke-width="1.4" stroke-dasharray="3,2"/>
+          <text x="320" y="195" fill="#9ba0ab" font-size="10" text-anchor="middle">切 workspace (后端清 currentSessionId)</text>
+        </svg>
+        <div class="caption">图 4 · 会话复用与重置</div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 8. Modules deep dive                         -->
+    <!-- ============================================== -->
+    <section id="s-modules" class="reveal">
+      <span class="anchor"></span>
+      <h2><span class="num">08</span>关键模块剖析</h2>
+
+      <h3>文件地图</h3>
+      <pre><span class="c"># 后端（lib/wechat/）</span>
+index.ts          <span class="n">10</span>  <span class="c">// 桶导出：state / api / qr / monitor / startup</span>
+types.ts         <span class="n">165</span>  <span class="c">// iLink CGI 协议类型 + WeChatAccount/LoginSession</span>
+state.ts         <span class="n">208</span>  <span class="c">// account.json 持久化 + 内存 LoginSession map + contacts</span>
+api.ts           <span class="n">282</span>  <span class="c">// iLink HTTP 客户端（getUpdates / sendMessage / sendTyping / ...）</span>
+qr.ts             <span class="n">14</span>  <span class="c">// weixin:// URL → base64 PNG</span>
+monitor.ts       <span class="n">148</span>  <span class="c">// 3s 短轮询 + 投递到 handleInbound</span>
+<span class="h">inbound.ts       <span class="n">315</span>  <span class="c">// ★ 核心：消息 → session → agent → 回复</span></span>
+startup.ts        <span class="n">65</span>  <span class="c">// 进程启动时：notifyStart + ensureMonitor + 30s rescan</span>
+sessions-log.ts   <span class="n">53</span>  <span class="c">// append-only JSONL 审计日志</span>
+
+<span class="c"># API 路由（app/api/weixin/）—— 8 个</span>
+login/route.ts              <span class="c">// POST 开始 / GET 轮询</span>
+login/verify-code/route.ts  <span class="c">// POST 配对码</span>
+status/route.ts             <span class="c">// GET 状态 + 当前 workspace/session</span>
+logout/route.ts             <span class="c">// POST 清空</span>
+workspace/route.ts          <span class="c">// GET 列表 / POST 切换</span>
+contacts/route.ts           <span class="c">// GET 联系人 / DELETE 清空</span>
+inbound/route.ts            <span class="c">// POST 测试入口（绕过 monitor）</span>
+test-send/route.ts          <span class="c">// POST 主动发消息（测试用）</span>
+
+<span class="c"># 前端</span>
+components/WeChatPanel.tsx  <span class="n">584</span>  <span class="c">// 3 个模式：未登录 / 已登录 / 已过期</span>
+hooks/useI18n.tsx           <span class="c">// 中英文翻译</span>
+instrumentation.ts          <span class="c">// Next.js 启动钩子 → bootstrap()</span></pre>
+
+      <h3>模块依赖图</h3>
+      <div class="diagram">
+        <svg viewBox="0 0 920 460" xmlns="http://www.w3.org/2000/svg" style="font-family: var(--font-mono); font-size: 11px;">
+          <defs>
+            <marker id="ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#9ba0ab"/>
+            </marker>
+          </defs>
+
+          <!-- boxes -->
+          <g font-family="var(--font-sans)">
+            <rect x="40" y="40" width="180" height="50" rx="8" fill="#11131a" stroke="#5b9dff" stroke-width="1.5"/>
+            <text x="130" y="64" fill="#5b9dff" text-anchor="middle" font-weight="600">app/api/weixin/*</text>
+            <text x="130" y="80" fill="#9ba0ab" text-anchor="middle" font-size="10">HTTP 路由（薄壳）</text>
+
+            <rect x="280" y="40" width="180" height="50" rx="8" fill="#11131a" stroke="#1aad19" stroke-width="2"/>
+            <text x="370" y="64" fill="#1aad19" text-anchor="middle" font-weight="600">lib/wechat/inbound.ts</text>
+            <text x="370" y="80" fill="#9ba0ab" text-anchor="middle" font-size="10">★ 业务核心</text>
+
+            <rect x="520" y="40" width="180" height="50" rx="8" fill="#11131a" stroke="#1aad19" stroke-width="1.5"/>
+            <text x="610" y="64" fill="#1aad19" text-anchor="middle" font-weight="600">lib/wechat/monitor.ts</text>
+            <text x="610" y="80" fill="#9ba0ab" text-anchor="middle" font-size="10">3s 轮询</text>
+
+            <rect x="760" y="40" width="140" height="50" rx="8" fill="#11131a" stroke="#a78bfa" stroke-width="1.5"/>
+            <text x="830" y="64" fill="#a78bfa" text-anchor="middle" font-weight="600">lib/rpc-manager</text>
+            <text x="830" y="80" fill="#9ba0ab" text-anchor="middle" font-size="10">AgentSession</text>
+
+            <rect x="280" y="140" width="180" height="50" rx="8" fill="#11131a" stroke="#1aad19"/>
+            <text x="370" y="164" fill="#1aad19" text-anchor="middle" font-weight="600">lib/wechat/api.ts</text>
+            <text x="370" y="180" fill="#9ba0ab" text-anchor="middle" font-size="10">iLink HTTP 客户端</text>
+
+            <rect x="280" y="220" width="180" height="50" rx="8" fill="#11131a" stroke="#1aad19"/>
+            <text x="370" y="244" fill="#1aad19" text-anchor="middle" font-weight="600">lib/wechat/state.ts</text>
+            <text x="370" y="260" fill="#9ba0ab" text-anchor="middle" font-size="10">account.json + memory</text>
+
+            <rect x="280" y="300" width="180" height="50" rx="8" fill="#11131a" stroke="#1aad19"/>
+            <text x="370" y="324" fill="#1aad19" text-anchor="middle" font-weight="600">lib/wechat/qr.ts</text>
+            <text x="370" y="340" fill="#9ba0ab" text-anchor="middle" font-size="10">weixin:// → PNG</text>
+
+            <rect x="280" y="380" width="180" height="50" rx="8" fill="#11131a" stroke="#1aad19"/>
+            <text x="370" y="404" fill="#1aad19" text-anchor="middle" font-weight="600">lib/wechat/startup.ts</text>
+            <text x="370" y="420" fill="#9ba0ab" text-anchor="middle" font-size="10">bootstrap()</text>
+
+            <rect x="520" y="220" width="180" height="50" rx="8" fill="#11131a" stroke="#1aad19"/>
+            <text x="610" y="244" fill="#1aad19" text-anchor="middle" font-weight="600">sessions-log.ts</text>
+            <text x="610" y="260" fill="#9ba0ab" text-anchor="middle" font-size="10">JSONL 审计</text>
+
+            <rect x="40" y="220" width="180" height="50" rx="8" fill="#11131a" stroke="#5b9dff" stroke-width="1.5"/>
+            <text x="130" y="244" fill="#5b9dff" text-anchor="middle" font-weight="600">WeChatPanel.tsx</text>
+            <text x="130" y="260" fill="#9ba0ab" text-anchor="middle" font-size="10">React UI</text>
+
+            <rect x="40" y="380" width="180" height="50" rx="8" fill="#11131a" stroke="#5b9dff"/>
+            <text x="130" y="404" fill="#5b9dff" text-anchor="middle" font-weight="600">instrumentation.ts</text>
+            <text x="130" y="420" fill="#9ba0ab" text-anchor="middle" font-size="10">Next.js 启动钩子</text>
+
+            <rect x="760" y="220" width="140" height="50" rx="8" fill="#11131a" stroke="#9ba0ab"/>
+            <text x="830" y="244" fill="#9ba0ab" text-anchor="middle" font-weight="600">pi-coding-agent</text>
+            <text x="830" y="260" fill="#9ba0ab" text-anchor="middle" font-size="10">npm 包</text>
+          </g>
+
+          <!-- arrows -->
+          <line x1="220" y1="65" x2="278" y2="65" stroke="#5b9dff" stroke-width="1.4" marker-end="url(#ma)"/>
+          <line x1="370" y1="90" x2="370" y2="138" stroke="#1aad19" stroke-width="1.4" marker-end="url(#ma)"/>
+          <line x1="370" y1="190" x2="370" y2="218" stroke="#1aad19" stroke-width="1.4" marker-end="url(#ma)"/>
+          <line x1="460" y1="65" x2="518" y2="65" stroke="#1aad19" stroke-width="1.4" marker-end="url(#ma)"/>
+          <line x1="610" y1="90" x2="430" y2="138" stroke="#1aad19" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#ma)"/>
+
+          <line x1="370" y1="350" x2="370" y2="378" stroke="#1aad19" stroke-width="1.4" marker-end="url(#ma)"/>
+
+          <line x1="460" y1="65" x2="758" y2="65" stroke="#a78bfa" stroke-width="1.4" marker-end="url(#ma)"/>
+          <line x1="830" y1="90" x2="830" y2="218" stroke="#a78bfa" stroke-width="1.4" marker-end="url(#ma)"/>
+
+          <line x1="220" y1="245" x2="278" y2="245" stroke="#5b9dff" stroke-width="1.2" marker-end="url(#ma)"/>
+
+          <line x1="130" y1="270" x2="130" y2="378" stroke="#5b9dff" stroke-width="1.2" marker-end="url(#ma)"/>
+
+          <line x1="220" y1="405" x2="278" y2="405" stroke="#5b9dff" stroke-width="1.2" marker-end="url(#ma)"/>
+        </svg>
+        <div class="caption">图 5 · 模块依赖 —— 蓝色=前端/HTTP、绿色=微信内部、紫色=agent 侧</div>
+      </div>
+
+      <h3>HTTP 路由一览</h3>
+      <table>
+        <thead>
+          <tr><th>路径</th><th>方法</th><th>作用</th><th>调用</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code class="inline">/api/weixin/login</code></td><td>POST</td><td>拉 QR 开 session</td><td>api.fetchQrCode + qr.toDataUrl</td></tr>
+          <tr><td><code class="inline">/api/weixin/login</code></td><td>GET</td><td>轮询 phase</td><td>api.pollQrStatus + advancePhase</td></tr>
+          <tr><td><code class="inline">/api/weixin/login/verify-code</code></td><td>POST</td><td>提交配对码</td><td>state.updateSession</td></tr>
+          <tr><td><code class="inline">/api/weixin/status</code></td><td>GET</td><td>前端展示状态</td><td>state.loadAccount</td></tr>
+          <tr><td><code class="inline">/api/weixin/logout</code></td><td>POST</td><td>清账号 + 停 monitor</td><td>state.clearAccount + monitor.stop + api.notifyStop</td></tr>
+          <tr><td><code class="inline">/api/weixin/workspace</code></td><td>GET</td><td>列出可选 workspace</td><td>复用 /api/sessions + /api/pinned-cwds</td></tr>
+          <tr><td><code class="inline">/api/weixin/workspace</code></td><td>POST</td><td>切换 workspace（清 currentSessionId）</td><td>state.setCurrentWorkspace</td></tr>
+          <tr><td><code class="inline">/api/weixin/contacts</code></td><td>GET</td><td>联系人列表 + 顺带 ensureMonitor</td><td>state.getContacts</td></tr>
+          <tr><td><code class="inline">/api/weixin/contacts</code></td><td>DELETE</td><td>清空联系人</td><td>state.clearContacts</td></tr>
+          <tr><td><code class="inline">/api/weixin/inbound</code></td><td>POST</td><td>外部触发（测试）</td><td>void handleInbound</td></tr>
+          <tr><td><code class="inline">/api/weixin/test-send</code></td><td>POST</td><td>主动发消息（测试）</td><td>api.sendTextMessage</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 9. Storage                                   -->
+    <!-- ============================================== -->
+    <section id="s-storage" class="reveal">
+      <span class="anchor"></span>
+      <h2><span class="num">09</span>数据存到哪儿</h2>
+      <p>
+        整套微信渠道在磁盘上只有 <strong>3 个文件</strong>，且都放在 <code class="inline">~/.pi-web/wechat/</code>。
+        session 文件（.jsonl）走的是 pi 自己的目录，<em>不归</em> 微信模块管。
+      </p>
+
+      <table>
+        <thead>
+          <tr><th>路径</th><th>内容</th><th>权限</th><th>生命周期</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code class="inline">~/.pi-web/wechat/account.json</code></td>
+            <td>accountId / token / baseUrl / userId / currentWorkspaceId / currentSessionId / status</td>
+            <td><span class="tag red">chmod 600</span></td>
+            <td>登录时写入，logout 时清空</td>
+          </tr>
+          <tr>
+            <td><code class="inline">~/.pi-web/wechat/sessions.log</code></td>
+            <td>JSONL 审计：inbound / cold_start / send / agent_event / agent_end / agent_error / reply / reply_failed</td>
+            <td><span class="tag red">chmod 600</span></td>
+            <td>append-only，永不删除</td>
+          </tr>
+          <tr>
+            <td><code class="inline">~/.pi/agent/sessions/&lt;encoded-cwd&gt;/&lt;ts&gt;_&lt;uuid&gt;.jsonl</code></td>
+            <td>真正的 agent 会话流（不在微信模块下）</td>
+            <td>默认权限</td>
+            <td>由 pi-coding-agent 自身管理</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <strong>安全要点</strong>：<code class="inline">account.json</code> 含 <code class="inline">bot_token</code>，
+        等于"以你的微信身份发消息"的能力。<strong>一定</strong> chmod 600。
+        整个项目 <em>没有</em> 微信 refresh_token 机制 —— token 失效就 re-scan QR。
+      </div>
+
+      <h3>account.json 样例</h3>
+      <pre><span class="c">// ~/.pi-web/wechat/account.json</span>
+{
+  <span class="h">"accountId"</span>: <span class="s">"bot_abc123@im.bot"</span>,     <span class="c">// ilink_bot_id</span>
+  <span class="h">"token"</span>:     <span class="s">"eyJhbGciOiJIUzI1NiIsInR5cCI6..."</span>,  <span class="c">// bot_token (Bearer)</span>
+  <span class="h">"baseUrl"</span>:   <span class="s">"https://ilinkai.weixin.qq.com"</span>,   <span class="c">// 可能被 redirect 改写</span>
+  <span class="h">"userId"</span>:    <span class="s">"u_xyz789@im.wechat"</span>,   <span class="c">// 扫码的用户（自己）</span>
+  <span class="h">"savedAt"</span>:   <span class="s">"2026-06-06T14:30:00.000Z"</span>,
+  <span class="h">"status"</span>:    <span class="s">"ok"</span>,                    <span class="c">// "ok" | "expired"</span>
+  <span class="h">"currentWorkspaceId"</span>: <span class="s">"/home/alone/p/pi-web"</span>,
+  <span class="h">"currentSessionId"</span>:   <span class="s">"01HX..."</span>  <span class="c">// undefined ⇒ 下次冷启动</span>
+}</pre>
+
+      <h3>在内存里（不写盘）</h3>
+      <table>
+        <thead>
+          <tr><th>对象</th><th>类型</th><th>用途</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code class="inline">LoginSession[]</code></td><td>Map keyed by sessionKey</td><td>登录中（6min TTL），不会被持久化</td></tr>
+          <tr><td><code class="inline">WeChatContact[]</code></td><td>Map keyed by userId</td><td>已联系过的人（logout 清空）</td></tr>
+          <tr><td><code class="inline">syncBufs: Map&lt;accountId, buf&gt;</code></td><td>内存</td><td>iLink 增量游标（重启会丢）</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 10. Decisions                                -->
+    <!-- ============================================== -->
+    <section id="s-decisions" class="reveal">
+      <span class="anchor"></span>
+      <h2><span class="num">10</span>关键设计决策（避坑指南）</h2>
+      <p>从代码注释和 AGENTS.md 抠出来的 6 个"看似随意实则刻意"的选择 —— 改了会出 bug。</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>❶ <span class="tag amber">架构</span> in-process，不走 HTTP</h3>
+          <p><code class="inline">inbound.ts</code> 直接 <code class="inline">import</code> rpc-manager 而不是
+          <code class="inline">fetch('/api/agent/...')</code>。注释原话：<em>"the listening port varies
+          (dev=30141, prod=14514) and a hardcoded fallback silently broke the channel when the two diverged."</em></p>
+        </div>
+        <div class="card">
+          <h3>❷ <span class="tag amber">时序</span> notifyStart 必须在 boot 重发</h3>
+          <p>重启 pi-web 后，iLink 会把"长时间没心跳"的 bot 当作离线、停止入队消息。
+          <code class="inline">instrumentation.ts</code> 一启动就调一次 <code class="inline">notifyStart</code>，
+          配合 <code class="inline">startup.ts</code> 的 30s rescan 兜底。</p>
+        </div>
+        <div class="card">
+          <h3>❸ <span class="tag blue">UX</span> 越早 sendtyping 越好</h3>
+          <p>进入 <code class="inline">handleInbound</code> 的第一步就 <code class="inline">void fireTyping()</code>，
+          <em>不 await</em>。失败被吞掉（debug log）—— 这是个 best-effort 提示，agent 跑 30s 期间用户能看到"对方正在输入"。</p>
+        </div>
+        <div class="card">
+          <h3>❹ <span class="tag purple">协议</span> agent_end 是唯一真理</h3>
+          <p>每个 LLM provider 的 streaming 事件形状都不一样（<code class="inline">message_update</code>），但
+          <code class="inline">agent_end</code> 始终带完整 <code class="inline">messages[]</code>。代码里只 listen agent_end，<em>从不</em>尝试拼 streaming。</p>
+        </div>
+        <div class="card">
+          <h3>❺ <span class="tag green">语义</span> /new 不冷启动</h3>
+          <p>用户发 <code class="inline">/new</code> → 只清 <code class="inline">currentSessionId</code> + 回"已重置"。
+          <em>下一条</em> 消息才冷启动、并作为新会话的 <strong>第一条</strong>。
+          保证 <code class="inline">/new</code> 这个字符串永远不会进 agent 的 prompt 历史。</p>
+        </div>
+        <div class="card">
+          <h3>❻ <span class="tag pink">错误</span> 401/expired → 自动 mark</h3>
+          <p><code class="inline">safeReply</code> 捕获 <code class="inline">sendmessage</code> 失败时，如果错误文本里含
+          <code class="inline">401|expired|invalid|token</code>，就 <code class="inline">state.markAccountExpired()</code>。
+          下次 <code class="inline">/api/weixin/status</code> 时面板会显示"账号已过期"的红色 banner。</p>
+        </div>
+      </div>
+
+      <h3>iLink HTTP 协议形态（一份就够）</h3>
+      <pre><span class="c">// lib/wechat/api.ts — 所有 iLink 请求都长这样</span>
+POST <span class="h">https://ilinkai.weixin.qq.com/ilink/bot/&lt;endpoint&gt;</span>
+Content-Type:        application/json
+Authorization:       Bearer <span class="v">&lt;bot_token&gt;</span>
+AuthorizationType:   ilink_bot_token
+iLink-App-Id:        bot
+iLink-App-ClientVersion: <span class="n">65537</span>
+X-WECHAT-UIN:        <span class="h">base64(</span>random_uint32_decimal_string<span class="h">)</span>
+
+<span class="c">// 例：发消息</span>
+{
+  <span class="s">"msg"</span>: {
+    <span class="s">"from_user_id"</span>: <span class="s">""</span>,               <span class="c">// BOT 发时留空</span>
+    <span class="s">"to_user_id"</span>:   <span class="s">"u_xxx@im.wechat"</span>,
+    <span class="s">"client_id"</span>:    <span class="s">"a1b2c3d4..."</span>,     <span class="c">// SHA1(16 hex)</span>
+    <span class="s">"message_type"</span>: <span class="n">2</span>,                  <span class="c">// 1=USER 2=BOT</span>
+    <span class="s">"message_state"</span>: <span class="n">2</span>,                 <span class="c">// 0=NEW 1=GENERATING 2=FINISH</span>
+    <span class="s">"item_list"</span>: [
+      { <span class="s">"type"</span>: <span class="n">1</span>, <span class="s">"text_item"</span>: { <span class="s">"text"</span>: <span class="s">"回复内容"</span> } }
+    ],
+    <span class="s">"context_token"</span>: <span class="s">"..."</span>              <span class="c">// 从 inbound message 拿来</span>
+  },
+  <span class="s">"base_info"</span>: {
+    <span class="s">"channel_version"</span>: <span class="s">"pi-web/0.1.0"</span>,
+    <span class="s">"bot_agent"</span>:        <span class="s">"pi-web-demo"</span>     <span class="c">// ↑ 跟官方 OpenClaw 区分开</span>
+  }
+}</pre>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 11. End-to-end sequence                      -->
+    <!-- ============================================== -->
+    <section id="s-timeline" class="reveal">
+      <span class="anchor"></span>
+      <h2><span class="num">11</span>端到端时序图</h2>
+      <p>把上面所有章节压成一张图 —— 从用户按下回车到微信收到回复的完整时间线。</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 1000 1200" xmlns="http://www.w3.org/2000/svg" style="font-family: var(--font-mono); font-size: 11px;">
+          <defs>
+            <marker id="mA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9ba0ab"/></marker>
+            <marker id="mG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#1aad19"/></marker>
+            <marker id="mB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#5b9dff"/></marker>
+            <marker id="mP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#a78bfa"/></marker>
+          </defs>
+
+          <!-- actors -->
+          <g font-family="var(--font-sans)">
+            <rect x="20" y="20" width="120" height="40" rx="6" fill="#1aad19" fill-opacity="0.15" stroke="#1aad19"/>
+            <text x="80" y="46" fill="#1aad19" text-anchor="middle" font-weight="600">用户手机</text>
+            <line x1="80" y1="60" x2="80" y2="1180" stroke="#1aad19" stroke-opacity="0.4" stroke-dasharray="3,3"/>
+
+            <rect x="220" y="20" width="120" height="40" rx="6" fill="#1aad19" fill-opacity="0.15" stroke="#1aad19"/>
+            <text x="280" y="46" fill="#1aad19" text-anchor="middle" font-weight="600">WeChat App</text>
+            <line x1="280" y1="60" x2="280" y2="1180" stroke="#1aad19" stroke-opacity="0.4" stroke-dasharray="3,3"/>
+
+            <rect x="420" y="20" width="120" height="40" rx="6" fill="#5b9dff" fill-opacity="0.15" stroke="#5b9dff"/>
+            <text x="480" y="46" fill="#5b9dff" text-anchor="middle" font-weight="600">iLink Server</text>
+            <line x1="480" y1="60" x2="480" y2="1180" stroke="#5b9dff" stroke-opacity="0.4" stroke-dasharray="3,3"/>
+
+            <rect x="620" y="20" width="120" height="40" rx="6" fill="#1aad19" fill-opacity="0.20" stroke="#1aad19" stroke-width="1.5"/>
+            <text x="680" y="46" fill="#1aad19" text-anchor="middle" font-weight="600">pi-web</text>
+            <line x1="680" y1="60" x2="680" y2="1180" stroke="#1aad19" stroke-opacity="0.4" stroke-dasharray="3,3"/>
+
+            <rect x="820" y="20" width="140" height="40" rx="6" fill="#a78bfa" fill-opacity="0.15" stroke="#a78bfa"/>
+            <text x="890" y="46" fill="#a78bfa" text-anchor="middle" font-weight="600">AgentSession</text>
+            <line x1="890" y1="60" x2="890" y2="1180" stroke="#a78bfa" stroke-opacity="0.4" stroke-dasharray="3,3"/>
+          </g>
+
+          <!-- LOGIN phase (background) -->
+          <rect x="10" y="90" width="980" height="320" rx="8" fill="#5b9dff" fill-opacity="0.04" stroke="#5b9dff" stroke-opacity="0.2" stroke-dasharray="4,4"/>
+          <text x="30" y="115" fill="#5b9dff" font-family="var(--font-sans)" font-weight="600">阶段 1 · 登录（一次性）</text>
+
+          <!-- 1.1 click -->
+          <line x1="80" y1="150" x2="275" y2="150" stroke="#9ba0ab" marker-end="url(#mA)"/>
+          <text x="178" y="143" fill="#9ba0ab" font-size="10" text-anchor="middle">① 打开微信面板</text>
+
+          <!-- 1.2 POST login -->
+          <line x1="280" y1="180" x2="675" y2="180" stroke="#5b9dff" marker-end="url(#mB)"/>
+          <text x="478" y="173" fill="#5b9dff" font-size="10" text-anchor="middle">② POST /api/weixin/login</text>
+
+          <line x1="680" y1="210" x2="485" y2="210" stroke="#5b9dff" marker-end="url(#mB)"/>
+          <text x="582" y="203" fill="#5b9dff" font-size="10" text-anchor="middle">③ get_bot_qrcode</text>
+
+          <line x1="480" y1="240" x2="675" y2="240" stroke="#9ba0ab" marker-end="url(#mA)"/>
+          <text x="578" y="233" fill="#9ba0ab" font-size="10" text-anchor="middle">④ {qrcode, weixin://...}</text>
+
+          <line x1="680" y1="270" x2="285" y2="270" stroke="#5b9dff" marker-end="url(#mB)"/>
+          <text x="482" y="263" fill="#5b9dff" font-size="10" text-anchor="middle">⑤ 渲染 PNG 返回前端</text>
+
+          <line x1="280" y1="300" x2="85" y2="300" stroke="#1aad19" marker-end="url(#mG)"/>
+          <text x="183" y="293" fill="#1aad19" font-size="10" text-anchor="middle">⑥ 展示 QR</text>
+
+          <line x1="80" y1="330" x2="275" y2="330" stroke="#9ba0ab" marker-end="url(#mA)"/>
+          <text x="178" y="323" fill="#9ba0ab" font-size="10" text-anchor="middle">⑦ 扫码</text>
+
+          <line x1="280" y1="360" x2="485" y2="360" stroke="#5b9dff" marker-end="url(#mB)"/>
+          <text x="382" y="353" fill="#5b9dff" font-size="10" text-anchor="middle">⑧ ↑ iLink 处理扫码</text>
+
+          <text x="380" y="390" fill="#9ba0ab" font-size="10">... 轮询 2s/次 ...</text>
+
+          <!-- confirmed -->
+          <line x1="680" y1="430" x2="485" y2="430" stroke="#5b9dff" marker-end="url(#mB)"/>
+          <text x="582" y="423" fill="#5b9dff" font-size="10" text-anchor="middle">⑨ get_qrcode_status → confirmed</text>
+
+          <line x1="480" y1="460" x2="675" y2="460" stroke="#9ba0ab" marker-end="url(#mA)"/>
+          <text x="578" y="453" fill="#9ba0ab" font-size="10" text-anchor="middle">⑩ {bot_token, ilink_bot_id, baseurl}</text>
+
+          <line x1="680" y1="490" x2="480" y2="490" stroke="#5b9dff" marker-end="url(#mB)"/>
+          <text x="580" y="483" fill="#5b9dff" font-size="10" text-anchor="middle">⑪ notifystart (bot 上线)</text>
+
+          <line x1="680" y1="520" x2="888" y2="520" stroke="#9ba0ab" marker-end="url(#mA)"/>
+          <text x="784" y="513" fill="#9ba0ab" font-size="10" text-anchor="middle">⑫ state.saveAccount + monitor.start</text>
+
+          <!-- MONITOR phase -->
+          <rect x="10" y="430" width="980" height="200" rx="8" fill="#a78bfa" fill-opacity="0.04" stroke="#a78bfa" stroke-opacity="0.2" stroke-dasharray="4,4" transform="translate(0, 0)"/>
+          <text x="30" y="615" fill="#a78bfa" font-family="var(--font-sans)" font-weight="600">阶段 2 · 持续轮询（后台）</text>
+
+          <line x1="680" y1="650" x2="485" y2="650" stroke="#a78bfa" marker-end="url(#mP)"/>
+          <text x="582" y="643" fill="#a78bfa" font-size="10" text-anchor="middle">ⓐ getupdates (sync_buf, 3s)</text>
+          <line x1="480" y1="680" x2="675" y2="680" stroke="#9ba0ab" marker-end="url(#mA)"/>
+          <text x="578" y="673" fill="#9ba0ab" font-size="10" text-anchor="middle">ⓑ 空 / msgs[]</text>
+
+          <text x="380" y="710" fill="#9ba0ab" font-size="10">... 每 ~3s 一次 ...</text>
+
+          <!-- INBOUND phase -->
+          <rect x="10" y="730" width="980" height="450" rx="8" fill="#1aad19" fill-opacity="0.05" stroke="#1aad19" stroke-opacity="0.25" stroke-dasharray="4,4"/>
+          <text x="30" y="755" fill="#1aad19" font-family="var(--font-sans)" font-weight="600">阶段 3 · 收到一条消息</text>
+
+          <line x1="80" y1="790" x2="275" y2="790" stroke="#1aad19" marker-end="url(#mG)"/>
+          <text x="178" y="783" fill="#1aad19" font-size="10" text-anchor="middle">"帮我重构 lib/"</text>
+
+          <line x1="280" y1="820" x2="485" y2="820" stroke="#5b9dff" marker-end="url(#mB)"/>
+          <text x="382" y="813" fill="#5b9dff" font-size="10" text-anchor="middle">↑ 投递到 iLink 队列</text>
+
+          <line x1="480" y1="850" x2="675" y2="850" stroke="#9ba0ab" marker-end="url(#mA)"/>
+          <text x="578" y="843" fill="#9ba0ab" font-size="10" text-anchor="middle">ⓒ 下一次 getupdates 拉到</text>
+
+          <line x1="680" y1="880" x2="480" y2="880" stroke="#1aad19" marker-end="url(#mG)"/>
+          <text x="580" y="873" fill="#1aad19" font-size="10" text-anchor="middle">ⓓ fireTyping (best-effort)</text>
+
+          <line x1="680" y1="910" x2="888" y2="910" stroke="#a78bfa" marker-end="url(#mP)"/>
+          <text x="784" y="903" fill="#a78bfa" font-size="10" text-anchor="middle">ⓔ session.send(prompt)</text>
+
+          <line x1="890" y1="940" x2="888" y2="970" stroke="#a78bfa"/>
+          <rect x="800" y="975" width="180" height="40" rx="6" fill="#a78bfa" fill-opacity="0.10" stroke="#a78bfa"/>
+          <text x="890" y="995" fill="#a78bfa" text-anchor="middle">agent thinks + tools</text>
+          <text x="890" y="1009" fill="#9ba0ab" text-anchor="middle" font-size="10">30s ~ 数分钟</text>
+
+          <line x1="800" y1="1030" x2="680" y2="1030" stroke="#a78bfa" marker-end="url(#mP)"/>
+          <text x="740" y="1023" fill="#a78bfa" font-size="10" text-anchor="middle">ⓕ agent_end + messages[]</text>
+
+          <line x1="680" y1="1060" x2="485" y2="1060" stroke="#1aad19" marker-end="url(#mG)"/>
+          <text x="582" y="1053" fill="#1aad19" font-size="10" text-anchor="middle">ⓖ sendmessage</text>
+
+          <line x1="480" y1="1090" x2="285" y2="1090" stroke="#5b9dff" marker-end="url(#mB)"/>
+          <text x="382" y="1083" fill="#5b9dff" font-size="10" text-anchor="middle">ⓗ 推送给收信人</text>
+
+          <line x1="280" y1="1120" x2="85" y2="1120" stroke="#1aad19" marker-end="url(#mG)"/>
+          <text x="183" y="1113" fill="#1aad19" font-size="10" text-anchor="middle">ⓘ 用户看到回复</text>
+
+          <!-- time hint -->
+          <text x="980" y="1180" fill="#9ba0ab" font-size="10" text-anchor="end">↓ 时间 ↓</text>
+        </svg>
+        <div class="caption">图 6 · 端到端时序：登录 → 后台轮询 → 收到消息 → agent 回复</div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 12. How to play                              -->
+    <!-- ============================================== -->
+    <section id="s-howto" class="reveal">
+      <span class="anchor"></span>
+      <h2><span class="num">12</span>如何亲自动手</h2>
+
+      <h3>本机启动 pi-web</h3>
+      <pre><span class="c"># 1. 装依赖（已经装过可跳过）</span>
+npm install
+
+<span class="c"># 2. dev 模式启动（端口 30141）</span>
+npm run dev
+
+<span class="c"># 3. 浏览器打开 http://localhost:30141</span>
+<span class="c">#    点左下角绿色 "WeChat" 按钮 → "Start QR login"</span></pre>
+
+      <h3>用 production 模式</h3>
+      <pre>npm run build
+/home/alone/.xyl_scripts/run_pi_web.sh</pre>
+
+      <div class="callout info">
+        <strong>注意</strong>：AGENTS.md 明确要求 <em>不要</em> 在 dev 时跑 <code class="inline">next build</code>，
+        会污染 <code class="inline">.next/</code> 缓存。
+      </div>
+
+      <h3>看审计日志</h3>
+      <pre>tail -f ~/.pi-web/wechat/sessions.log | jq</pre>
+
+      <h3>看聊天上下文</h3>
+      <p>
+        agent 写出的 <code class="inline">.jsonl</code> session 文件
+        在 <code class="inline">~/.pi/agent/sessions/&lt;encoded-cwd&gt;/</code> 下
+        （<code class="inline">encoded-cwd</code> 是 cwd 的 base64-ish 编码），
+        可以用 <code class="inline">GET /api/sessions</code> 列表或直接 <code class="inline">jq</code> 解析。
+      </p>
+
+      <h3>再加一个平台？</h3>
+      <p>所有可复用的基础设施都摆在台面上了。建一个 <code class="inline">lib/telegram/</code> + <code class="inline">app/api/telegram/</code> + <code class="inline">TelegramPanel.tsx</code>，把
+      <code class="inline">inbound.ts</code> 那 315 行的"load account → resolve session → cold-start or continue → fireTyping → subscribe to agent_end → reply"骨架抄一份，把 WeChat 专属的 token / sendMessage / /new 换成 Telegram 的即可。</p>
+
+      <div class="grid-3" style="margin-top: 24px;">
+        <div class="card">
+          <h3>已具备</h3>
+          <p>
+            <span class="tag green">rpc-manager</span>
+            <span class="tag green">session-reader</span>
+            <span class="tag green">i18n</span>
+            <span class="tag green">panel pattern</span>
+            <span class="tag green">startup hook</span>
+            <span class="tag green">audit log</span>
+          </p>
+        </div>
+        <div class="card">
+          <h3>需要补</h3>
+          <p>
+            <span class="tag amber">媒体处理</span>
+            <span class="tag amber">签名验证</span>
+            <span class="tag amber">allowFrom</span>
+            <span class="tag amber">多账号</span>
+          </p>
+        </div>
+        <div class="card">
+          <h3>要警惕</h3>
+          <p>
+            <span class="tag red">端口不一致</span>
+            <span class="tag red">token 失效</span>
+            <span class="tag red">agent_end 跨 provider</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+</div>
+
+<footer>
+  <div class="wrap">
+    生成于 <code class="inline">/home/alone/p/pi-web/wechat-integration.html</code> ·
+    基于 <code class="inline">lib/wechat/</code> + <code class="inline">app/api/weixin/</code> + <code class="inline">components/WeChatPanel.tsx</code> 静态分析 ·
+    共 1,722 LOC 真实代码
+  </div>
+</footer>
+
+<script>
+  // -------- scroll-spy TOC --------
+  const tocLinks = document.querySelectorAll('.toc a');
+  const sections = [...tocLinks].map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  function onScroll() {
+    const y = window.scrollY + 80;
+    let active = sections[0];
+    for (const s of sections) {
+      if (s.offsetTop <= y) active = s;
+    }
+    tocLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + active.id));
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // -------- reveal on scroll --------
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) {
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      }
+    }
+  }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
+</html>
