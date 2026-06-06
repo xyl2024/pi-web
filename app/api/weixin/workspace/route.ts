@@ -30,10 +30,9 @@ interface SessionRow {
   modified: string;
 }
 
-async function fetchSessions(): Promise<SessionRow[]> {
-  const base = process.env.PI_WEB_BASE_URL ?? "http://127.0.0.1:30141";
+async function fetchSessions(origin: string): Promise<SessionRow[]> {
   try {
-    const res = await fetch(`${base}/api/sessions`, { cache: "no-store" });
+    const res = await fetch(`${origin}/api/sessions`, { cache: "no-store" });
     if (!res.ok) return [];
     const data = (await res.json()) as { sessions?: SessionRow[] };
     return Array.isArray(data.sessions) ? data.sessions : [];
@@ -42,10 +41,9 @@ async function fetchSessions(): Promise<SessionRow[]> {
   }
 }
 
-async function fetchPinnedCwds(): Promise<string[]> {
-  const base = process.env.PI_WEB_BASE_URL ?? "http://127.0.0.1:30141";
+async function fetchPinnedCwds(origin: string): Promise<string[]> {
   try {
-    const res = await fetch(`${base}/api/pinned-cwds`, { cache: "no-store" });
+    const res = await fetch(`${origin}/api/pinned-cwds`, { cache: "no-store" });
     if (!res.ok) return [];
     const data = (await res.json()) as { cwds?: string[] };
     return Array.isArray(data.cwds) ? data.cwds : [];
@@ -54,9 +52,14 @@ async function fetchPinnedCwds(): Promise<string[]> {
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  // Self-fetch back into the same Next.js server — use the request's own
+  // origin so this works regardless of the listening port (dev=30141,
+  // prod=14514, etc.). Falling back to a hardcoded port silently breaks
+  // workspace listing on any non-30141 deployment.
+  const origin = new URL(req.url).origin;
   const account = state.loadAccount();
-  const [sessions, pinnedCwds] = await Promise.all([fetchSessions(), fetchPinnedCwds()]);
+  const [sessions, pinnedCwds] = await Promise.all([fetchSessions(origin), fetchPinnedCwds(origin)]);
 
   // Recent = most-recently-active cwd across all sessions, unpinned.
   const latestByCwd = new Map<string, string>();

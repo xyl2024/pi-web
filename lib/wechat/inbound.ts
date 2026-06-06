@@ -11,10 +11,11 @@
  *      binding and cold-start on its own — that message becomes the first
  *      turn of the new session, so /new itself never reaches the agent.
  *   2. Otherwise reuse currentSessionId, or cold-start if missing.
- *   3. POST /api/agent/[id] with { type: "prompt", message: text }.
+ *   3. Send a prompt through the AgentSessionWrapper (startRpcSession +
+ *      session.send, both in-process — no HTTP).
  *   4. Best-effort sendtyping() to the user.
- *   5. Open SSE /api/agent/[id]/events, accumulate assistant text, and on
- *      `agent_end` send the full reply back via sendTextMessage.
+ *   5. Subscribe via session.onEvent, wait for `agent_end`, and send the
+ *      full reply back via sendTextMessage.
  *   6. On any error, send a brief failure notice to the user.
  *
  * Side effects on state:
@@ -22,181 +23,29 @@
  *   - state.setCurrentSession(null) on /new (clears the binding).
  *   - state.recordContact(...) is called by the monitor before this is invoked.
  *   - logSessionEvent(...) writes a JSONL line for every lifecycle step.
+ *
+ * Note: this module calls `lib/rpc-manager` directly in-process. The HTTP
+ * `/api/agent/*` routes still exist for the browser UI — they wrap the
+ * same primitives. We deliberately avoid HTTP self-calls here because the
+ * listening port varies (dev=30141, prod=14514) and a hardcoded fallback
+ * silently broke the channel when the two diverged.
  */
+import { existsSync } from "fs";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { state, api } from "./index";
+import { getRpcSession, startRpcSession } from "@/lib/rpc-manager";
+import { resolveSessionPath } from "@/lib/session-reader";
 import { logSessionEvent } from "./sessions-log";
 import { createLogger } from "@/lib/logger";
+import type { AgentEvent } from "@/lib/rpc-manager";
 
 const log = createLogger("wechat/inbound");
 
-const PI_BASE = process.env.PI_WEB_BASE_URL ?? "http://127.0.0.1:30141";
-
-/** A 60s safety net — even if the SSE stream misbehaves we won't wait forever. */
-const SSE_TIMEOUT_MS = 5 * 60 * 1000;
-
-/** Plain HTTP wrapper that throws on non-2xx with a readable message. */
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`POST ${url} → ${res.status} ${text.slice(0, 200)}`);
-  }
-  return (await res.json()) as T;
-}
-
-interface AgentNewResult {
-  success: boolean;
-  sessionId: string;
-}
-
-interface AgentCommandResult {
-  success: boolean;
-  data?: unknown;
-}
-
-interface SsseEvent {
-  type: string;
-  // Some events carry content arrays of typed blocks.
-  content?: Array<{ type?: string; text?: string }>;
-  // agent_end carries the full message snapshot.
-  messages?: unknown;
-  // Agent-end error payload, when the run failed.
-  error?: string;
-}
-
-/**
- * Cold-start a fresh session in the current workspace, with PRESET_FULL tools
- * and the default model from settings.json (K1=c, K2=a).
- */
-async function coldStart(workspaceId: string, firstMessage: string): Promise<string> {
-  const result = await postJson<AgentNewResult>(`${PI_BASE}/api/agent/new`, {
-    cwd: workspaceId,
-    type: "prompt",
-    message: firstMessage,
-    toolNames: "all",
-  });
-  if (!result.sessionId) throw new Error("cold-start returned no sessionId");
-  return result.sessionId;
-}
-
-/** Send a prompt to an existing session. */
-async function sendPrompt(sessionId: string, message: string): Promise<void> {
-  await postJson<AgentCommandResult>(`${PI_BASE}/api/agent/${encodeURIComponent(sessionId)}`, {
-    type: "prompt",
-    message,
-  });
-}
-
-/**
- * Open the SSE event stream and wait for `agent_end`. Returns the final
- * assistant reply text by walking `event.messages` backwards and joining
- * the text content blocks of the last assistant message. This is the
- * stable path: pi guarantees the full `messages` snapshot on agent_end,
- * whereas the per-token `message_update` events vary in shape between
- * providers (Anthropic / OpenAI / Google all format `assistantMessageEvent`
- * differently).
- *
- * If `agent_end` carries an `error` field on the last assistant message
- * (stopReason === "error" / "aborted"), throws so the caller can surface
- * it to the user.
- */
-async function waitForAgentReply(sessionId: string): Promise<string> {
-  const url = `${PI_BASE}/api/agent/${encodeURIComponent(sessionId)}/events`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SSE_TIMEOUT_MS);
-
-  let agentEndMessages: AgentMessage[] | null = null;
-  let agentEndError: string | null = null;
-
-  try {
-    const res = await fetch(url, {
-      headers: { Accept: "text/event-stream" },
-      signal: controller.signal,
-    });
-    if (!res.ok || !res.body) {
-      throw new Error(`SSE connect failed: ${res.status}`);
-    }
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let streamDone = false;
-
-    while (!streamDone) {
-      const { value, done: rDone } = await reader.read();
-      streamDone = rDone;
-      if (value) {
-        buffer += decoder.decode(value, { stream: true });
-        let idx: number;
-        while ((idx = buffer.indexOf("\n\n")) !== -1) {
-          const rawEvent = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
-          const dataLines: string[] = [];
-          for (const line of rawEvent.split("\n")) {
-            if (line.startsWith("data: ")) dataLines.push(line.slice(6));
-          }
-          if (dataLines.length === 0) continue;
-          const payload = dataLines.join("\n");
-          if (!payload) continue;
-          let event: SsseEvent;
-          try {
-            event = JSON.parse(payload) as SsseEvent;
-          } catch {
-            continue;
-          }
-          logSessionEvent({
-            kind: "agent_event",
-            sessionId,
-            fromUserId: "",
-            eventType: event.type,
-          });
-          if (event.type === "agent_end") {
-            if (Array.isArray(event.messages)) {
-              agentEndMessages = event.messages as AgentMessage[];
-            }
-            if (typeof event.error === "string") agentEndError = event.error;
-            controller.abort();
-            break;
-          }
-        }
-      }
-    }
-  } catch (err) {
-    if (err instanceof Error && err.name !== "AbortError") {
-      log.warn("SSE stream error", { sessionId, error: String(err) });
-    }
-  } finally {
-    clearTimeout(timer);
-  }
-
-  if (agentEndError) throw new Error(agentEndError);
-  if (!agentEndMessages) {
-    throw new Error("SSE ended without agent_end event");
-  }
-
-  // Walk backwards to find the last assistant message.
-  for (let i = agentEndMessages.length - 1; i >= 0; i--) {
-    const m = agentEndMessages[i];
-    if (m.role !== "assistant") continue;
-    // Surface stopReason="error" / "aborted" with the provider's errorMessage
-    if (m.stopReason === "error" || m.stopReason === "aborted") {
-      throw new Error(m.errorMessage || `assistant stopReason=${m.stopReason}`);
-    }
-    const text = m.content
-      .filter((b): b is TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-    if (text) return text;
-  }
-  return "";
-}
+/** A 5min safety net — even if the agent misbehaves we won't wait forever. */
+const AGENT_END_TIMEOUT_MS = 5 * 60 * 1000;
 
 // Minimal local types — we only need to walk the well-known shape returned
-// by the pi SSE endpoint. They are compatible with @earendil-works/pi-ai's
+// on agent_end. They are compatible with @earendil-works/pi-ai's
 // AssistantMessage / TextContent but defined inline to avoid pulling the
 // full type graph into this file.
 interface TextBlock { type: "text"; text: string }
@@ -207,6 +56,109 @@ interface AssistantMsg {
   errorMessage?: string;
 }
 type AgentMessage = AssistantMsg | { role: "user" | "toolResult"; [k: string]: unknown };
+
+/**
+ * Cold-start a fresh session in the current workspace, with all tools
+ * enabled and the default model from settings.json (K1=c, K2=a).
+ */
+async function coldStart(workspaceId: string, firstMessage: string): Promise<string> {
+  if (!existsSync(workspaceId)) {
+    throw new Error(`Directory does not exist: ${workspaceId}`);
+  }
+  // One-time key so startRpcSession's lock doesn't conflict with real session ids.
+  const tempKey = `__new__${Date.now()}`;
+  const { session, realSessionId } = await startRpcSession(tempKey, "", workspaceId, "all");
+  await session.send({ type: "prompt", message: firstMessage });
+  return realSessionId;
+}
+
+/** Send a prompt to an existing session, starting it from disk if needed. */
+async function sendPrompt(sessionId: string, message: string): Promise<void> {
+  let session = getRpcSession(sessionId);
+  if (!session?.isAlive()) {
+    const filePath = await resolveSessionPath(sessionId);
+    if (!filePath) throw new Error(`Session not found: ${sessionId}`);
+    const cwd = SessionManager.open(filePath).getHeader()?.cwd ?? process.cwd();
+    ({ session } = await startRpcSession(sessionId, filePath, cwd));
+  }
+  await session.send({ type: "prompt", message });
+}
+
+/**
+ * Subscribe to the wrapper's event stream and wait for `agent_end`. Returns
+ * the final assistant reply text by walking `event.messages` backwards and
+ * joining the text content blocks of the last assistant message. This is the
+ * stable path: pi guarantees the full `messages` snapshot on agent_end,
+ * whereas the per-token `message_update` events vary in shape between
+ * providers (Anthropic / OpenAI / Google all format `assistantMessageEvent`
+ * differently).
+ *
+ * If `agent_end` carries an `error` field, or the last assistant message
+ * has stopReason === "error" / "aborted", throws so the caller can surface
+ * it to the user.
+ */
+async function waitForAgentReply(sessionId: string): Promise<string> {
+  // The session should already be running (cold-start or sendPrompt
+  // just kicked it). If for some reason it's gone, fail loudly rather
+  // than silently waiting on a dead stream.
+  const session = getRpcSession(sessionId);
+  if (!session?.isAlive()) {
+    throw new Error(`Session not running: ${sessionId}`);
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      unsubscribe();
+      reject(new Error(`agent_end timed out after ${AGENT_END_TIMEOUT_MS}ms`));
+    }, AGENT_END_TIMEOUT_MS);
+
+    const unsubscribe = session.onEvent((event: AgentEvent) => {
+      logSessionEvent({
+        kind: "agent_event",
+        sessionId,
+        fromUserId: "",
+        eventType: event.type,
+      });
+      if (event.type !== "agent_end") return;
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      unsubscribe();
+
+      const error = typeof event.error === "string" ? event.error : null;
+      if (error) {
+        reject(new Error(error));
+        return;
+      }
+      const messages = Array.isArray(event.messages) ? (event.messages as AgentMessage[]) : null;
+      if (!messages) {
+        reject(new Error("agent_end arrived without messages"));
+        return;
+      }
+
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m.role !== "assistant") continue;
+        if (m.stopReason === "error" || m.stopReason === "aborted") {
+          reject(new Error(m.errorMessage || `assistant stopReason=${m.stopReason}`));
+          return;
+        }
+        const text = m.content
+          .filter((b): b is TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join("");
+        if (text) {
+          resolve(text);
+          return;
+        }
+      }
+      resolve("");
+    });
+  });
+}
 
 export interface InboundMessage {
   fromUserId: string;
