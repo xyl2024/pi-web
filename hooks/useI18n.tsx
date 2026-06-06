@@ -267,6 +267,10 @@ const ZH_TRANSLATIONS = {
   "Name already exists": "名称已存在",
   "Directory not empty": "目录非空",
 
+  // WeChat — settings section (embedded in SettingsModal)
+  "WeChat Connection": "微信连接",
+  "Manage WeChat connection.": "管理微信连接。",
+  "Discard unsaved changes?": "放弃未保存的修改？",
   // WeChat demo panel
   "WeChat": "微信",
   "WeChat Demo": "微信演示",
