@@ -2,9 +2,9 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 
-export type ToastKind = "success" | "error" | "info";
+type ToastKind = "success" | "error" | "info";
 
-export interface ToastInput {
+interface ToastInput {
   kind?: ToastKind;
   message: string;
   durationMs?: number;

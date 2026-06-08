@@ -46,5 +46,5 @@ export function useAudio() {
     }
   }, []);
 
-  return { soundEnabled: enabled, onSoundToggle: toggle, playDoneSound: playDone, soundEnabledRef: enabledRef };
+  return { soundEnabled: enabled, onSoundToggle: toggle, playDoneSound: playDone };
 }

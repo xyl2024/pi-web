@@ -98,8 +98,6 @@ export class AgentSessionWrapper {
           sessionFile: this.inner.sessionFile ?? "",
           isStreaming: this.inner.isStreaming,
           isCompacting: this.inner.isCompacting,
-          autoCompactionEnabled: this.inner.autoCompactionEnabled,
-          autoRetryEnabled: this.inner.autoRetryEnabled,
           model: model ? { id: model.id, provider: model.provider } : undefined,
           messageCount: 0,
           pendingMessageCount: 0,
@@ -206,11 +204,6 @@ export class AgentSessionWrapper {
         return result;
       }
 
-      case "set_auto_compaction": {
-        this.inner.setAutoCompactionEnabled(command.enabled as boolean);
-        return null;
-      }
-
       case "steer": {
         const steerImages = command.images as Array<{ type: "image"; data: string; mimeType: string }> | undefined;
         await this.inner.steer(command.message as string, steerImages?.length ? steerImages : undefined);
@@ -245,11 +238,6 @@ export class AgentSessionWrapper {
 
       case "abort_compaction": {
         this.inner.abortCompaction();
-        return null;
-      }
-
-      case "set_auto_retry": {
-        this.inner.setAutoRetryEnabled(command.enabled as boolean);
         return null;
       }
 

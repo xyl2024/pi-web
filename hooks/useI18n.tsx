@@ -304,6 +304,23 @@ const ZH_TRANSLATIONS = {
   "Workspace switched": "Workspace 已切换",
   "No workspaces yet": "暂无 Workspace",
   "Account expired — please scan again": "账号已过期，请重新扫码",
+
+  // Todos (right-panel tab, mutually exclusive with file tabs)
+  "Todos": "待办",
+  "Open todos": "打开待办",
+  "Add": "添加",
+  "All": "全部",
+  "Done": "已完成",
+  "No todos": "暂无待办",
+  "Add description...": "添加描述…",
+  "Delete todo?": "删除待办？",
+  "Toggle done": "切换完成",
+  "Title cannot be empty": "标题不能为空",
+  "Title is too long": "标题过长",
+  "Save failed": "保存失败",
+  "Expand": "展开",
+  "Collapse": "收起",
+  "InProgress": "进行中",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

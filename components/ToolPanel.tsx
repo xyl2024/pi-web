@@ -9,17 +9,15 @@ export interface ToolEntry {
   active: boolean;
 }
 
-export type ToolPreset = "none" | "full";
 export const PRESET_NONE: string[] = [];
-export const PRESET_DEFAULT: string[] = ["read", "bash", "edit", "write", "find", "grep", "ls"];
 
-export function getPresetFromTools(tools: ToolEntry[]): ToolPreset {
+type ToolPreset = "none" | "full";
+
+function getPresetFromTools(tools: ToolEntry[]): ToolPreset {
   const activeNames = tools.filter(t => t.active).map(t => t.name).sort();
   const allNames = tools.map(t => t.name).sort();
-  const active = activeNames.join(",");
-  if (active === "") return "none";
-  if (allNames.length > 0 && active === allNames.join(",")) return "full";
-  return "none"; // closest match when tools are partially active
+  if (activeNames.join(",") === allNames.join(",")) return "full";
+  return "none";
 }
 
 interface Props {
@@ -28,15 +26,23 @@ interface Props {
   onClose: () => void;
 }
 
-const PRESETS: { id: ToolPreset; label: string; desc: string; tools?: string[] }[] = [
-  { id: "none", label: "Off",  desc: "No tools",              tools: PRESET_NONE },
-  { id: "full", label: "High", desc: "All available tools",   tools: [] },
+interface PresetDef {
+  id: ToolPreset;
+  label: string;
+  desc: string;
+  tools?: string[];
+}
+
+const PRESETS: PresetDef[] = [
+  { id: "none", label: "Off",  desc: "No tools",            tools: PRESET_NONE },
+  { id: "full", label: "High", desc: "All available tools", tools: [] },
 ];
 
 export function ToolPanel({ tools, onPreset, onClose }: Props) {
   const { t } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
   const current = getPresetFromTools(tools);
+  const currentDef = PRESETS.find(p => p.id === current) ?? PRESETS[0];
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -47,8 +53,6 @@ export function ToolPanel({ tools, onPreset, onClose }: Props) {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [onClose]);
-
-  const currentIndex = PRESETS.findIndex(p => p.id === current);
 
   return (
     <div
@@ -62,17 +66,16 @@ export function ToolPanel({ tools, onPreset, onClose }: Props) {
         border: "1px solid var(--border)",
         borderRadius: 10,
         boxShadow: "0 -4px 20px rgba(0,0,0,0.10)",
-        width: 260,
+        width: 240,
         padding: "12px 14px",
         display: "flex",
         flexDirection: "column",
         gap: 10,
       }}
     >
-      {/* Segmented control */}
       <div style={{
         display: "grid",
-        gridTemplateColumns: "1fr 1fr 1fr",
+        gridTemplateColumns: "1fr 1fr",
         background: "var(--bg-panel)",
         borderRadius: 8,
         padding: 3,
@@ -103,24 +106,9 @@ export function ToolPanel({ tools, onPreset, onClose }: Props) {
         })}
       </div>
 
-      {/* Description of current selection */}
       <div style={{ fontSize: 11, color: "var(--text-dim)", lineHeight: 1.5 }}>
-        {currentIndex >= 0 ? PRESETS[currentIndex].desc || t("No tools enabled") : ""}
+        {t(currentDef.desc)}
         {current === "none" && <span> — {t("agent will not use any tools")}</span>}
-      </div>
-
-      {/* Track bar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        {PRESETS.map((_, i) => (
-          <div
-            key={i}
-            style={{
-              flex: 1, height: 3, borderRadius: 2,
-              background: i <= currentIndex ? "var(--accent)" : "var(--border)",
-              transition: "background 0.15s",
-            }}
-          />
-        ))}
       </div>
 
       <div style={{ fontSize: 10, color: "var(--text-dim)" }}>

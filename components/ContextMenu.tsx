@@ -13,7 +13,7 @@ export interface ContextMenuItem {
   disabled?: boolean;
 }
 
-export interface ContextMenuState {
+interface ContextMenuState {
   id: string;
   x: number;
   y: number;

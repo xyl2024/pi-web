@@ -6,6 +6,9 @@ import { SessionSidebar } from "./SessionSidebar";
 import { ChatWindow } from "./ChatWindow";
 import { FileViewer } from "./FileViewer";
 import { TabBar, type Tab } from "./TabBar";
+import { TodoPanel } from "./TodoPanel";
+
+const TODO_TAB_ID = "todo:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -322,11 +325,23 @@ export function AppShell() {
     const tabId = `file:${filePath}`;
     setFileTabs((prev) => {
       if (prev.find((t) => t.id === tabId)) return prev;
-      return [...prev, { id: tabId, label: fileName, filePath }];
+      return [...prev, { kind: "file", id: tabId, label: fileName, filePath }];
     });
     setActiveFileTabId(tabId);
     setRightPanelState("normal");
   }, []);
+
+  const handleAddTodoTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((t) => t.kind === "todo")) return prev;
+      return [
+        ...prev.filter((t) => t.id !== activeFileTabId),
+        { kind: "todo", id: TODO_TAB_ID, label: t("Todos") },
+      ];
+    });
+    setActiveFileTabId(TODO_TAB_ID);
+    setRightPanelState("normal");
+  }, [activeFileTabId, t]);
 
   const handleCloseFileTab = useCallback((tabId: string) => {
     setFileTabs((prev) => {
@@ -973,13 +988,16 @@ export function AppShell() {
               activeTabId={activeFileTabId ?? ""}
               onSelectTab={setActiveFileTabId}
               onCloseTab={handleCloseFileTab}
+              onAddTodoTab={handleAddTodoTab}
             />
           </div>
         </div>
 
         {/* File content */}
         <div style={{ flex: 1, overflow: "hidden" }}>
-          {activeFileTab?.filePath ? (
+          {activeFileTab?.kind === "todo" ? (
+            <TodoPanel />
+          ) : activeFileTab?.kind === "file" ? (
             <FileViewer filePath={activeFileTab.filePath} cwd={activeCwd ?? undefined} />
           ) : (
             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
@@ -996,7 +1014,7 @@ export function AppShell() {
       <button
         onClick={() => setRightPanelState((v) => v === "expanded" ? "normal" : "expanded")}
         style={{
-          position: "fixed", top: 0, right: 36, zIndex: 300,
+          position: "fixed", top: 0, right: 72, zIndex: 300,
           display: "flex", alignItems: "center", justifyContent: "center",
           width: 36, height: 36, padding: 0,
           background: "var(--bg-panel)", border: "none", borderLeft: "1px solid var(--border)", borderBottom: "1px solid var(--border)",
@@ -1020,6 +1038,26 @@ export function AppShell() {
       </Tooltip>
     )}
     {/* Show/hide — always visible */}
+    <Tooltip content={t("Open todos")}>
+    <button
+      onClick={handleAddTodoTab}
+      style={{
+        position: "fixed", top: 0, right: 36, zIndex: 300,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        width: 36, height: 36, padding: 0,
+        background: "var(--bg-panel)", border: "none", borderLeft: "1px solid var(--border)", borderBottom: "1px solid var(--border)",
+        color: activeFileTab?.kind === "todo" ? "var(--text)" : "var(--text-muted)",
+        cursor: "pointer", transition: "color 0.12s",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "todo" ? "var(--text)" : "var(--text-muted)"; }}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="2" width="12" height="12" rx="2" />
+        <polyline points="5 8 7 10 11 6" />
+      </svg>
+    </button>
+    </Tooltip>
     <Tooltip content={rightPanelState !== "closed" ? t("Hide file panel") : t("Show file panel")}>
     <button
       onClick={() => setRightPanelState((v) => v === "closed" ? "normal" : "closed")}

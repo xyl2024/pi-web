@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createPortal } from "react-dom";
 import { useI18n } from "@/hooks/useI18n";
 
-export interface ConfirmOptions {
+interface ConfirmOptions {
   title: string;
   description?: string;
   confirmLabel?: string;

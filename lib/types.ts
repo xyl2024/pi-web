@@ -1,15 +1,6 @@
 // Types mirrored from pi-mono coding-agent session-manager
 
-export interface SessionHeader {
-  type: "session";
-  version?: number;
-  id: string;
-  timestamp: string;
-  cwd: string;
-  parentSession?: string;
-}
-
-export interface SessionEntryBase {
+interface SessionEntryBase {
   type: string;
   id: string;
   parentId: string | null;
@@ -99,12 +90,12 @@ export interface SessionMessageEntry extends SessionEntryBase {
   message: AgentMessage;
 }
 
-export interface ThinkingLevelChangeEntry extends SessionEntryBase {
+interface ThinkingLevelChangeEntry extends SessionEntryBase {
   type: "thinking_level_change";
   thinkingLevel: string;
 }
 
-export interface ModelChangeEntry extends SessionEntryBase {
+interface ModelChangeEntry extends SessionEntryBase {
   type: "model_change";
   provider: string;
   modelId: string;
@@ -119,7 +110,7 @@ export interface CompactionEntry extends SessionEntryBase {
   fromHook?: boolean;
 }
 
-export interface BranchSummaryEntry extends SessionEntryBase {
+interface BranchSummaryEntry extends SessionEntryBase {
   type: "branch_summary";
   fromId: string;
   summary: string;
@@ -127,13 +118,13 @@ export interface BranchSummaryEntry extends SessionEntryBase {
   fromHook?: boolean;
 }
 
-export interface CustomEntry extends SessionEntryBase {
+interface CustomEntry extends SessionEntryBase {
   type: "custom";
   customType: string;
   data?: unknown;
 }
 
-export interface CustomMessageEntry extends SessionEntryBase {
+interface CustomMessageEntry extends SessionEntryBase {
   type: "custom_message";
   customType: string;
   content: string | (TextContent | ImageContent)[];
@@ -141,13 +132,13 @@ export interface CustomMessageEntry extends SessionEntryBase {
   display: boolean;
 }
 
-export interface LabelEntry extends SessionEntryBase {
+interface LabelEntry extends SessionEntryBase {
   type: "label";
   targetId: string;
   label: string | undefined;
 }
 
-export interface SessionInfoEntry extends SessionEntryBase {
+interface SessionInfoEntry extends SessionEntryBase {
   type: "session_info";
   name?: string;
 }
@@ -162,8 +153,6 @@ export type SessionEntry =
   | CustomMessageEntry
   | LabelEntry
   | SessionInfoEntry;
-
-export type FileEntry = SessionHeader | SessionEntry;
 
 export interface SessionTreeNode {
   entry: SessionEntry;
@@ -191,17 +180,6 @@ export interface SessionContext {
 }
 
 // RPC types
-export interface RpcSessionState {
-  model?: { provider: string; id: string; contextWindow?: number };
-  thinkingLevel: string;
-  isStreaming: boolean;
-  isCompacting: boolean;
-  sessionFile?: string;
-  sessionId: string;
-  sessionName?: string;
-  messageCount: number;
-}
-
 export interface SessionSearchResult {
   id: string;
   name?: string;

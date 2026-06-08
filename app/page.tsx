@@ -4,6 +4,7 @@ import { I18nProvider } from "@/hooks/useI18n";
 import { ToastProvider } from "@/components/Toast";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { ContextMenuProvider } from "@/components/ContextMenu";
+import { TodoProvider } from "@/hooks/useTodos";
 
 export default function Home() {
   return (
@@ -12,7 +13,9 @@ export default function Home() {
         <ToastProvider>
           <ConfirmProvider>
             <ContextMenuProvider>
-              <AppShell />
+              <TodoProvider>
+                <AppShell />
+              </TodoProvider>
             </ContextMenuProvider>
           </ConfirmProvider>
         </ToastProvider>

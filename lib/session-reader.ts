@@ -8,7 +8,7 @@ import { normalizeToolCalls } from "./normalize";
 
 export { getAgentDir };
 
-export function getSessionsDir(): string {
+function getSessionsDir(): string {
   return `${getAgentDir()}/sessions`;
 }
 
@@ -63,11 +63,6 @@ export function cacheSessionPath(sessionId: string, filePath: string): void {
 
 export function invalidateSessionPathCache(sessionId: string): void {
   getPathCache().delete(sessionId);
-}
-
-export function getSessionEntries(filePath: string): SessionEntry[] {
-  const entries = SessionManager.open(filePath).getEntries();
-  return entries as unknown as SessionEntry[];
 }
 
 export function buildTree(entries: SessionEntry[]): SessionTreeNode[] {
@@ -184,11 +179,6 @@ export function buildSessionContext(entries: SessionEntry[], leafId?: string | n
     thinkingLevel: piCtx.thinkingLevel,
     model: piCtx.model,
   };
-}
-
-export function getLeafId(entries: SessionEntry[]): string | null {
-  if (entries.length === 0) return null;
-  return entries[entries.length - 1].id;
 }
 
 // ============================================================================
