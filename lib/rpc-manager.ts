@@ -1,8 +1,9 @@
-import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, DefaultResourceLoader, SessionManager } from "@earendil-works/pi-coding-agent";
 import { cacheSessionPath } from "./session-reader";
 import type { AgentSessionLike, ToolInfo } from "./pi-types";
 import { createLogger, elapsedMs } from "./logger";
 import { readConfig, applyReplacements } from "./config";
+import { recordRequest, recordResponse } from "./payload-capture";
 
 const log = createLogger("rpc-manager");
 type ToolSelection = string[] | "all";
@@ -329,11 +330,34 @@ export async function startRpcSession(
       ? SessionManager.open(sessionFile, undefined)
       : SessionManager.create(cwd, undefined);
 
+    // Inline extension that mirrors every outgoing provider request and
+    // its response headers into our in-memory ring buffer. Each session
+    // gets its own loader/closure, so `capturedSessionId` only ever holds
+    // the id for this wrapper.
+    let capturedSessionId: string | null = null;
+    const resourceLoader = new DefaultResourceLoader({
+      cwd,
+      agentDir,
+      extensionFactories: [
+        (pi) => {
+          pi.on("before_provider_request", (event) => {
+            if (capturedSessionId) recordRequest(capturedSessionId, event.payload);
+          });
+          pi.on("after_provider_response", (event) => {
+            if (capturedSessionId) recordResponse(capturedSessionId, event.status, event.headers);
+          });
+        },
+      ],
+    });
+    await resourceLoader.reload();
+
     const { session: inner } = await createAgentSession({
       cwd,
       agentDir,
       sessionManager,
+      resourceLoader,
     });
+    capturedSessionId = inner.sessionId as string;
 
     // Keep pi's full tool registry available so later switches to "all" can include
     // extension/custom tools, then set the active subset before the first prompt.
@@ -381,7 +405,12 @@ export async function startRpcSession(
     const realSessionFile = inner.sessionFile as string | undefined;
     if (realSessionFile) cacheSessionPath(realSessionId, realSessionFile);
 
-    wrapper.onDestroy(() => registry.delete(realSessionId));
+    wrapper.onDestroy(() => {
+      registry.delete(realSessionId);
+      // Note: payload capture file is intentionally NOT cleared here.
+      // It survives session unload and is only removed when the session
+      // itself is deleted (see app/api/sessions/[id]/route.ts DELETE).
+    });
     registry.set(realSessionId, wrapper);
 
     log.info("agent session started", {
