@@ -124,6 +124,7 @@ const ZH_TRANSLATIONS = {
   "unchanged lines": "行未变更",
   "Failed to load image": "图片加载失败",
   "Failed to load audio": "音频加载失败",
+  "Fit": "适应",
   "lines": "行",
   "Source": "源码",
   "Diff": "差异",
