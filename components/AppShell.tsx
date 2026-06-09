@@ -742,7 +742,7 @@ export function AppShell() {
                   marginLeft: "auto",
                   display: "flex", alignItems: "center", gap: 10,
                   paddingLeft: 12,
-                  paddingRight: rightPanelState !== "closed" ? 12 : 48,
+                  paddingRight: rightPanelState !== "closed" ? 12 : 84,
                   height: "100%",
                   fontSize: 11, color: "var(--text-muted)",
                   whiteSpace: "nowrap", cursor: "default",
