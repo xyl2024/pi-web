@@ -314,7 +314,7 @@ span.linenumber {
   to   { stroke-dashoffset: 0;  opacity: 1; }
 }
 
-/* Desktop sidebar: animate width */
+/* Desktop sidebar: width driven by inline style (drag-resize) */
 @media (min-width: 641px) {
   .sidebar-overlay-backdrop {
     display: none !important;
@@ -324,33 +324,20 @@ span.linenumber {
     overflow: hidden;
     transition: width 0.2s ease, min-width 0.2s ease;
   }
-  .sidebar-container.sidebar-open {
-    width: 260px;
-    min-width: 260px;
-  }
   .sidebar-container.sidebar-closed {
     width: 0;
     min-width: 0;
     border-right: none !important;
   }
-  /* keep inner content at fixed width so it doesn't reflow during animation */
-  .sidebar-container > * {
-    width: 260px;
-    min-width: 260px;
-  }
 }
 
 
-/* Right panel: animate width */
+/* Right panel: width driven by inline style when in `normal` state */
 @media (min-width: 641px) {
   .right-panel-container {
     overflow: hidden;
     transition: width 0.2s ease, min-width 0.2s ease;
     flex-shrink: 0;
-  }
-  .right-panel-container.right-panel-open {
-    width: 42%;
-    min-width: 300px;
   }
   .right-panel-container.right-panel-closed {
     width: 0;
@@ -365,10 +352,22 @@ span.linenumber {
     width: 100%;
     min-width: 0;
   }
-  /* keep inner content at fixed width so it doesn't reflow during animation */
-  .right-panel-container > * {
-    width: 42vw;
-    min-width: 300px;
+}
+
+/* Drag handle between panels — desktop only; mobile renders as overlay */
+@media (min-width: 641px) {
+  .resize-handle {
+    width: 6px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    background: transparent;
+    transition: background 0.12s;
+    position: relative;
+    z-index: 5;
+  }
+  .resize-handle:hover,
+  .resize-handle.dragging {
+    background: var(--accent);
   }
 }
 

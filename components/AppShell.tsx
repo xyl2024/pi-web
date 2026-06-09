@@ -29,6 +29,23 @@ interface ToolInfo {
   active: boolean;
 }
 
+// Drag-resize limits + defaults. Widths are in CSS pixels.
+const DEFAULT_LEFT_WIDTH = 260;
+const LEFT_MIN = 200;
+const LEFT_MAX = 600;
+const RIGHT_MIN = 300;
+const RIGHT_MAX = 1000;
+const STORAGE_KEY_LEFT = "pi-sidebar-width";
+const STORAGE_KEY_RIGHT = "pi-right-panel-width";
+
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
+// Default right-panel width is 42% of viewport, clamped to the allowed range.
+const defaultRightWidth = (): number => {
+  if (typeof window === "undefined") return 600;
+  return clamp(Math.round(window.innerWidth * 0.42), RIGHT_MIN, RIGHT_MAX);
+};
+
 export function AppShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -182,6 +199,120 @@ export function AppShell() {
   const [fileTabs, setFileTabs] = useState<Tab[]>([]);
   const [activeFileTabId, setActiveFileTabId] = useState<string | null>(null);
   const [rightPanelState, setRightPanelState] = useState<"closed" | "normal" | "expanded">("closed");
+
+  // ── Drag-resize state ────────────────────────────────────────────
+  const [leftWidth, setLeftWidth] = useState<number>(DEFAULT_LEFT_WIDTH);
+  const [rightWidth, setRightWidth] = useState<number>(600);
+  const [isDraggingLeft, setIsDraggingLeft] = useState(false);
+  const [isDraggingRight, setIsDraggingRight] = useState(false);
+  const cleanupDragRef = useRef<(() => void) | null>(null);
+
+  // Hydrate widths from localStorage on mount. SSR-safe: defaults are
+  // used on the first render, then we sync from storage.
+  useEffect(() => {
+    try {
+      const l = localStorage.getItem(STORAGE_KEY_LEFT);
+      if (l) {
+        const n = parseInt(l, 10);
+        if (Number.isFinite(n) && n >= LEFT_MIN && n <= LEFT_MAX) setLeftWidth(n);
+      }
+      const r = localStorage.getItem(STORAGE_KEY_RIGHT);
+      if (r) {
+        const n = parseInt(r, 10);
+        if (Number.isFinite(n) && n >= RIGHT_MIN && n <= RIGHT_MAX) {
+          setRightWidth(n);
+        } else {
+          setRightWidth(defaultRightWidth());
+        }
+      } else {
+        setRightWidth(defaultRightWidth());
+      }
+    } catch {
+      /* localStorage unavailable — keep defaults */
+    }
+  }, []);
+
+  // If a drag is in flight when the component unmounts, drop the listeners.
+  useEffect(() => () => cleanupDragRef.current?.(), []);
+
+  // Left handle — drag the boundary between sidebar and center.
+  const startDragLeft = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingLeft(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const startX = e.clientX;
+    const startWidth = leftWidth;
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startX;
+      setLeftWidth(clamp(startWidth + delta, LEFT_MIN, LEFT_MAX));
+    };
+    const cleanup = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setIsDraggingLeft(false);
+      cleanupDragRef.current = null;
+    };
+    const onUp = () => {
+      cleanup();
+      setLeftWidth((cur) => {
+        try { localStorage.setItem(STORAGE_KEY_LEFT, String(cur)); } catch {}
+        return cur;
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    cleanupDragRef.current = cleanup;
+  }, [leftWidth]);
+
+  // Right handle — drag the boundary between center and right panel.
+  const startDragRight = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingRight(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const startX = e.clientX;
+    const startWidth = rightWidth;
+    const onMove = (ev: MouseEvent) => {
+      // Cursor moving left → right panel grows (delta is startX - clientX).
+      const delta = startX - ev.clientX;
+      setRightWidth(clamp(startWidth + delta, RIGHT_MIN, RIGHT_MAX));
+    };
+    const cleanup = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setIsDraggingRight(false);
+      cleanupDragRef.current = null;
+    };
+    const onUp = () => {
+      cleanup();
+      setRightWidth((cur) => {
+        try { localStorage.setItem(STORAGE_KEY_RIGHT, String(cur)); } catch {}
+        return cur;
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    cleanupDragRef.current = cleanup;
+  }, [rightWidth]);
+
+  // Double-click the handle to reset to the default width.
+  const resetLeftWidth = useCallback(() => {
+    setLeftWidth(DEFAULT_LEFT_WIDTH);
+    try { localStorage.setItem(STORAGE_KEY_LEFT, String(DEFAULT_LEFT_WIDTH)); } catch {}
+  }, []);
+
+  const resetRightWidth = useCallback(() => {
+    const def = defaultRightWidth();
+    setRightWidth(def);
+    try { localStorage.setItem(STORAGE_KEY_RIGHT, String(def)); } catch {}
+  }, []);
 
   const handleAtMention = useCallback((relativePath: string) => {
     chatInputRef.current?.insertText("`" + relativePath + "`");
@@ -495,7 +626,7 @@ export function AppShell() {
 
       {/* Left sidebar */}
       <div
-        className={`sidebar-container${sidebarOpen ? " sidebar-open" : " sidebar-closed"}`}
+        className={`sidebar-container${sidebarOpen ? "" : " sidebar-closed"}`}
         style={{
           background: "var(--bg-panel)",
           borderRight: "1px solid var(--border)",
@@ -503,10 +634,22 @@ export function AppShell() {
           flexDirection: "column",
           flexShrink: 0,
           zIndex: 200,
+          width: sidebarOpen ? leftWidth : 0,
+          minWidth: sidebarOpen ? leftWidth : 0,
+          transition: isDraggingLeft ? "none" : undefined,
         }}
       >
         {sidebarContent}
       </div>
+
+      {/* Drag handle: left ↔ center. Only visible when sidebar is open. */}
+      {sidebarOpen && (
+        <div
+          className={`resize-handle${isDraggingLeft ? " dragging" : ""}`}
+          onMouseDown={startDragLeft}
+          onDoubleClick={resetLeftWidth}
+        />
+      )}
 
       {/* Center: chat */}
       <div style={{ flex: 1, display: rightPanelState === "expanded" ? "none" : "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
@@ -1010,6 +1153,15 @@ export function AppShell() {
         </div>
       </div>
 
+      {/* Drag handle: center ↔ right. Only when right panel is in `normal`. */}
+      {rightPanelState === "normal" && (
+        <div
+          className={`resize-handle${isDraggingRight ? " dragging" : ""}`}
+          onMouseDown={startDragRight}
+          onDoubleClick={resetRightWidth}
+        />
+      )}
+
       {/* Right panel: file viewer — always mounted, width animated via CSS */}
       <div
         className={`right-panel-container right-panel-${rightPanelState}`}
@@ -1018,6 +1170,9 @@ export function AppShell() {
           flexDirection: "column",
           borderLeft: "1px solid var(--border)",
           background: "var(--bg)",
+          width: rightPanelState === "normal" ? rightWidth : undefined,
+          minWidth: rightPanelState === "normal" ? rightWidth : undefined,
+          transition: isDraggingRight ? "none" : undefined,
         }}
       >
         {/* Right panel tab bar */}
