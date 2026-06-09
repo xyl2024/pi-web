@@ -721,8 +721,8 @@ export function AppShell() {
               </Tooltip>
             </div>
           )}
-          {/* Session stats — right-aligned in top bar */}
-          {showChat && (sessionStats || contextUsage) && (() => {
+          {/* Session stats — right-aligned in top bar, hidden when right panel is open */}
+          {showChat && (sessionStats || contextUsage) && rightPanelState === "closed" && (() => {
             const t = sessionStats?.tokens;
             const c = sessionStats?.cost ?? 0;
             const fmt = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(0)}k` : String(n);
