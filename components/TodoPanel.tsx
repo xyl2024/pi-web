@@ -11,6 +11,63 @@ import { useContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 
 type Filter = "active" | "all" | "done";
 
+type DeadlineTone = "overdue" | "today" | "future";
+
+function startOfDay(ts: number): number {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function endOfDayFromInput(value: string): number | undefined {
+  // <input type="date"> emits "YYYY-MM-DD" in local time. Store as end-of-day so
+  // overdue detection flips at midnight local time the day after.
+  if (!value) return undefined;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return undefined;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 23, 59, 59, 999);
+  return d.getTime();
+}
+
+function formatDateForInput(ts: number): string {
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatDeadline(deadline: number, now: number = Date.now()): { label: string; tone: DeadlineTone } {
+  const todayStart = startOfDay(now);
+  const todayEnd = todayStart + 24 * 60 * 60 * 1000 - 1;
+  const label = formatDateForInput(deadline);
+  if (deadline < todayStart) return { label, tone: "overdue" };
+  if (deadline <= todayEnd) return { label, tone: "today" };
+  return { label, tone: "future" };
+}
+
+function CalendarIcon({ size = 11 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ flexShrink: 0 }}
+      aria-hidden
+    >
+      <rect x="1.5" y="3" width="9" height="8" rx="1" />
+      <line x1="1.5" y1="5.5" x2="10.5" y2="5.5" />
+      <line x1="4" y1="1.5" x2="4" y2="3.5" />
+      <line x1="8" y1="1.5" x2="8" y2="3.5" />
+    </svg>
+  );
+}
+
 function highlightMatch(text: string, term: string): ReactNode {
   if (!term) return text;
   const lower = text.toLowerCase();
@@ -98,13 +155,13 @@ export function TodoPanel() {
     setDraftMode(true);
   };
 
-  const handleDraftSubmit = async (title: string) => {
-    const trimmed = title.trim();
+  const handleDraftSubmit = async (value: { title: string; deadline?: number }) => {
+    const trimmed = value.title.trim();
     if (trimmed.length === 0) {
       setDraftMode(false);
       return;
     }
-    const todo = await addTodo(trimmed);
+    const todo = await addTodo(trimmed, { deadline: value.deadline });
     setDraftMode(false);
     if (todo) setFilter("active");
   };
@@ -283,47 +340,78 @@ function FilterBar({
   );
 }
 
-function DraftRow({ onSubmit, onCancel }: { onSubmit: (title: string) => void; onCancel: () => void }) {
+function DraftRow({ onSubmit, onCancel }: { onSubmit: (value: { title: string; deadline?: number }) => void; onCancel: () => void }) {
   const { t } = useI18n();
-  const [value, setValue] = useState("");
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [title, setTitle] = useState("");
+  const [deadline, setDeadline] = useState<number | undefined>(undefined);
+  const titleRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    titleRef.current?.focus();
   }, []);
 
+  const submit = () => {
+    onSubmit({ title, deadline });
+  };
+
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 6px", borderBottom: "1px solid var(--border)" }}>
-      <div style={{ width: 14, height: 14, flexShrink: 0, border: "1.5px solid var(--text-dim)", borderRadius: 3 }} />
-      <input
-        ref={inputRef}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder={t("New")}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            onSubmit(value);
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            onCancel();
-          }
-        }}
-        onBlur={() => {
-          if (value.trim().length === 0) onCancel();
-          else onSubmit(value);
-        }}
-        style={{
-          flex: 1, minWidth: 0,
-          padding: "2px 4px",
-          fontSize: 13,
-          background: "transparent",
-          border: "none",
-          outline: "none",
-          color: "var(--text)",
-          fontFamily: "inherit",
-        }}
-      />
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "8px 6px", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ width: 14, height: 14, flexShrink: 0, border: "1.5px solid var(--text-dim)", borderRadius: 3 }} />
+        <input
+          ref={titleRef}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={t("New")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onCancel();
+            }
+          }}
+          onBlur={() => {
+            if (title.trim().length === 0) onCancel();
+            else submit();
+          }}
+          style={{
+            flex: 1, minWidth: 0,
+            padding: "2px 4px",
+            fontSize: 13,
+            background: "transparent",
+            border: "none",
+            outline: "none",
+            color: "var(--text)",
+            fontFamily: "inherit",
+          }}
+        />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 22 }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--text-dim)", flexShrink: 0 }}>
+          <CalendarIcon />
+          {t("Deadline")}
+        </span>
+        <input
+          type="date"
+          value={deadline !== undefined ? formatDateForInput(deadline) : ""}
+          onChange={(e) => setDeadline(endOfDayFromInput(e.target.value))}
+          aria-label={t("Pick a date")}
+          style={{
+            flex: 1, minWidth: 0,
+            padding: "1px 4px",
+            fontSize: 11,
+            background: "transparent",
+            border: "1px solid var(--border)",
+            borderRadius: 3,
+            outline: "none",
+            color: "var(--text-muted)",
+            fontFamily: "inherit",
+            colorScheme: "dark",
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -337,7 +425,7 @@ function TodoItem({
 }: {
   todo: Todo;
   onToggleDone: () => void;
-  onUpdate: (patch: { title?: string; description?: string; done?: boolean }) => void;
+  onUpdate: (patch: { title?: string; description?: string; done?: boolean; deadline?: number }) => void;
   onDelete: () => void;
   searchTerm: string;
 }) {
@@ -348,6 +436,14 @@ function TodoItem({
   const [editingDesc, setEditingDesc] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [titleDraft, setTitleDraft] = useState(todo.title);
+  const deadlineInputRef = useRef<HTMLInputElement | null>(null);
+
+  const openDeadlinePicker = () => {
+    const el = deadlineInputRef.current;
+    if (!el) return;
+    if (typeof el.showPicker === "function") el.showPicker();
+    else el.focus();
+  };
 
   const markdownComponents = useMemo(() => {
     if (!searchTerm) return undefined;
@@ -390,6 +486,18 @@ function TodoItem({
           setEditingTitle(true);
         },
       },
+      {
+        key: "set-deadline",
+        label: todo.deadline !== undefined ? t("Change deadline") : t("Set deadline"),
+        onSelect: openDeadlinePicker,
+      },
+      ...(todo.deadline !== undefined
+        ? [{
+            key: "clear-deadline",
+            label: t("Clear deadline"),
+            onSelect: () => onUpdate({ deadline: undefined }),
+          }]
+        : []),
       {
         key: "delete",
         label: t("Delete"),
@@ -496,6 +604,11 @@ function TodoItem({
             {highlightMatch(todo.title, searchTerm)}
           </span>
         )}
+        <DeadlineControl
+          todo={todo}
+          inputRef={deadlineInputRef}
+          onChange={(v) => onUpdate({ deadline: v })}
+        />
       </div>
       {editingDesc ? (
         <textarea
@@ -531,6 +644,8 @@ function TodoItem({
               fontSize: 12,
               lineHeight: 1.5,
               color: todo.done ? "var(--text-dim)" : "var(--text-muted)",
+              textDecoration: todo.done ? "line-through" : "none",
+              textDecorationColor: todo.done ? "var(--text-muted)" : undefined,
               cursor: "text",
               padding: "2px 0",
             }}
@@ -576,5 +691,113 @@ function TodoItem({
         </div>
       )}
     </div>
+  );
+}
+
+function DeadlineControl({
+  todo,
+  inputRef,
+  onChange,
+}: {
+  todo: Todo;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  onChange: (v: number | undefined) => void;
+}) {
+  const { t } = useI18n();
+
+  // Always render a hidden-but-layout-present <input type="date">. The visible
+  // button calls showPicker() on it so the user gets the native calendar in one
+  // click, with no intermediate "edit box" state.
+  const hiddenInput = (
+    <input
+      ref={inputRef}
+      type="date"
+      value={todo.deadline !== undefined ? formatDateForInput(todo.deadline) : ""}
+      onChange={(e) => {
+        const v = endOfDayFromInput(e.target.value);
+        if (v !== undefined) onChange(v);
+      }}
+      style={{
+        position: "absolute",
+        width: 1,
+        height: 1,
+        padding: 0,
+        margin: 0,
+        border: 0,
+        opacity: 0,
+        pointerEvents: "none",
+      }}
+      tabIndex={-1}
+      aria-hidden
+    />
+  );
+
+  const handleClick = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    if (typeof el.showPicker === "function") el.showPicker();
+    else el.focus();
+  };
+
+  if (todo.deadline === undefined) {
+    return (
+      <span style={{ position: "relative", display: "inline-flex" }}>
+        {hiddenInput}
+        <button
+          onClick={handleClick}
+          aria-label={t("Set deadline")}
+          title={t("Set deadline")}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 20, height: 20, padding: 0,
+            flexShrink: 0,
+            background: "transparent",
+            border: "none",
+            color: "var(--text-dim)",
+            cursor: "pointer",
+            borderRadius: 3,
+            fontFamily: "inherit",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-dim)")}
+        >
+          <CalendarIcon />
+        </button>
+      </span>
+    );
+  }
+
+  const { label, tone } = formatDeadline(todo.deadline);
+  const color = todo.done
+    ? "var(--text-dim)"
+    : tone === "overdue" ? "#ef4444" : tone === "today" ? "var(--accent)" : "var(--text-muted)";
+  const suffix = todo.done || tone === "future"
+    ? ""
+    : tone === "overdue" ? ` (${t("Overdue")})` : ` (${t("Due today")})`;
+  return (
+    <span style={{ position: "relative", display: "inline-flex" }}>
+      {hiddenInput}
+      <button
+        onClick={handleClick}
+        aria-label={t("Change deadline")}
+        title={t("Change deadline")}
+        style={{
+          display: "flex", alignItems: "center", gap: 4,
+          padding: "1px 6px", fontSize: 11,
+          flexShrink: 0,
+          background: "transparent",
+          border: "none",
+          color,
+          cursor: "pointer",
+          borderRadius: 3,
+          fontFamily: "inherit",
+          textDecoration: todo.done ? "line-through" : "none",
+        }}
+        onMouseEnter={(e) => { if (!todo.done) e.currentTarget.style.color = "var(--text)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = color; }}
+      >
+        <CalendarIcon /> {label}{suffix}
+      </button>
+    </span>
   );
 }

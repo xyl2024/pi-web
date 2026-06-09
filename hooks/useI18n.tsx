@@ -335,6 +335,14 @@ const ZH_TRANSLATIONS = {
   "InProgress": "进行中",
   "Search todos…": "搜索待办…",
   "Clear search": "清除搜索",
+  "Deadline": "截止日期",
+  "Set deadline": "设置截止日期",
+  "Change deadline": "修改截止日期",
+  "Clear deadline": "清除截止日期",
+  "Overdue": "已逾期",
+  "Due today": "今天到期",
+  "Pick a date": "选择日期",
+  "Deadline removed": "已清除截止日期",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

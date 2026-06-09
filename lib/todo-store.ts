@@ -8,6 +8,7 @@ export interface Todo {
   done: boolean;
   createdAt: number;
   completedAt?: number;
+  deadline?: number;
 }
 
 function isTodo(v: unknown): v is Todo {
@@ -19,7 +20,8 @@ function isTodo(v: unknown): v is Todo {
     typeof o.done === "boolean" &&
     typeof o.createdAt === "number" &&
     (o.description === undefined || typeof o.description === "string") &&
-    (o.completedAt === undefined || typeof o.completedAt === "number")
+    (o.completedAt === undefined || typeof o.completedAt === "number") &&
+    (o.deadline === undefined || typeof o.deadline === "number")
   );
 }
 

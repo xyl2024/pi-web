@@ -11,16 +11,17 @@ export interface Todo {
   done: boolean;
   createdAt: number;
   completedAt?: number;
+  deadline?: number;
 }
 
-export type TodoPatch = Partial<Pick<Todo, "title" | "description" | "done">>;
+export type TodoPatch = Partial<Pick<Todo, "title" | "description" | "done" | "deadline">>;
 
 interface TodoContextValue {
   todos: Todo[];
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  addTodo: (title: string, description?: string) => Promise<Todo | null>;
+  addTodo: (title: string, opts?: { description?: string; deadline?: number }) => Promise<Todo | null>;
   updateTodo: (id: string, patch: TodoPatch) => Promise<void>;
   deleteTodo: (id: string) => Promise<void>;
   toggleDone: (id: string) => Promise<void>;
@@ -54,9 +55,11 @@ export function TodoProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
-  const addTodo = useCallback(async (title: string, description?: string): Promise<Todo | null> => {
+  const addTodo = useCallback(async (title: string, opts?: { description?: string; deadline?: number }): Promise<Todo | null> => {
     const trimmed = title.trim();
     if (trimmed.length === 0) return null;
+    const description = opts?.description;
+    const deadline = opts?.deadline;
     // Optimistic placeholder
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const optimistic: Todo = {
@@ -65,13 +68,14 @@ export function TodoProvider({ children }: { children: ReactNode }) {
       description,
       done: false,
       createdAt: Date.now(),
+      deadline,
     };
     setTodos((prev) => [optimistic, ...prev]);
     try {
       const res = await fetch("/api/todos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: trimmed, description }),
+        body: JSON.stringify({ title: trimmed, description, deadline }),
       });
       if (!res.ok) {
         const { error } = (await res.json().catch(() => ({ error: "" }))) as { error?: string };
@@ -100,10 +104,16 @@ export function TodoProvider({ children }: { children: ReactNode }) {
     }));
     if (!snapshot) return;
     try {
+      // JSON.stringify drops `undefined` fields, so an explicit clear of deadline
+      // would look identical to "no change" to the server. Send `null` instead.
+      const body: Record<string, unknown> = { id, ...patch };
+      if ("deadline" in patch && patch.deadline === undefined) {
+        body.deadline = null;
+      }
       const res = await fetch("/api/todos", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...patch }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const { error } = (await res.json().catch(() => ({ error: "" }))) as { error?: string };

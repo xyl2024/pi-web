@@ -26,11 +26,11 @@ export async function GET() {
   }
 }
 
-// POST /api/todos  body: { title: string; description?: string }
+// POST /api/todos  body: { title: string; description?: string; deadline?: number }
 export async function POST(req: Request) {
   const startedAt = Date.now();
   try {
-    const body = (await req.json().catch(() => ({}))) as { title?: unknown; description?: unknown };
+    const body = (await req.json().catch(() => ({}))) as { title?: unknown; description?: unknown; deadline?: unknown };
     if (typeof body.title !== "string") {
       return NextResponse.json({ error: "title must be a string" }, { status: 400 });
     }
@@ -42,6 +42,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "title is too long" }, { status: 400 });
     }
     const description = typeof body.description === "string" ? body.description : undefined;
+    if (body.deadline !== undefined && (typeof body.deadline !== "number" || !Number.isFinite(body.deadline))) {
+      return NextResponse.json({ error: "deadline must be a number" }, { status: 400 });
+    }
+    const deadline = typeof body.deadline === "number" ? body.deadline : undefined;
 
     const todos = readTodos(TODOS_FILE);
     const todo: Todo = {
@@ -50,6 +54,7 @@ export async function POST(req: Request) {
       description,
       done: false,
       createdAt: Date.now(),
+      deadline,
     };
     const next = [todo, ...todos];
     writeTodos(TODOS_FILE, next);
@@ -61,12 +66,12 @@ export async function POST(req: Request) {
   }
 }
 
-// PATCH /api/todos  body: { id: string; title?: string; description?: string; done?: boolean }
+// PATCH /api/todos  body: { id: string; title?: string; description?: string; done?: boolean; deadline?: number | null }
 export async function PATCH(req: Request) {
   const startedAt = Date.now();
   try {
     const body = (await req.json().catch(() => ({}))) as {
-      id?: unknown; title?: unknown; description?: unknown; done?: unknown;
+      id?: unknown; title?: unknown; description?: unknown; done?: unknown; deadline?: unknown;
     };
     if (typeof body.id !== "string") {
       return NextResponse.json({ error: "id must be a string" }, { status: 400 });
@@ -106,6 +111,15 @@ export async function PATCH(req: Request) {
       if (body.done !== prev.done) {
         next.done = body.done;
         next.completedAt = body.done ? Date.now() : undefined;
+      }
+    }
+    if (body.deadline !== undefined) {
+      if (body.deadline === null) {
+        delete next.deadline;
+      } else if (typeof body.deadline !== "number" || !Number.isFinite(body.deadline)) {
+        return NextResponse.json({ error: "deadline must be a number or null" }, { status: 400 });
+      } else {
+        next.deadline = body.deadline;
       }
     }
 
