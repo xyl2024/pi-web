@@ -21,7 +21,7 @@ export function TodoPanel() {
   const { t } = useI18n();
   const { todos, loading, addTodo, updateTodo, deleteTodo, toggleDone } = useTodos();
   const confirm = useConfirm();
-  const [filter, setFilter] = useState<Filter>("active");
+  const [filter, setFilter] = useState<Filter>("all");
   const [draftMode, setDraftMode] = useState(false);
 
   const visible = useMemo(() => {
@@ -317,7 +317,7 @@ function TodoItem({
             style={{
               flex: 1, minWidth: 0,
               fontSize: 13, fontWeight: 500,
-              color: todo.done ? "var(--text-muted)" : "var(--text)",
+              color: todo.done ? "var(--text-muted)" : "var(--accent)",
               textDecoration: todo.done ? "line-through" : "none",
               cursor: "text",
               overflow: "hidden",

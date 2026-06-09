@@ -14,10 +14,9 @@ interface Props {
   activeTabId: string;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
-  onAddTodoTab?: () => void;
 }
 
-export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onAddTodoTab }: Props) {
+export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
   const { t } = useI18n();
   const [hoveredClose, setHoveredClose] = useState<string | null>(null);
 
@@ -101,27 +100,6 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onAddTodoTa
           </div>
         );
       })}
-      {onAddTodoTab && (
-        <Tooltip content={t("Open todos")}>
-          <button
-            onClick={onAddTodoTab}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center",
-              width: 28, height: 36, padding: 0,
-              background: "none", border: "none", borderRight: "1px solid var(--border)",
-              color: "var(--text-muted)", cursor: "pointer", flexShrink: 0,
-              transition: "color 0.12s, background 0.12s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.background = "none"; }}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <line x1="6" y1="2" x2="6" y2="10" />
-              <line x1="2" y1="6" x2="10" y2="6" />
-            </svg>
-          </button>
-        </Tooltip>
-      )}
     </div>
   );
 }

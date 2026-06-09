@@ -331,18 +331,6 @@ export function AppShell() {
     setRightPanelState("normal");
   }, []);
 
-  const handleAddTodoTab = useCallback(() => {
-    setFileTabs((prev) => {
-      if (prev.some((t) => t.kind === "todo")) return prev;
-      return [
-        ...prev.filter((t) => t.id !== activeFileTabId),
-        { kind: "todo", id: TODO_TAB_ID, label: t("Todos") },
-      ];
-    });
-    setActiveFileTabId(TODO_TAB_ID);
-    setRightPanelState("normal");
-  }, [activeFileTabId, t]);
-
   // Top-right toggle: open todos on first click, close them on the next.
   // If closing leaves no tabs, the right panel collapses too.
   const handleToggleTodoTab = useCallback(() => {
@@ -355,9 +343,17 @@ export function AppShell() {
         return remaining.length > 0 ? remaining[remaining.length - 1].id : null;
       });
     } else {
-      handleAddTodoTab();
+      setFileTabs((prev) => {
+        if (prev.some((t) => t.kind === "todo")) return prev;
+        return [
+          ...prev.filter((t) => t.id !== activeFileTabId),
+          { kind: "todo", id: TODO_TAB_ID, label: t("Todos") },
+        ];
+      });
+      setActiveFileTabId(TODO_TAB_ID);
+      setRightPanelState("normal");
     }
-  }, [fileTabs, handleAddTodoTab]);
+  }, [fileTabs, activeFileTabId, t]);
 
   const handleCloseFileTab = useCallback((tabId: string) => {
     setFileTabs((prev) => {
@@ -1004,7 +1000,6 @@ export function AppShell() {
               activeTabId={activeFileTabId ?? ""}
               onSelectTab={setActiveFileTabId}
               onCloseTab={handleCloseFileTab}
-              onAddTodoTab={handleAddTodoTab}
             />
           </div>
         </div>
