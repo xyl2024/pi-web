@@ -343,6 +343,22 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [activeFileTabId, t]);
 
+  // Top-right toggle: open todos on first click, close them on the next.
+  // If closing leaves no tabs, the right panel collapses too.
+  const handleToggleTodoTab = useCallback(() => {
+    if (fileTabs.some((t) => t.kind === "todo")) {
+      setFileTabs((prev) => prev.filter((t) => t.kind !== "todo"));
+      setActiveFileTabId((cur) => {
+        if (cur !== TODO_TAB_ID) return cur;
+        const remaining = fileTabs.filter((t) => t.kind !== "todo");
+        if (remaining.length === 0) setRightPanelState("closed");
+        return remaining.length > 0 ? remaining[remaining.length - 1].id : null;
+      });
+    } else {
+      handleAddTodoTab();
+    }
+  }, [fileTabs, handleAddTodoTab]);
+
   const handleCloseFileTab = useCallback((tabId: string) => {
     setFileTabs((prev) => {
       const next = prev.filter((t) => t.id !== tabId);
@@ -1038,9 +1054,9 @@ export function AppShell() {
       </Tooltip>
     )}
     {/* Show/hide — always visible */}
-    <Tooltip content={t("Open todos")}>
+    <Tooltip content={activeFileTab?.kind === "todo" ? t("Hide todos") : t("Open todos")}>
     <button
-      onClick={handleAddTodoTab}
+      onClick={handleToggleTodoTab}
       style={{
         position: "fixed", top: 0, right: 36, zIndex: 300,
         display: "flex", alignItems: "center", justifyContent: "center",

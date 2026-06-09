@@ -308,6 +308,7 @@ const ZH_TRANSLATIONS = {
   // Todos (right-panel tab, mutually exclusive with file tabs)
   "Todos": "待办",
   "Open todos": "打开待办",
+  "Hide todos": "隐藏待办",
   "Add": "添加",
   "All": "全部",
   "Done": "已完成",
