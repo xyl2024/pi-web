@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect, Fragment, cloneElement, createElement, isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useI18n } from "@/hooks/useI18n";
@@ -10,6 +10,52 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { useContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 
 type Filter = "active" | "all" | "done";
+
+function highlightMatch(text: string, term: string): ReactNode {
+  if (!term) return text;
+  const lower = text.toLowerCase();
+  const t = term.toLowerCase();
+  const ranges: Array<[number, number]> = [];
+  let i = 0;
+  while (i < text.length) {
+    const idx = lower.indexOf(t, i);
+    if (idx === -1) break;
+    ranges.push([idx, idx + t.length]);
+    i = idx + t.length;
+  }
+  if (!ranges.length) return text;
+  const out: ReactNode[] = [];
+  let cursor = 0;
+  ranges.forEach(([s, e], k) => {
+    if (s > cursor) out.push(text.slice(cursor, s));
+    out.push(
+      <mark
+        key={k}
+        style={{ background: "#fde047", color: "#1a1a1a", borderRadius: 2, padding: "0 1px" }}
+      >
+        {text.slice(s, e)}
+      </mark>
+    );
+    cursor = e;
+  });
+  if (cursor < text.length) out.push(text.slice(cursor));
+  return out;
+}
+
+function highlightDeep(node: ReactNode, term: string): ReactNode {
+  if (!term) return node;
+  if (node == null || typeof node === "boolean") return node;
+  if (typeof node === "number") return String(node);
+  if (typeof node === "string") return highlightMatch(node, term);
+  if (Array.isArray(node)) {
+    return node.map((child, i) => <Fragment key={i}>{highlightDeep(child, term)}</Fragment>);
+  }
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    const element = node;
+    return cloneElement(element, { children: highlightDeep(element.props.children, term) });
+  }
+  return node;
+}
 
 const FILTERS: { key: Filter; labelKey: string }[] = [
   { key: "active", labelKey: "InProgress" },
@@ -23,20 +69,28 @@ export function TodoPanel() {
   const confirm = useConfirm();
   const [filter, setFilter] = useState<Filter>("all");
   const [draftMode, setDraftMode] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const visible = useMemo(() => {
-    const list = filter === "all"
+    let list = filter === "all"
       ? todos
       : filter === "active"
         ? todos.filter((x) => !x.done)
         : todos.filter((x) => x.done);
+    const term = searchTerm.trim().toLowerCase();
+    if (term) {
+      list = list.filter((x) =>
+        x.title.toLowerCase().includes(term) ||
+        (x.description ?? "").toLowerCase().includes(term)
+      );
+    }
     const sortKey: keyof Todo = filter === "done" ? "completedAt" : "createdAt";
     return [...list].sort((a, b) => {
       const av = (a[sortKey] as number | undefined) ?? 0;
       const bv = (b[sortKey] as number | undefined) ?? 0;
       return bv - av;
     });
-  }, [todos, filter]);
+  }, [todos, filter, searchTerm]);
 
   const handleAddClick = () => {
     if (draftMode) return;
@@ -67,7 +121,13 @@ export function TodoPanel() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg)" }}>
-      <FilterBar current={filter} onChange={setFilter} onAdd={handleAddClick} />
+      <FilterBar
+        current={filter}
+        onChange={setFilter}
+        onAdd={handleAddClick}
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+      />
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 6px" }}>
         {loading && todos.length === 0 && (
           <div style={{ padding: "16px 12px", fontSize: 12, color: "var(--text-muted)", textAlign: "center" }}>
@@ -76,7 +136,7 @@ export function TodoPanel() {
         )}
         {!loading && visible.length === 0 && !draftMode && (
           <div style={{ padding: "16px 12px", fontSize: 12, color: "var(--text-dim)", textAlign: "center" }}>
-            {t("No todos")}
+            {searchTerm.trim() ? t("No matches") : t("No todos")}
           </div>
         )}
         {draftMode && (
@@ -89,6 +149,7 @@ export function TodoPanel() {
             onToggleDone={() => toggleDone(todo.id)}
             onUpdate={(patch) => updateTodo(todo.id, patch)}
             onDelete={() => handleDelete(todo)}
+            searchTerm={searchTerm}
           />
         ))}
       </div>
@@ -96,8 +157,21 @@ export function TodoPanel() {
   );
 }
 
-function FilterBar({ current, onChange, onAdd }: { current: Filter; onChange: (f: Filter) => void; onAdd: () => void }) {
+function FilterBar({
+  current,
+  onChange,
+  onAdd,
+  searchTerm,
+  onSearchChange,
+}: {
+  current: Filter;
+  onChange: (f: Filter) => void;
+  onAdd: () => void;
+  searchTerm: string;
+  onSearchChange: (v: string) => void;
+}) {
   const { t } = useI18n();
+  const searchRef = useRef<HTMLInputElement | null>(null);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 8px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
       {FILTERS.map((f) => {
@@ -109,6 +183,7 @@ function FilterBar({ current, onChange, onAdd }: { current: Filter; onChange: (f
             style={{
               padding: "3px 10px",
               fontSize: 11,
+              flexShrink: 0,
               background: active ? "var(--bg-selected)" : "transparent",
               border: "1px solid var(--border)",
               borderRadius: 10,
@@ -121,13 +196,75 @@ function FilterBar({ current, onChange, onAdd }: { current: Filter; onChange: (f
           </button>
         );
       })}
-      <span style={{ flex: 1 }} />
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          padding: "0 6px",
+          background: "var(--bg)",
+          border: "1px solid var(--border)",
+          borderRadius: 4,
+        }}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--text-dim)" strokeWidth="1.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
+          <circle cx="4.5" cy="4.5" r="2.5" />
+          <line x1="6.5" y1="6.5" x2="9" y2="9" />
+        </svg>
+        <input
+          ref={searchRef}
+          value={searchTerm}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={t("Search todos…")}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            padding: "3px 0",
+            fontSize: 11,
+            background: "transparent",
+            border: "none",
+            outline: "none",
+            color: "var(--text)",
+            fontFamily: "inherit",
+          }}
+        />
+        {searchTerm.length > 0 && (
+          <button
+            onClick={() => {
+              onSearchChange("");
+              searchRef.current?.focus();
+            }}
+            aria-label={t("Clear search")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 14,
+              height: 14,
+              padding: 0,
+              flexShrink: 0,
+              background: "transparent",
+              border: "none",
+              color: "var(--text-dim)",
+              cursor: "pointer",
+            }}
+          >
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="1" y1="1" x2="7" y2="7" />
+              <line x1="7" y1="1" x2="1" y2="7" />
+            </svg>
+          </button>
+        )}
+      </div>
       <button
         onClick={onAdd}
         style={{
           display: "flex", alignItems: "center", gap: 4,
           padding: "3px 10px",
           fontSize: 11,
+          flexShrink: 0,
           background: "var(--accent)",
           border: "none",
           borderRadius: 10,
@@ -196,11 +333,13 @@ function TodoItem({
   onToggleDone,
   onUpdate,
   onDelete,
+  searchTerm,
 }: {
   todo: Todo;
   onToggleDone: () => void;
   onUpdate: (patch: { title?: string; description?: string; done?: boolean }) => void;
   onDelete: () => void;
+  searchTerm: string;
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -209,6 +348,35 @@ function TodoItem({
   const [editingDesc, setEditingDesc] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [titleDraft, setTitleDraft] = useState(todo.title);
+
+  const markdownComponents = useMemo(() => {
+    if (!searchTerm) return undefined;
+    const wrap = (children: ReactNode) => highlightDeep(children, searchTerm);
+    const passthrough = (Tag: string) => {
+      const Component = (props: { children?: ReactNode }) => {
+        const { children, ...rest } = props;
+        return createElement(Tag, rest, wrap(children));
+      };
+      Component.displayName = `Highlight(${Tag})`;
+      return Component;
+    };
+    return {
+      p: passthrough("p"),
+      li: passthrough("li"),
+      h1: passthrough("h1"),
+      h2: passthrough("h2"),
+      h3: passthrough("h3"),
+      h4: passthrough("h4"),
+      h5: passthrough("h5"),
+      h6: passthrough("h6"),
+      td: passthrough("td"),
+      th: passthrough("th"),
+      em: passthrough("em"),
+      strong: passthrough("strong"),
+      a: passthrough("a"),
+      code: passthrough("code"),
+    };
+  }, [searchTerm]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -325,7 +493,7 @@ function TodoItem({
               whiteSpace: "nowrap",
             }}
           >
-            {todo.title}
+            {highlightMatch(todo.title, searchTerm)}
           </span>
         )}
       </div>
@@ -382,7 +550,7 @@ function TodoItem({
                     : {}),
                 }}
               >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{todo.description}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{todo.description}</ReactMarkdown>
               </div>
             ) : (
               <span style={{ color: "var(--text-dim)", fontStyle: "italic" }}>{t("Add description...")}</span>

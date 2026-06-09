@@ -332,6 +332,8 @@ const ZH_TRANSLATIONS = {
   "Expand": "展开",
   "Collapse": "收起",
   "InProgress": "进行中",
+  "Search todos…": "搜索待办…",
+  "Clear search": "清除搜索",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
