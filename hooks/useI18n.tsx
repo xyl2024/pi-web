@@ -140,7 +140,7 @@ const ZH_TRANSLATIONS = {
   "live": "实时",
   "static": "静态",
   "Close": "关闭",
-  "API": "API",
+  "API": "API 请求",
   "Provider API Requests": "模型 API 请求",
   "View raw provider API requests captured for this session": "查看本会话发往大模型服务商的原始接口请求",
   "No requests captured yet. Send a message in this session to record one.": "尚未捕获到请求。在本会话发送一条消息后即可记录。",
