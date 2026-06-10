@@ -11,9 +11,31 @@ import { useContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { extractImageGallery, MarkdownImage, ImageLightbox } from "./ImageLightbox";
 
-type Filter = "active" | "all" | "done";
+type StatusFilter = "all" | "active" | "done";
+type DeadlineFilter = "all" | "overdue" | "today" | "thisWeek" | "noDeadline";
+
+type Filters = {
+  status: StatusFilter;
+  deadline: DeadlineFilter;
+};
 
 type DeadlineTone = "overdue" | "today" | "future";
+
+const DEFAULT_FILTERS: Filters = { status: "all", deadline: "all" };
+
+const STATUS_FILTER_OPTIONS: { key: StatusFilter; labelKey: string }[] = [
+  { key: "all", labelKey: "All" },
+  { key: "active", labelKey: "InProgress" },
+  { key: "done", labelKey: "Done" },
+];
+
+const DEADLINE_FILTER_OPTIONS: { key: DeadlineFilter; labelKey: string }[] = [
+  { key: "all", labelKey: "All" },
+  { key: "overdue", labelKey: "Overdue" },
+  { key: "today", labelKey: "Due today" },
+  { key: "thisWeek", labelKey: "This week" },
+  { key: "noDeadline", labelKey: "No deadline" },
+];
 
 function startOfDay(ts: number): number {
   const d = new Date(ts);
@@ -116,44 +138,66 @@ function highlightDeep(node: ReactNode, term: string): ReactNode {
   return node;
 }
 
-const FILTERS: { key: Filter; labelKey: string }[] = [
-  { key: "active", labelKey: "InProgress" },
-  { key: "all", labelKey: "All" },
-  { key: "done", labelKey: "Done" },
-];
-
 export function TodoPanel() {
   const { t } = useI18n();
   const { todos, loading, addTodo, updateTodo, deleteTodo, toggleDone } = useTodos();
   const confirm = useConfirm();
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [draftMode, setDraftMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
+  const filterActive = filters.status !== "all" || filters.deadline !== "all";
+
+  const [now] = useState(() => Date.now());
+  const startOfToday = startOfDay(now);
+  const startOfTomorrow = startOfToday + 24 * 60 * 60 * 1000;
+  // "本周内" = 本周一 ~ 本周日（含今天）。endOfThisWeek 取"下周一 0 点"，
+  // 即本周日结束那一刻。使用 ISO 8601：周一为 1，周日为 0。
+  const dayOfWeek = new Date(now).getDay();
+  const daysToEndOfWeek = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+  const endOfThisWeek = startOfToday + daysToEndOfWeek * 24 * 60 * 60 * 1000;
+
   const visible = useMemo(() => {
-    let list = filter === "all"
-      ? todos
-      : filter === "active"
-        ? todos.filter((x) => !x.done)
-        : todos.filter((x) => x.done);
-    const term = searchTerm.trim().toLowerCase();
-    if (term) {
-      list = list.filter((x) =>
-        x.title.toLowerCase().includes(term) ||
-        (x.description ?? "").toLowerCase().includes(term)
-      );
-    }
-    const sortKey: keyof Todo = filter === "done" ? "completedAt" : "createdAt";
-    return [...list].sort((a, b) => {
-      const av = (a[sortKey] as number | undefined) ?? 0;
-      const bv = (b[sortKey] as number | undefined) ?? 0;
-      return bv - av;
-    });
-  }, [todos, filter, searchTerm]);
+    const sortKey: keyof Todo = filters.status === "done" ? "completedAt" : "createdAt";
+    return [...todos]
+      .filter((x) => {
+        if (filters.status === "active" && x.done) return false;
+        if (filters.status === "done" && !x.done) return false;
+        switch (filters.deadline) {
+          case "all":
+            break;
+          case "overdue":
+            if (x.done || x.deadline === undefined || x.deadline >= startOfToday) return false;
+            break;
+          case "today":
+            if (x.done || x.deadline === undefined || x.deadline < startOfToday || x.deadline >= startOfTomorrow) return false;
+            break;
+          case "thisWeek":
+            if (x.done || x.deadline === undefined || x.deadline < startOfToday || x.deadline >= endOfThisWeek) return false;
+            break;
+          case "noDeadline":
+            if (x.deadline !== undefined) return false;
+            break;
+        }
+        return true;
+      })
+      .filter((x) => {
+        const term = searchTerm.trim().toLowerCase();
+        if (!term) return true;
+        return x.title.toLowerCase().includes(term) ||
+          (x.description ?? "").toLowerCase().includes(term);
+      })
+      .sort((a, b) => {
+        const av = (a[sortKey] as number | undefined) ?? 0;
+        const bv = (b[sortKey] as number | undefined) ?? 0;
+        return bv - av;
+      });
+  }, [todos, filters, searchTerm, startOfToday, startOfTomorrow, endOfThisWeek]);
 
   const handleAddClick = () => {
     if (draftMode) return;
-    setFilter("all");
+    setFilters(DEFAULT_FILTERS);
     setDraftMode(true);
   };
 
@@ -165,7 +209,7 @@ export function TodoPanel() {
     }
     const todo = await addTodo(trimmed, { deadline: value.deadline });
     setDraftMode(false);
-    if (todo) setFilter("active");
+    if (todo) setFilters((f) => ({ ...f, status: "active" }));
   };
 
   const handleDelete = async (todo: Todo) => {
@@ -181,8 +225,11 @@ export function TodoPanel() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg)" }}>
       <FilterBar
-        current={filter}
-        onChange={setFilter}
+        filters={filters}
+        onFiltersChange={setFilters}
+        filterOpen={filterOpen}
+        onFilterOpenChange={setFilterOpen}
+        filterActive={filterActive}
         onAdd={handleAddClick}
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
@@ -217,14 +264,20 @@ export function TodoPanel() {
 }
 
 function FilterBar({
-  current,
-  onChange,
+  filters,
+  onFiltersChange,
+  filterOpen,
+  onFilterOpenChange,
+  filterActive,
   onAdd,
   searchTerm,
   onSearchChange,
 }: {
-  current: Filter;
-  onChange: (f: Filter) => void;
+  filters: Filters;
+  onFiltersChange: (next: Filters) => void;
+  filterOpen: boolean;
+  onFilterOpenChange: (open: boolean) => void;
+  filterActive: boolean;
   onAdd: () => void;
   searchTerm: string;
   onSearchChange: (v: string) => void;
@@ -233,28 +286,6 @@ function FilterBar({
   const searchRef = useRef<HTMLInputElement | null>(null);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 8px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
-      {FILTERS.map((f) => {
-        const active = current === f.key;
-        return (
-          <button
-            key={f.key}
-            onClick={() => onChange(f.key)}
-            style={{
-              padding: "3px 10px",
-              fontSize: 11,
-              flexShrink: 0,
-              background: active ? "var(--bg-selected)" : "transparent",
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              cursor: "pointer",
-              color: active ? "var(--text)" : "var(--text-muted)",
-              transition: "background 0.1s, color 0.1s",
-            }}
-          >
-            {t(f.labelKey)}
-          </button>
-        );
-      })}
       <div
         style={{
           flex: 1,
@@ -317,6 +348,39 @@ function FilterBar({
           </button>
         )}
       </div>
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <button
+          onClick={() => onFilterOpenChange(!filterOpen)}
+          aria-haspopup="dialog"
+          aria-expanded={filterOpen}
+          aria-label={t("Filter")}
+          style={{
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "3px 10px",
+            fontSize: 11,
+            flexShrink: 0,
+            background: filterActive || filterOpen ? "var(--bg-selected)" : "transparent",
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            cursor: "pointer",
+            color: filterActive || filterOpen ? "var(--text)" : "var(--text-muted)",
+            transition: "background 0.1s, color 0.1s",
+            fontFamily: "inherit",
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <polygon points="1,1.5 9,1.5 6.2,5.2 6.2,8.5 3.8,8.5 3.8,5.2" />
+          </svg>
+          {t("Filter")}
+        </button>
+        {filterOpen && (
+          <FilterPopover
+            filters={filters}
+            onChange={onFiltersChange}
+            onClose={() => onFilterOpenChange(false)}
+          />
+        )}
+      </div>
       <button
         onClick={onAdd}
         style={{
@@ -330,6 +394,7 @@ function FilterBar({
           color: "var(--bg)",
           cursor: "pointer",
           fontWeight: 500,
+          fontFamily: "inherit",
         }}
       >
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -338,6 +403,144 @@ function FilterBar({
         </svg>
         {t("Add")}
       </button>
+    </div>
+  );
+}
+
+function FilterPopover({
+  filters,
+  onChange,
+  onClose,
+}: {
+  filters: Filters;
+  onChange: (next: Filters) => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onMouseDown = (e: MouseEvent) => {
+      if (!ref.current) return;
+      if (e.target instanceof Node && ref.current.contains(e.target)) return;
+      onClose();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  const reset = () => onChange(DEFAULT_FILTERS);
+
+  const renderOption = <K extends string>(
+    options: { key: K; labelKey: string }[],
+    current: K,
+    onSelect: (key: K) => void,
+  ) => (
+    <div role="radiogroup" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      {options.map((o) => {
+        const selected = current === o.key;
+        return (
+          <button
+            key={o.key}
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onSelect(o.key)}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "4px 8px",
+              fontSize: 11,
+              textAlign: "left",
+              background: selected ? "var(--bg-selected)" : "transparent",
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer",
+              color: selected ? "var(--text)" : "var(--text-muted)",
+              fontFamily: "inherit",
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 10, height: 10, flexShrink: 0,
+                border: `1.2px solid ${selected ? "var(--accent)" : "var(--text-dim)"}`,
+                borderRadius: "50%",
+              }}
+            >
+              {selected && (
+                <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--accent)" }} />
+              )}
+            </span>
+            {t(o.labelKey)}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={t("Filter")}
+      style={{
+        position: "absolute",
+        top: "calc(100% + 4px)",
+        right: 0,
+        zIndex: 10,
+        minWidth: 168,
+        padding: 6,
+        background: "var(--bg-panel)",
+        border: "1px solid var(--border)",
+        borderRadius: 6,
+        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.25)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      <div>
+        <div style={{ fontSize: 10, color: "var(--text-dim)", padding: "2px 8px 4px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          {t("Status")}
+        </div>
+        {renderOption(STATUS_FILTER_OPTIONS, filters.status, (key) =>
+          onChange({ ...filters, status: key as StatusFilter }),
+        )}
+      </div>
+      <div>
+        <div style={{ fontSize: 10, color: "var(--text-dim)", padding: "2px 8px 4px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          {t("Deadline")}
+        </div>
+        {renderOption(DEADLINE_FILTER_OPTIONS, filters.deadline, (key) =>
+          onChange({ ...filters, deadline: key as DeadlineFilter }),
+        )}
+      </div>
+      <div style={{ borderTop: "1px solid var(--border)", paddingTop: 6, display: "flex", justifyContent: "flex-end" }}>
+        <button
+          onClick={reset}
+          style={{
+            padding: "2px 8px",
+            fontSize: 11,
+            background: "transparent",
+            border: "none",
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          {t("Reset filters")}
+        </button>
+      </div>
     </div>
   );
 }

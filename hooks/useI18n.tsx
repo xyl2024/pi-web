@@ -347,6 +347,11 @@ const ZH_TRANSLATIONS = {
   "Show preview": "显示预览",
   "Hide preview": "隐藏预览",
   "Failed to upload image": "图片上传失败",
+  "Filter": "过滤",
+  "Status": "状态",
+  "This week": "本周内",
+  "No deadline": "无截止日期",
+  "Reset filters": "重置过滤",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
