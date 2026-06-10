@@ -3,7 +3,7 @@
 import { useMemo, useState, useRef, useEffect, Fragment, cloneElement, createElement, isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useI18n } from "@/hooks/useI18n";
+import { useI18n, type Locale } from "@/hooks/useI18n";
 import { useTodos, type Todo } from "@/hooks/useTodos";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -61,10 +61,12 @@ function formatDateForInput(ts: number): string {
   return `${y}-${m}-${day}`;
 }
 
-function formatDeadline(deadline: number, now: number = Date.now()): { label: string; tone: DeadlineTone } {
+function formatDeadline(deadline: number, now: number = Date.now(), locale: Locale = "en"): { label: string; tone: DeadlineTone } {
   const todayStart = startOfDay(now);
   const todayEnd = todayStart + 24 * 60 * 60 * 1000 - 1;
-  const label = formatDateForInput(deadline);
+  const dateLabel = formatDateForInput(deadline);
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: "short" }).format(new Date(deadline));
+  const label = `${dateLabel} ${weekday}`;
   if (deadline < todayStart) return { label, tone: "overdue" };
   if (deadline <= todayEnd) return { label, tone: "today" };
   return { label, tone: "future" };
@@ -1129,7 +1131,7 @@ function DeadlineControl({
   inputRef: React.RefObject<HTMLInputElement | null>;
   onChange: (v: number | undefined) => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   // Always render a hidden-but-layout-present <input type="date">. The visible
   // button calls showPicker() on it so the user gets the native calendar in one
@@ -1193,10 +1195,10 @@ function DeadlineControl({
     );
   }
 
-  const { label, tone } = formatDeadline(todo.deadline);
+  const { label, tone } = formatDeadline(todo.deadline, Date.now(), locale);
   const color = todo.done
     ? "var(--text-dim)"
-    : tone === "overdue" ? "#ef4444" : tone === "today" ? "var(--accent)" : "var(--text-muted)";
+    : tone === "overdue" ? "#ef4444" : tone === "today" ? "var(--accent)" : "#f97316";
   const suffix = todo.done || tone === "future"
     ? ""
     : tone === "overdue" ? ` (${t("Overdue")})` : ` (${t("Due today")})`;
