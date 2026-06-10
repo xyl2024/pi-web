@@ -31,6 +31,7 @@ import {
 import { searchKeymap, highlightSelectionMatches, search } from "@codemirror/search";
 import { tags as t } from "@lezer/highlight";
 import { useI18n } from "@/hooks/useI18n";
+import { useToast } from "./Toast";
 
 interface Props {
   defaultValue: string;
@@ -141,6 +142,60 @@ function insertLink(view: EditorView): boolean {
   return true;
 }
 
+// Upload clipboard image(s) to /api/todo-images and insert `![](url)` lines
+// at the current cursor position. Errors are surfaced via onError (toast).
+// The view may have been destroyed while uploads were in flight — guard.
+async function uploadAndInsertImages(
+  view: EditorView,
+  files: File[],
+  onError: (message: string) => void,
+): Promise<void> {
+  if (files.length === 0) return;
+
+  const results = await Promise.all(
+    files.map(async (file, idx): Promise<{ idx: number; url?: string; err?: string }> => {
+      try {
+        const fd = new FormData();
+        fd.append("file", file, file.name || `pasted-${idx + 1}.png`);
+        const res = await fetch("/api/todo-images", { method: "POST", body: fd });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({} as { error?: string }));
+          throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
+        const data = (await res.json()) as { url: string };
+        return { idx, url: data.url };
+      } catch (err) {
+        return { idx, err: err instanceof Error ? err.message : String(err) };
+      }
+    }),
+  );
+
+  // Reorder by original index so insertion order matches the user's paste.
+  results.sort((a, b) => a.idx - b.idx);
+  const errors = new Set<string>();
+  const urls: string[] = [];
+  for (const r of results) {
+    if (r.url) urls.push(r.url);
+    else if (r.err) errors.add(r.err);
+  }
+  for (const err of errors) onError(err);
+  if (urls.length === 0) return;
+
+  const insert = urls.map((u) => `![](${u})`).join("\n") + "\n";
+  const sel = view.state.selection.main;
+  try {
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert },
+      selection: { anchor: sel.from + insert.length },
+      scrollIntoView: true,
+      userEvent: "input.paste",
+    });
+    view.focus();
+  } catch {
+    // view was destroyed while uploads were in flight (user cancelled)
+  }
+}
+
 export function MarkdownEditorInner({
   defaultValue,
   onSave,
@@ -150,6 +205,7 @@ export function MarkdownEditorInner({
   className,
 }: Props) {
   const { t } = useI18n();
+  const { show: showToast } = useToast();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -203,6 +259,21 @@ export function MarkdownEditorInner({
           ...historyKeymap,
           indentWithTab,
         ]),
+        EditorView.domEventHandlers({
+          paste(event, view) {
+            const items = Array.from(event.clipboardData?.items ?? []);
+            const imageItems = items.filter((it) => it.type.startsWith("image/"));
+            if (imageItems.length === 0) return false; // let default paste handle non-image content
+            event.preventDefault();
+            const files = imageItems
+              .map((it) => it.getAsFile())
+              .filter((f): f is File => !!f);
+            void uploadAndInsertImages(view, files, (msg) =>
+              showToast({ kind: "error", message: t("Failed to upload image") + `: ${msg}` }),
+            );
+            return true;
+          },
+        }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             // Debounce the live preview to avoid re-rendering on every keystroke.

@@ -346,6 +346,7 @@ const ZH_TRANSLATIONS = {
   "Markdown supported": "支持 Markdown 语法",
   "Show preview": "显示预览",
   "Hide preview": "隐藏预览",
+  "Failed to upload image": "图片上传失败",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

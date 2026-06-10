@@ -210,6 +210,15 @@ pre, code {
 }
 .markdown-body th { background: var(--bg-panel); font-weight: 600; }
 .markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+.markdown-body img[src*="/api/todo-images/"] {
+  border: 1px solid var(--border);
+}
 
 /* File viewer markdown preview — larger headings */
 .markdown-file-preview h1 { font-size: 1.8em; }
