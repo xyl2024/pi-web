@@ -352,6 +352,13 @@ const ZH_TRANSLATIONS = {
   "This week": "本周内",
   "No deadline": "无截止日期",
   "Reset filters": "重置过滤",
+  "Pi agent tools": "Pi Agent 工具",
+  "Agent tools settings": "设置暴露给 Pi Agent 的待办工具",
+  "Tool: todo_list": "查看待办",
+  "Tool: todo_create": "新建待办",
+  "Tool: todo_update": "更新待办",
+  "Tool: todo_delete": "删除待办",
+  "Applies to new sessions": "将在新会话中生效",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

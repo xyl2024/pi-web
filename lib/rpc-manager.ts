@@ -4,6 +4,8 @@ import type { AgentSessionLike, ToolInfo } from "./pi-types";
 import { createLogger, elapsedMs } from "./logger";
 import { readConfig, applyReplacements } from "./config";
 import { recordRequest, recordResponse } from "./payload-capture";
+import { buildTodoTools } from "./todo-tools";
+import { readEnabledTodoTools } from "./todo-tools-config";
 
 const log = createLogger("rpc-manager");
 type ToolSelection = string[] | "all";
@@ -356,6 +358,7 @@ export async function startRpcSession(
       agentDir,
       sessionManager,
       resourceLoader,
+      customTools: buildTodoTools(readEnabledTodoTools()),
     });
     capturedSessionId = inner.sessionId as string;
 
