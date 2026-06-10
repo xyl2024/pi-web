@@ -343,6 +343,9 @@ const ZH_TRANSLATIONS = {
   "Due today": "今天到期",
   "Pick a date": "选择日期",
   "Deadline removed": "已清除截止日期",
+  "Markdown supported": "支持 Markdown 语法",
+  "Show preview": "显示预览",
+  "Hide preview": "隐藏预览",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

@@ -8,6 +8,7 @@ import { useTodos, type Todo } from "@/hooks/useTodos";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
+import { MarkdownEditor } from "@/components/MarkdownEditor";
 
 type Filter = "active" | "all" | "done";
 
@@ -529,7 +530,6 @@ function TodoItem({
     setEditingDesc(false);
   };
 
-  const descRows = Math.min(8, Math.max(2, (todo.description ?? "").split("\n").length));
   const hasLongDescription = (todo.description ?? "").split("\n").length > 5;
 
   return (
@@ -611,29 +611,11 @@ function TodoItem({
         />
       </div>
       {editingDesc ? (
-        <textarea
-          autoFocus
+        <MarkdownEditor
           defaultValue={todo.description ?? ""}
-          rows={descRows}
-          onBlur={(e) => commitDescription(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); }
-          }}
+          onSave={commitDescription}
+          onCancel={() => setEditingDesc(false)}
           placeholder={t("Add description...")}
-          style={{
-            width: "100%",
-            padding: "4px 6px",
-            fontSize: 12,
-            background: "var(--bg-selected)",
-            border: "1px solid var(--accent)",
-            borderRadius: 3,
-            outline: "none",
-            resize: "vertical",
-            color: "var(--text)",
-            fontFamily: "var(--font-mono)",
-            lineHeight: 1.5,
-            marginLeft: 22,
-          }}
         />
       ) : (
         <div style={{ marginLeft: 22 }}>
