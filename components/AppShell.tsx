@@ -143,10 +143,17 @@ export function AppShell() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
-      // Ctrl+B — toggle left sidebar
+      const active = document.activeElement;
+      const isEditable =
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        (active instanceof HTMLElement && active.isContentEditable);
+      // Ctrl+B — toggle left sidebar (skipped when an editor is focused)
       if (mod && e.key === "b" && !e.altKey) {
-        e.preventDefault();
-        setSidebarOpen((v) => !v);
+        if (!isEditable) {
+          e.preventDefault();
+          setSidebarOpen((v) => !v);
+        }
         return;
       }
       // Ctrl+Alt+B — toggle right sidebar
@@ -155,10 +162,12 @@ export function AppShell() {
         setRightPanelState((v) => v === "closed" ? "normal" : "closed");
         return;
       }
-      // Ctrl+K — command palette
+      // Ctrl+K — command palette (skipped when an editor is focused)
       if (mod && e.key === "k") {
-        e.preventDefault();
-        setPaletteOpen((v) => !v);
+        if (!isEditable) {
+          e.preventDefault();
+          setPaletteOpen((v) => !v);
+        }
         return;
       }
       // Space — focus chat input when not already focused
@@ -168,11 +177,6 @@ export function AppShell() {
         !paletteOpen &&
         chatInputRef.current
       ) {
-        const active = document.activeElement;
-        const isEditable =
-          active instanceof HTMLInputElement ||
-          active instanceof HTMLTextAreaElement ||
-          (active instanceof HTMLElement && active.isContentEditable);
         if (!isEditable) {
           e.preventDefault();
           chatInputRef.current.focus();

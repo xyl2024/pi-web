@@ -93,6 +93,54 @@ const PREVIEW_MIN = 40;
 const RATIO_MIN = 0.2;
 const RATIO_MAX = 0.8;
 
+// Wrap the current selection (or insert at cursor) with a marker.
+// Empty selection → insert marker*2, place cursor in the middle.
+// Non-empty     → wrap and select the new wrapped text.
+function wrapSelection(view: EditorView, marker: string): boolean {
+  const sel = view.state.selection.main;
+  if (sel.empty) {
+    const pos = sel.from;
+    view.dispatch({
+      changes: { from: pos, to: pos, insert: marker + marker },
+      selection: { anchor: pos + marker.length },
+      scrollIntoView: true,
+      userEvent: "input.format",
+    });
+  } else {
+    const text = view.state.sliceDoc(sel.from, sel.to);
+    const insert = marker + text + marker;
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert },
+      selection: { anchor: sel.from, head: sel.from + insert.length },
+      scrollIntoView: true,
+      userEvent: "input.format",
+    });
+  }
+  view.focus();
+  return true;
+}
+
+// Insert [text](url) at the current selection; prompt for the URL.
+// Empty selection → insert "[](url)" with cursor inside the brackets.
+// Non-empty      → wrap selected text as the link text, prompt for URL.
+function insertLink(view: EditorView): boolean {
+  const sel = view.state.selection.main;
+  const text = sel.empty ? "" : view.state.sliceDoc(sel.from, sel.to);
+  const url = window.prompt("URL", "https://");
+  if (url === null) return true; // user cancelled — no change
+  const insert = `[${text}](${url})`;
+  view.dispatch({
+    changes: { from: sel.from, to: sel.to, insert },
+    selection: text.length > 0
+      ? { anchor: sel.from, head: sel.from + insert.length }   // select whole [text](url)
+      : { anchor: sel.from + 1, head: sel.from + 1 },           // cursor inside [ ]
+    scrollIntoView: true,
+    userEvent: "input.format",
+  });
+  view.focus();
+  return true;
+}
+
 export function MarkdownEditorInner({
   defaultValue,
   onSave,
@@ -145,6 +193,11 @@ export function MarkdownEditorInner({
           { key: "Mod-s", preventDefault: true, run: () => { handleSave(); return true; } },
           { key: "Mod-Enter", preventDefault: true, run: () => { handleSave(); return true; } },
           { key: "Escape", preventDefault: true, run: () => { handleCancel(); return true; } },
+          { key: "Mod-b",       preventDefault: true, run: (v) => wrapSelection(v, "**") },
+          { key: "Mod-i",       preventDefault: true, run: (v) => wrapSelection(v, "*") },
+          { key: "Mod-Shift-x", preventDefault: true, run: (v) => wrapSelection(v, "~~") },
+          { key: "Mod-`",       preventDefault: true, run: (v) => wrapSelection(v, "`") },
+          { key: "Mod-k",       preventDefault: true, run: insertLink },
           ...defaultKeymap,
           ...searchKeymap,
           ...historyKeymap,
