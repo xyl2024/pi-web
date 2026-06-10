@@ -1133,6 +1133,7 @@ export function AppShell() {
               onSessionStatsChange={handleSessionStatsChange}
               onContextUsageChange={handleContextUsageChange}
               onNewSessionRequest={handleSlashNew}
+              onSelectSession={handleSelectSession}
             />
           ) : showPlaceholder ? (
             activeCwd ? (

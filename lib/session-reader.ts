@@ -12,8 +12,11 @@ function getSessionsDir(): string {
   return `${getAgentDir()}/sessions`;
 }
 
-export async function listAllSessions(): Promise<SessionInfo[]> {
-  const piSessions: PiSessionInfo[] = await SessionManager.listAll();
+export async function listAllSessions(cwd?: string): Promise<SessionInfo[]> {
+  // When cwd is provided, delegate to pi-mono's per-dir scanner so we reuse its
+  // header/message parsing. Falls back to scanning every workspace otherwise.
+  const targetDir = cwd ? path.join(getSessionsDir(), workspaceSlug(cwd)) : undefined;
+  const piSessions: PiSessionInfo[] = await SessionManager.listAll(targetDir);
   const pathToId = new Map<string, string>();
   for (const s of piSessions) pathToId.set(s.path, s.id);
 

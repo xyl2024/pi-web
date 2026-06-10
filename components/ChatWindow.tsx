@@ -5,6 +5,7 @@ import type { AgentMessage, SessionInfo, SessionTreeNode, AgentsFile } from "@/l
 import { MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { Tooltip } from "./Tooltip";
+import { SessionHeatmap } from "./SessionHeatmap";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
 import { useAudio } from "@/hooks/useAudio";
@@ -34,6 +35,7 @@ interface Props {
   /** Called after the scroll-to-entry navigation completes */
   onScrollComplete?: () => void;
   onNewSessionRequest?: () => void;
+  onSelectSession?: (session: SessionInfo) => void;
 }
 
 function phaseLabel(phase: AgentPhase, t: ReturnType<typeof useI18n>["t"]): string {
@@ -125,7 +127,7 @@ function Typewriter({ phrases }: { phrases: string[] }) {
   );
 }
 
-function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onAgentsFilesChange, onSessionStatsChange, onContextUsageChange, scrollToEntryId, onScrollComplete, onNewSessionRequest }: Props) {
+function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onAgentsFilesChange, onSessionStatsChange, onContextUsageChange, scrollToEntryId, onScrollComplete, onNewSessionRequest, onSelectSession }: Props) {
   const { locale, t } = useI18n();
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
 
@@ -466,6 +468,9 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       {isEmptyNew ? (
         <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-8">
           <div className="w-full max-w-[820px]">
+            {newSessionCwd && (
+              <SessionHeatmap cwd={newSessionCwd} onOpenSession={onSelectSession} />
+            )}
             <div
               className="mb-3"
               style={{

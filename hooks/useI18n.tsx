@@ -359,6 +359,13 @@ const ZH_TRANSLATIONS = {
   "Tool: todo_update": "更新待办",
   "Tool: todo_delete": "删除待办",
   "Applies to new sessions": "将在新会话中生效",
+  "(untitled)": "（无标题）",
+  "No messages yet": "暂无消息",
+  "No activity in this workspace yet": "此工作区暂无活动",
+  "Couldn't load activity": "无法加载活动数据",
+  "session": "个会话",
+  "sessions": "个会话",
+  "+{n} more": "还有 {n} 条",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
