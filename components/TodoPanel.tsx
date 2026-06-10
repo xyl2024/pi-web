@@ -9,6 +9,7 @@ import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { extractImageGallery, MarkdownImage, ImageLightbox } from "./ImageLightbox";
 
 type Filter = "active" | "all" | "done";
 
@@ -437,6 +438,7 @@ function TodoItem({
   const [editingDesc, setEditingDesc] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [titleDraft, setTitleDraft] = useState(todo.title);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const deadlineInputRef = useRef<HTMLInputElement | null>(null);
 
   const openDeadlinePicker = () => {
@@ -446,8 +448,27 @@ function TodoItem({
     else el.focus();
   };
 
+  // Gallery of every image reference in the description, for lightbox
+  // prev/next navigation. Todo image URLs are already absolute
+  // (/api/todo-images/...) so we use the identity resolver.
+  const gallery = useMemo(
+    () => extractImageGallery(todo.description ?? ""),
+    [todo.description],
+  );
+
   const markdownComponents = useMemo(() => {
-    if (!searchTerm) return undefined;
+    const imgComp = (props: { src?: string | Blob; alt?: string }) => (
+      <MarkdownImage
+        src={props.src}
+        alt={props.alt}
+        resolveSrc={(s) => s}
+        onImageClick={(src) => {
+          const idx = gallery.findIndex((g) => g.src === src);
+          if (idx >= 0) setLightboxIndex(idx);
+        }}
+      />
+    );
+    if (!searchTerm) return { img: imgComp };
     const wrap = (children: ReactNode) => highlightDeep(children, searchTerm);
     const passthrough = (Tag: string) => {
       const Component = (props: { children?: ReactNode }) => {
@@ -458,6 +479,7 @@ function TodoItem({
       return Component;
     };
     return {
+      img: imgComp,
       p: passthrough("p"),
       li: passthrough("li"),
       h1: passthrough("h1"),
@@ -473,7 +495,7 @@ function TodoItem({
       a: passthrough("a"),
       code: passthrough("code"),
     };
-  }, [searchTerm]);
+  }, [searchTerm, gallery]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -671,6 +693,14 @@ function TodoItem({
             </button>
           )}
         </div>
+      )}
+      {lightboxIndex !== null && gallery.length > 0 && (
+        <ImageLightbox
+          images={gallery}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+        />
       )}
     </div>
   );
