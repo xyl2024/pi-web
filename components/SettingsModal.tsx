@@ -85,6 +85,10 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     [config]
   );
 
+  const handleGithubUsernameChange = useCallback((value: string) => {
+    setConfig((prev) => (prev ? { ...prev, github_username: value } : prev));
+  }, []);
+
   // Dirty check — compare current config against the snapshot from initial load
   const isDirty = !!config && !!originalConfig && JSON.stringify(config) !== JSON.stringify(originalConfig);
 
@@ -276,7 +280,27 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             </button>
           </div>
 
-          {/* ── Section 2: WeChat Connection ── */}
+          {/* ── Section 2: GitHub ── */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", margin: "0 0 4px 0" }}>{t("GitHub")}</h3>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 14px 0", lineHeight: 1.5 }}>
+              {t("Used to render your contribution graph on the new-session page.")}
+            </p>
+            <input
+              type="text"
+              placeholder={t("GitHub username")}
+              value={config.github_username}
+              onChange={(e) => handleGithubUsernameChange(e.target.value)}
+              style={{
+                width: "100%", height: 32, padding: "4px 10px",
+                background: "var(--bg-panel)", border: "1px solid var(--border)",
+                borderRadius: 6, color: "var(--text)", fontSize: 13,
+                outline: "none",
+              }}
+            />
+          </div>
+
+          {/* ── Section 3: WeChat Connection ── */}
           <div style={{ marginBottom: 0 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", margin: "0 0 4px 0" }}>{t("WeChat Connection")}</h3>
             <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 14px 0", lineHeight: 1.5 }}>

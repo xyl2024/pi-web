@@ -6,6 +6,7 @@ import { MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { Tooltip } from "./Tooltip";
 import { SessionHeatmap } from "./SessionHeatmap";
+import { GithubHeatmap, GithubHeatmapPlaceholder } from "./GithubHeatmap";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
 import { useAudio } from "@/hooks/useAudio";
@@ -157,6 +158,20 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
 
   // Tool call stats hook
   const { snapshot, isDrawerOpen, toggleDrawer } = useToolCallStats(messages);
+
+  // ── GitHub username from ~/.pi-web/config.yaml (one-shot fetch on mount) ──
+  const [githubUsername, setGithubUsername] = useState<string>("");
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/settings")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: { github_username?: string } | null) => {
+        if (cancelled || !d) return;
+        setGithubUsername((d.github_username ?? "").trim());
+      })
+      .catch(() => { /* ignore — heatmap hides itself if username is empty */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Running summary for the drawer toggle button
   const runningSummary = agentPhase?.kind === "running_tools" && agentPhase.tools.length > 0
@@ -470,6 +485,11 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
           <div className="w-full max-w-[820px]">
             {newSessionCwd && (
               <SessionHeatmap cwd={newSessionCwd} onOpenSession={onSelectSession} />
+            )}
+            {newSessionCwd && (
+              githubUsername
+                ? <GithubHeatmap username={githubUsername} />
+                : <GithubHeatmapPlaceholder />
             )}
             <div
               className="mb-3"

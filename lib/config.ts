@@ -18,6 +18,7 @@ export interface SystemPromptReplacements {
 
 export interface PiWebConfig {
   system_prompt_replacements: SystemPromptReplacements;
+  github_username: string;
 }
 
 const DEFAULT_CONFIG: PiWebConfig = {
@@ -25,6 +26,7 @@ const DEFAULT_CONFIG: PiWebConfig = {
     enabled: false,
     rules: [],
   },
+  github_username: "",
 };
 
 const CONFIG_DIR = join(homedir(), ".pi-web");
@@ -95,6 +97,7 @@ export function readConfig(): PiWebConfig {
         enabled: sprObj.enabled as boolean,
         rules,
       },
+      github_username: typeof cfg.github_username === "string" ? cfg.github_username : "",
     };
   } catch (err) {
     log.warn("failed to read config, resetting to defaults", { error: String(err) });
