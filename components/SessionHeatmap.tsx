@@ -80,14 +80,14 @@ export function SessionHeatmap({ cwd, onOpenSession }: Props) {
 
   // Build cells column-major (one column per week, 7 rows of days)
   const cells = useMemo(() => {
-    const out: Array<{ date: Date; key: string; count: number; future: boolean; list: SessionInfo[] }> = [];
+    const out: Array<{ date: Date; key: string; col: number; row: number; count: number; future: boolean; list: SessionInfo[] }> = [];
     for (let c = 0; c < COLS; c++) {
       for (let r = 0; r < ROWS; r++) {
         const d = new Date(start);
         d.setDate(start.getDate() + c * 7 + r);
         const key = dateKey(d);
         const list = sessionsByDay.get(key) ?? [];
-        out.push({ date: d, key, count: list.length, future: d > today, list });
+        out.push({ date: d, key, col: c, row: r, count: list.length, future: d > today, list });
       }
     }
     return out;
@@ -188,6 +188,7 @@ export function SessionHeatmap({ cwd, onOpenSession }: Props) {
       </div>
 
       <div
+        data-heatmap="sessions"
         style={{
           display: "grid",
           gridTemplateColumns: `repeat(${COLS}, ${CELL}px)`,
@@ -199,6 +200,10 @@ export function SessionHeatmap({ cwd, onOpenSession }: Props) {
         {cells.map((cell) => {
           const cellEl = (
             <div
+              data-cell=""
+              data-col={cell.col}
+              data-row={cell.row}
+              data-level={Math.min(cell.count, 4)}
               onClick={() => {
                 if (cell.list.length === 0) return;
                 setSelectedDay((cur) => (cur === cell.key ? null : cell.key));

@@ -84,7 +84,7 @@ export function GithubHeatmap({ username }: Props) {
 
   // Build cells column-major (one column per week, 7 rows of days)
   const cells = useMemo(() => {
-    const out: Array<{ date: Date; key: string; level: number; count: number; future: boolean }> = [];
+    const out: Array<{ date: Date; key: string; col: number; row: number; level: number; count: number; future: boolean }> = [];
     for (let c = 0; c < COLS; c++) {
       for (let r = 0; r < ROWS; r++) {
         const d = new Date(start);
@@ -94,6 +94,8 @@ export function GithubHeatmap({ username }: Props) {
         out.push({
           date: d,
           key,
+          col: c,
+          row: r,
           level: c0?.level ?? 0,
           count: c0?.count ?? 0,
           future: d > today,
@@ -203,6 +205,7 @@ export function GithubHeatmap({ username }: Props) {
       </div>
 
       <div
+        data-heatmap="github"
         style={{
           display: "grid",
           gridTemplateColumns: `repeat(${COLS}, ${CELL}px)`,
@@ -214,6 +217,10 @@ export function GithubHeatmap({ username }: Props) {
         {cells.map((cell) => {
           const cellEl = (
             <div
+              data-cell=""
+              data-col={cell.col}
+              data-row={cell.row}
+              data-level={cell.level}
               onClick={() => {
                 if (cell.future) return;
                 setSelectedDay((cur) => (cur === cell.key ? null : cell.key));

@@ -17,6 +17,8 @@ import { ToolCallStatsProvider, useToolCallStatsEmit } from "@/hooks/ToolCallSta
 import { useToolCallStats } from "@/hooks/useToolCallStats";
 import { ToolCallStatsDrawer } from "./ToolCallStatsDrawer";
 import { SessionSearch } from "./SessionSearch";
+import { useIdle } from "@/hooks/useIdle";
+import { SnakeGame } from "./SnakeGame";
 
 interface Props {
   session: SessionInfo | null;
@@ -358,6 +360,12 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
 
   const isEmptyNew = isNew && messages.length === 0 && !streamState.isStreaming && !agentRunning;
 
+  // ── Idle snake game ─────────────────────────────────────────────────
+  // Triggers 10s after the last click on a heatmap; once triggered, the
+  // snake keeps playing until isEmptyNew flips false (user sends a message)
+  // or all bright cells are eaten.
+  const isIdle = useIdle(10_000, isEmptyNew);
+
   const availableThinkingLevels = displayModelValue
     ? (modelThinkingLevels[`${displayModelValue.provider}:${displayModelValue.modelId}`] ?? null)
     : null;
@@ -482,7 +490,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
 
       {isEmptyNew ? (
         <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-8">
-          <div className="w-full max-w-[820px]">
+          <div className="relative w-full max-w-[820px]">
             {newSessionCwd && (
               <SessionHeatmap cwd={newSessionCwd} onOpenSession={onSelectSession} />
             )}
@@ -520,6 +528,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
               </div>
             </div>
             {chatInputElement}
+            <SnakeGame enabled={isEmptyNew && isIdle} />
           </div>
         </div>
       ) : (
