@@ -61,15 +61,16 @@ function formatDateForInput(ts: number): string {
   return `${y}-${m}-${day}`;
 }
 
-function formatDeadline(deadline: number, now: number = Date.now(), locale: Locale = "en"): { label: string; tone: DeadlineTone } {
+function formatDeadline(deadline: number, now: number = Date.now(), locale: Locale = "en"): { label: string; tone: DeadlineTone; daysAhead: number } {
   const todayStart = startOfDay(now);
   const todayEnd = todayStart + 24 * 60 * 60 * 1000 - 1;
   const dateLabel = formatDateForInput(deadline);
   const weekday = new Intl.DateTimeFormat(locale, { weekday: "short" }).format(new Date(deadline));
   const label = `${dateLabel} ${weekday}`;
-  if (deadline < todayStart) return { label, tone: "overdue" };
-  if (deadline <= todayEnd) return { label, tone: "today" };
-  return { label, tone: "future" };
+  if (deadline < todayStart) return { label, tone: "overdue", daysAhead: 0 };
+  if (deadline <= todayEnd) return { label, tone: "today", daysAhead: 0 };
+  const daysAhead = Math.round((startOfDay(deadline) - todayStart) / (24 * 60 * 60 * 1000));
+  return { label, tone: "future", daysAhead };
 }
 
 function CalendarIcon({ size = 11 }: { size?: number }) {
@@ -1195,13 +1196,15 @@ function DeadlineControl({
     );
   }
 
-  const { label, tone } = formatDeadline(todo.deadline, Date.now(), locale);
+  const { label, tone, daysAhead } = formatDeadline(todo.deadline, Date.now(), locale);
   const color = todo.done
     ? "var(--text-dim)"
     : tone === "overdue" ? "#ef4444" : tone === "today" ? "var(--accent)" : "#f97316";
-  const suffix = todo.done || tone === "future"
+  const suffix = todo.done
     ? ""
-    : tone === "overdue" ? ` (${t("Overdue")})` : ` (${t("Due today")})`;
+    : tone === "overdue" ? ` (${t("Overdue")})`
+    : tone === "today"   ? ` (${t("Due today")})`
+    : ` (${t("In {n} days").replace("{n}", String(daysAhead))})`;
   return (
     <span style={{ position: "relative", display: "inline-flex" }}>
       {hiddenInput}

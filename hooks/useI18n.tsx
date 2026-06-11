@@ -341,6 +341,7 @@ const ZH_TRANSLATIONS = {
   "Clear deadline": "清除截止日期",
   "Overdue": "已逾期",
   "Due today": "今天到期",
+  "In {n} days": "{n} 天后",
   "Pick a date": "选择日期",
   "Deadline removed": "已清除截止日期",
   "Markdown supported": "支持 Markdown 语法",
