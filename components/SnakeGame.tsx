@@ -66,37 +66,57 @@ const REVERSE: Record<Direction, Direction> = {
 
 const ALL_DIRS: Direction[] = ["up", "down", "left", "right"];
 
-/** Greedy step toward a target cell. Prefer axis that reduces Manhattan
- *  distance, with current direction as a tie-breaker. Never 180° reverse.
- *  Falls back to any non-reverse valid direction, then to reverse. */
-function chooseDirection(
+function posKey(col: number, logicalRow: number): string {
+  return `${col},${logicalRow}`;
+}
+
+/** BFS from the snake's head to the nearest reachable bright + uneaten cell.
+ *  The snake is allowed to pass through its own body (no obstacle check) — the
+ *  only constraint beyond the board envelope is "no instant 180° reverse" when
+ *  the snake is longer than 1 segment, which prevents a visually jarring snap.
+ *  Returns the first step direction along the shortest path, or null when no
+ *  bright + uneaten cell exists at all. */
+function findNextStep(
   head: Segment,
-  target: { col: number; logicalRow: number },
   currentDir: Direction,
-): Direction {
-  const dc = target.col - head.col;
-  const dr = target.logicalRow - head.logicalRow;
-  const preferred: Direction[] = [];
-  if (dc > 0) preferred.push("right");
-  else if (dc < 0) preferred.push("left");
-  if (dr > 0) preferred.push("down");
-  else if (dr < 0) preferred.push("up");
-  // Keep current direction at the front when possible.
-  if (currentDir !== REVERSE[currentDir]) {
-    const idx = preferred.indexOf(currentDir);
-    if (idx >= 0) preferred.splice(idx, 1);
-    preferred.unshift(currentDir);
-  }
-  for (const dir of preferred) {
-    const next = step(head, dir);
-    if (isValidPos(next.col, next.logicalRow)) return dir;
-  }
+  snake: Segment[],
+  board: Map<string, CellInfo>,
+  eaten: Set<string>,
+): Direction | null {
+  const headKey = posKey(head.col, head.logicalRow);
+  const visited = new Set<string>([headKey]);
+  // Queue holds {col, logicalRow, firstDir}; uses a head index to avoid the
+  // O(n) cost of Array.shift on every pop.
+  type Node = { col: number; logicalRow: number; firstDir: Direction };
+  const queue: Node[] = [];
+  const allowReverse = snake.length <= 1;
   for (const dir of ALL_DIRS) {
-    if (dir === REVERSE[currentDir]) continue;
+    if (!allowReverse && dir === REVERSE[currentDir]) continue;
     const next = step(head, dir);
-    if (isValidPos(next.col, next.logicalRow)) return dir;
+    if (!isValidPos(next.col, next.logicalRow)) continue;
+    const k = posKey(next.col, next.logicalRow);
+    if (visited.has(k)) continue;
+    visited.add(k);
+    queue.push({ col: next.col, logicalRow: next.logicalRow, firstDir: dir });
   }
-  return REVERSE[currentDir];
+  for (let qh = 0; qh < queue.length; qh++) {
+    const node = queue[qh];
+    const hm: HeatmapKind = node.logicalRow >= ROWS_PER_HEATMAP ? "github" : "sessions";
+    const cr = node.logicalRow >= ROWS_PER_HEATMAP ? node.logicalRow - ROWS_PER_HEATMAP : node.logicalRow;
+    const cell = board.get(cellKey(hm, node.col, cr));
+    if (cell && cell.level >= 1 && !eaten.has(cellKey(hm, node.col, cr))) {
+      return node.firstDir;
+    }
+    for (const dir of ALL_DIRS) {
+      const next = step({ col: node.col, logicalRow: node.logicalRow }, dir);
+      if (!isValidPos(next.col, next.logicalRow)) continue;
+      const k = posKey(next.col, next.logicalRow);
+      if (visited.has(k)) continue;
+      visited.add(k);
+      queue.push({ col: next.col, logicalRow: next.logicalRow, firstDir: node.firstDir });
+    }
+  }
+  return null;
 }
 
 function discoverCells(): Map<string, CellInfo> {
@@ -140,10 +160,6 @@ export function SnakeGame({ enabled }: Props) {
   const eatenRef = useRef<Set<string>>(new Set());
   const flashingRef = useRef<Set<string>>(new Set());
   const directionRef = useRef<Direction>("right");
-  // Current chase target (logical coords). Replaced with a fresh random pick
-  // whenever the previous target is eaten (or otherwise leaves the
-  // bright+uneaten set).
-  const targetRef = useRef<{ col: number; logicalRow: number } | null>(null);
   const containerRectRef = useRef<DOMRect | null>(null);
 
   // `phase` is the only state — drives the game-tick effect.
@@ -166,7 +182,6 @@ export function SnakeGame({ enabled }: Props) {
         snakeRef.current = [];
         eatenRef.current = new Set();
         flashingRef.current = new Set();
-        targetRef.current = null;
         setPhase("dormant");
       }, FADE_MS);
       return () => window.clearTimeout(t);
@@ -181,7 +196,6 @@ export function SnakeGame({ enabled }: Props) {
         eatenRef.current = new Set();
         flashingRef.current = new Set();
         directionRef.current = "right";
-        targetRef.current = null;
         setPhase("playing");
         bump();
         return true;
@@ -267,44 +281,20 @@ export function SnakeGame({ enabled }: Props) {
     if (s_snake.length === 0) return;
     const head = s_snake[s_snake.length - 1];
 
-    // Maintain (or pick) a chase target. The target is a random bright
-    // uneaten cell — we keep it until the snake eats it, then re-roll.
-    let target: { col: number; logicalRow: number } | null = targetRef.current;
-    if (target) {
-      const c = s_board.get(cellKey(
-        target.logicalRow >= ROWS_PER_HEATMAP ? "github" : "sessions",
-        target.col,
-        target.logicalRow >= ROWS_PER_HEATMAP ? target.logicalRow - ROWS_PER_HEATMAP : target.logicalRow,
-      ));
-      if (!c || c.level < 1 || s_eaten.has(cellKey(c.heatmap, c.col, c.cellRow))) {
-        target = null;
-      }
+    // Pick the next step: BFS to the nearest reachable bright + uneaten cell,
+    // routing around the body. Returns null when there's nothing reachable —
+    // either all bright cells have been eaten or the snake has trapped itself.
+    const dir = findNextStep(head, directionRef.current, s_snake, s_board, s_eaten);
+    if (dir === null) {
+      setPhase("fadingOut");
+      window.setTimeout(() => {
+        snakeRef.current = [];
+        eatenRef.current = new Set();
+        flashingRef.current = new Set();
+        setPhase("dormant");
+      }, FADE_MS);
+      return;
     }
-    if (!target) {
-      const candidates: CellInfo[] = [];
-      s_board.forEach((c) => {
-        const k = cellKey(c.heatmap, c.col, c.cellRow);
-        if (c.level >= 1 && !s_eaten.has(k)) candidates.push(c);
-      });
-      if (candidates.length === 0) {
-        // All bright cells eaten → fade out.
-        setPhase("fadingOut");
-        targetRef.current = null;
-        window.setTimeout(() => {
-          snakeRef.current = [];
-          eatenRef.current = new Set();
-          flashingRef.current = new Set();
-          targetRef.current = null;
-          setPhase("dormant");
-        }, FADE_MS);
-        return;
-      }
-      const pick = candidates[Math.floor(Math.random() * candidates.length)];
-      target = { col: pick.col, logicalRow: pick.logicalRow };
-      targetRef.current = target;
-    }
-
-    const dir = chooseDirection(head, target, directionRef.current);
     directionRef.current = dir;
 
     const nextSeg = step(head, dir);
@@ -358,7 +348,11 @@ export function SnakeGame({ enabled }: Props) {
       ref={containerRef}
       style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 5, opacity, transition }}
     >
-      {/* Eaten cells: paint with the page background so the cell "disappears". */}
+      {/* Eaten cells: paint with the accent's complementary hue so they stay
+          clearly visible and distinct from both live heatmap cells (accent-
+          tinted) and the snake itself (solid accent). Uses CSS relative color
+          syntax to derive the complement from `--accent` at run time, keeping
+          the effect theme-aware. */}
       {Array.from(eatenRef.current).map((k) => {
         const cell = boardRef.current.get(k);
         if (!cell) return null;
@@ -372,7 +366,7 @@ export function SnakeGame({ enabled }: Props) {
               top: r.top - rect.top,
               width: r.width,
               height: r.height,
-              background: "var(--bg)",
+              background: "hsl(from var(--accent) calc(h + 180) s l)",
               borderRadius: 2,
             }}
           />
@@ -401,7 +395,11 @@ export function SnakeGame({ enabled }: Props) {
         );
       })}
 
-      {/* Snake body. */}
+      {/* Snake body. Painted with the accent's complementary hue so the snake
+          (= the leading edge of its eaten trail) visually merges with the
+          already-eaten cells underneath instead of covering them in accent —
+          which previously made the trail "disappear" wherever the body lay.
+          Head uses `--accent-hover`'s complementary hue for a subtle highlight. */}
       {snakeRef.current.map((seg, i) => {
         const hm = segmentHeatmap(seg);
         const cr = segmentCellRow(seg);
@@ -418,7 +416,9 @@ export function SnakeGame({ enabled }: Props) {
               top: r.top - rect.top,
               width: r.width,
               height: r.height,
-              background: isHead ? "var(--accent-hover)" : "var(--accent)",
+              background: isHead
+                ? "hsl(from var(--accent-hover) calc(h + 180) s l)"
+                : "hsl(from var(--accent) calc(h + 180) s l)",
               borderRadius: 2,
               transition: `left ${SEGMENT_TRANSITION_MS}ms ease, top ${SEGMENT_TRANSITION_MS}ms ease`,
               boxShadow: isHead ? "0 0 0 1px var(--bg)" : undefined,
