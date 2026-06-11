@@ -192,6 +192,9 @@ export function TodoPanel() {
           (x.description ?? "").toLowerCase().includes(term);
       })
       .sort((a, b) => {
+        if (filters.status === "all" && a.done !== b.done) {
+          return a.done ? 1 : -1; // active first, done last
+        }
         const av = (a[sortKey] as number | undefined) ?? 0;
         const bv = (b[sortKey] as number | undefined) ?? 0;
         return bv - av;
@@ -1049,7 +1052,7 @@ function TodoItem({
           onChange={(v) => onUpdate({ deadline: v })}
         />
       </div>
-      {editingDesc ? (
+      {!todo.done && (editingDesc ? (
         <MarkdownEditor
           defaultValue={todo.description ?? ""}
           onSave={commitDescription}
@@ -1110,8 +1113,8 @@ function TodoItem({
             </button>
           )}
         </div>
-      )}
-      {lightboxIndex !== null && gallery.length > 0 && (
+      ))}
+      {lightboxIndex !== null && gallery.length > 0 && !todo.done && (
         <ImageLightbox
           images={gallery}
           index={lightboxIndex}

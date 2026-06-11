@@ -241,6 +241,9 @@ export function listTodos(filePath: string, opts: TodoListOptions = {}): Todo[] 
 
   const sortKey: keyof Todo = opts.done === true ? "completedAt" : "createdAt";
   filtered.sort((a, b) => {
+    if (opts.done === undefined && a.done !== b.done) {
+      return a.done ? 1 : -1; // active first, done last
+    }
     const av = (a[sortKey] as number | undefined) ?? 0;
     const bv = (b[sortKey] as number | undefined) ?? 0;
     return bv - av;
