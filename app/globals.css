@@ -323,13 +323,6 @@ span.linenumber {
   to   { stroke-dashoffset: 0;  opacity: 1; }
 }
 
-/* Snake idle game: brief flash on a cell right when the snake eats it,
-   then the snake component paints it dim with --bg-subtle. */
-@keyframes snake-eat-flash {
-  0%   { opacity: 1;   transform: scale(1.6); }
-  60%  { opacity: 0.9; transform: scale(1.15); }
-  100% { opacity: 0.6; transform: scale(1); }
-}
 
 /* Desktop sidebar: width driven by inline style (drag-resize) */
 @media (min-width: 641px) {
