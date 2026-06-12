@@ -12,17 +12,18 @@ import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { extractImageGallery, MarkdownImage, ImageLightbox } from "./ImageLightbox";
 
 type StatusFilter = "all" | "active" | "done";
-type DeadlineFilter = "all" | "overdue" | "today" | "thisWeek" | "noDeadline";
+type DeadlineFilter = "all" | "overdue" | "today" | "thisWeek" | "thisMonth" | "noDeadline";
 
 type Filters = {
   status: StatusFilter;
   deadline: DeadlineFilter;
+  dateRange: { from: number | null; to: number | null };
   tags: string[];
 };
 
 type DeadlineTone = "overdue" | "today" | "future";
 
-const DEFAULT_FILTERS: Filters = { status: "all", deadline: "all", tags: [] };
+const DEFAULT_FILTERS: Filters = { status: "all", deadline: "all", dateRange: { from: null, to: null }, tags: [] };
 
 // Mirrors lib/todo-store.ts MAX_TAG_LENGTH. Kept in sync by hand; the server is
 // the source of truth and rejects anything longer.
@@ -59,6 +60,7 @@ const DEADLINE_FILTER_OPTIONS: { key: DeadlineFilter; labelKey: string }[] = [
   { key: "overdue", labelKey: "Overdue" },
   { key: "today", labelKey: "Due today" },
   { key: "thisWeek", labelKey: "This week" },
+  { key: "thisMonth", labelKey: "This month" },
   { key: "noDeadline", labelKey: "No deadline" },
 ];
 
@@ -75,6 +77,14 @@ function endOfDayFromInput(value: string): number | undefined {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!m) return undefined;
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 23, 59, 59, 999);
+  return d.getTime();
+}
+
+function startOfDayFromInput(value: string): number | undefined {
+  if (!value) return undefined;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return undefined;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0);
   return d.getTime();
 }
 
@@ -175,7 +185,7 @@ export function TodoPanel() {
   const [draftMode, setDraftMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filterActive = filters.status !== "all" || filters.deadline !== "all" || filters.tags.length > 0;
+  const filterActive = filters.status !== "all" || filters.deadline !== "all" || filters.dateRange.from != null || filters.dateRange.to != null || filters.tags.length > 0;
 
   const [now] = useState(() => Date.now());
   const startOfToday = startOfDay(now);
@@ -185,6 +195,10 @@ export function TodoPanel() {
   const dayOfWeek = new Date(now).getDay();
   const daysToEndOfWeek = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
   const endOfThisWeek = startOfToday + daysToEndOfWeek * 24 * 60 * 60 * 1000;
+  // "本月内" = 本月 1 日 0 点 ~ 下月 1 日 0 点（不含）。
+  const nowDate = new Date(now);
+  const startOfThisMonth = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1, 0, 0, 0, 0).getTime();
+  const endOfThisMonth = new Date(nowDate.getFullYear(), nowDate.getMonth() + 1, 1, 0, 0, 0, 0).getTime();
 
   const tagSuggestions = useMemo(() => aggregateTags(todos), [todos]);
 
@@ -209,6 +223,9 @@ export function TodoPanel() {
           case "thisWeek":
             if (x.done || x.deadline === undefined || x.deadline < startOfToday || x.deadline >= endOfThisWeek) return false;
             break;
+          case "thisMonth":
+            if (x.done || x.deadline === undefined || x.deadline < startOfThisMonth || x.deadline >= endOfThisMonth) return false;
+            break;
           case "noDeadline":
             if (x.deadline !== undefined) return false;
             break;
@@ -222,6 +239,13 @@ export function TodoPanel() {
           (x.description ?? "").toLowerCase().includes(term);
       })
       .filter((x) => {
+        if (filters.dateRange.from == null && filters.dateRange.to == null) return true;
+        if (x.deadline == null) return false;
+        if (filters.dateRange.from != null && x.deadline < filters.dateRange.from) return false;
+        if (filters.dateRange.to != null && x.deadline > filters.dateRange.to) return false;
+        return true;
+      })
+      .filter((x) => {
         if (!wantedTags) return true;
         return x.tags.some((t) => wantedTags.has(t.toLowerCase()));
       })
@@ -233,7 +257,7 @@ export function TodoPanel() {
         const bv = (b[sortKey] as number | undefined) ?? 0;
         return bv - av;
       });
-  }, [todos, filters, searchTerm, startOfToday, startOfTomorrow, endOfThisWeek]);
+  }, [todos, filters, searchTerm, startOfToday, startOfTomorrow, endOfThisWeek, startOfThisMonth, endOfThisMonth]);
 
   const handleAddClick = () => {
     if (draftMode) return;
@@ -607,8 +631,99 @@ function FilterPopover({
           {t("Deadline")}
         </div>
         {renderOption(DEADLINE_FILTER_OPTIONS, filters.deadline, (key) =>
-          onChange({ ...filters, deadline: key as DeadlineFilter }),
+          onChange({
+            ...filters,
+            deadline: key as DeadlineFilter,
+            // Custom date range is mutually exclusive with the deadline preset —
+            // selecting any non-"all" preset clears the range.
+            dateRange: key === "all" ? filters.dateRange : { from: null, to: null },
+          }),
         )}
+      </div>
+      <div>
+        <div style={{ fontSize: 10, color: "var(--text-dim)", padding: "2px 8px 4px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          {t("Date range")}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "2px 8px" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-muted)" }}>
+            <span style={{ width: 36, flexShrink: 0 }}>{t("From")}</span>
+            <input
+              type="date"
+              value={filters.dateRange.from != null ? formatDateForInput(filters.dateRange.from) : ""}
+              onChange={(e) => {
+                const next = startOfDayFromInput(e.target.value);
+                onChange({
+                  ...filters,
+                  dateRange: {
+                    from: next ?? null,
+                    to: filters.dateRange.to,
+                  },
+                  // Selecting a range clears the deadline preset.
+                  deadline: next != null ? "all" : filters.deadline,
+                });
+              }}
+              style={{
+                flex: 1, minWidth: 0,
+                padding: "1px 4px",
+                fontSize: 11,
+                background: "transparent",
+                border: "1px solid var(--border)",
+                borderRadius: 3,
+                outline: "none",
+                color: "var(--text-muted)",
+                fontFamily: "inherit",
+              }}
+            />
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-muted)" }}>
+            <span style={{ width: 36, flexShrink: 0 }}>{t("To")}</span>
+            <input
+              type="date"
+              value={filters.dateRange.to != null ? formatDateForInput(filters.dateRange.to) : ""}
+              onChange={(e) => {
+                const next = endOfDayFromInput(e.target.value);
+                onChange({
+                  ...filters,
+                  dateRange: {
+                    from: filters.dateRange.from,
+                    to: next ?? null,
+                  },
+                  deadline: next != null ? "all" : filters.deadline,
+                });
+              }}
+              style={{
+                flex: 1, minWidth: 0,
+                padding: "1px 4px",
+                fontSize: 11,
+                background: "transparent",
+                border: "1px solid var(--border)",
+                borderRadius: 3,
+                outline: "none",
+                color: "var(--text-muted)",
+                fontFamily: "inherit",
+              }}
+            />
+          </label>
+          {(filters.dateRange.from != null || filters.dateRange.to != null) && (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => onChange({ ...filters, dateRange: { from: null, to: null } })}
+                style={{
+                  padding: "2px 8px",
+                  fontSize: 11,
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {t("Clear range")}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       <div>
         <div style={{ fontSize: 10, color: "var(--text-dim)", padding: "2px 8px 4px", textTransform: "uppercase", letterSpacing: 0.5 }}>
