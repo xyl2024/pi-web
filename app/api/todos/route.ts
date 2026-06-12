@@ -31,17 +31,20 @@ export async function GET() {
   }
 }
 
-// POST /api/todos  body: { title: string; description?: string; deadline?: number }
+// POST /api/todos  body: { title: string; description?: string; deadline?: number; tags?: string[] }
 export async function POST(req: Request) {
   const startedAt = Date.now();
   try {
-    const body = (await req.json().catch(() => ({}))) as { title?: unknown; description?: unknown; deadline?: unknown };
+    const body = (await req.json().catch(() => ({}))) as {
+      title?: unknown; description?: unknown; deadline?: unknown; tags?: unknown;
+    };
     // Preserve pre-refactor behavior: silently drop non-string description on create.
     const description = typeof body.description === "string" ? body.description : undefined;
     const todo = createTodo(TODOS_FILE, {
       title: body.title as string,
       description,
       deadline: body.deadline as number | undefined,
+      tags: Array.isArray(body.tags) ? (body.tags as string[]) : undefined,
     });
     log.info("todo created", { id: todo.id, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ todo });
@@ -52,12 +55,12 @@ export async function POST(req: Request) {
   }
 }
 
-// PATCH /api/todos  body: { id: string; title?: string; description?: string; done?: boolean; deadline?: number | null }
+// PATCH /api/todos  body: { id: string; title?: string; description?: string; done?: boolean; deadline?: number | null; tags?: string[] | null }
 export async function PATCH(req: Request) {
   const startedAt = Date.now();
   try {
     const body = (await req.json().catch(() => ({}))) as {
-      id?: unknown; title?: unknown; description?: unknown; done?: unknown; deadline?: unknown;
+      id?: unknown; title?: unknown; description?: unknown; done?: unknown; deadline?: unknown; tags?: unknown;
     };
     if (typeof body.id !== "string") {
       return NextResponse.json({ error: "id must be a string" }, { status: 400 });
@@ -67,6 +70,11 @@ export async function PATCH(req: Request) {
       description: body.description as string | undefined,
       done: body.done as boolean | undefined,
       deadline: body.deadline as number | null | undefined,
+      tags: body.tags === null
+        ? null
+        : Array.isArray(body.tags)
+          ? (body.tags as string[])
+          : undefined,
     });
     log.info("todo updated", { id: todo.id, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ todo });

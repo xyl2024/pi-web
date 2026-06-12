@@ -9,9 +9,11 @@ export interface Todo {
   createdAt: number;
   completedAt?: number;
   deadline?: number;
+  tags: string[];
 }
 
 export const MAX_TITLE_LENGTH = 200;
+export const MAX_TAG_LENGTH = 50;
 
 export type DeadlineFilter = "overdue" | "today" | "thisWeek" | "noDeadline";
 
@@ -19,6 +21,7 @@ export interface TodoCreateInput {
   title: string;
   description?: string;
   deadline?: number;
+  tags?: string[];
 }
 
 export interface TodoUpdateInput {
@@ -26,12 +29,14 @@ export interface TodoUpdateInput {
   description?: string;
   done?: boolean;
   deadline?: number | null;
+  tags?: string[] | null;
 }
 
 export interface TodoListOptions {
   done?: boolean;
   search?: string;
   deadlineFilter?: DeadlineFilter;
+  tags?: string[];
   limit?: number;
   now?: number;
 }
@@ -62,7 +67,8 @@ function isTodo(v: unknown): v is Todo {
     typeof o.createdAt === "number" &&
     (o.description === undefined || typeof o.description === "string") &&
     (o.completedAt === undefined || typeof o.completedAt === "number") &&
-    (o.deadline === undefined || typeof o.deadline === "number")
+    (o.deadline === undefined || typeof o.deadline === "number") &&
+    (o.tags === undefined || (Array.isArray(o.tags) && o.tags.every((t) => typeof t === "string")))
   );
 }
 
@@ -71,7 +77,7 @@ export function readTodos(filePath: string): Todo[] {
     const raw = readFileSync(filePath, "utf-8");
     const data = JSON.parse(raw) as unknown;
     if (!Array.isArray(data)) return [];
-    return data.filter(isTodo);
+    return data.filter(isTodo).map((t) => ({ ...t, tags: t.tags ?? [] }));
   } catch {
     return [];
   }
@@ -115,6 +121,35 @@ function validateOptionalDeadline(value: unknown): number | undefined {
   return value;
 }
 
+/**
+ * Normalize a tag list: trim each entry, drop empties, dedupe case-insensitively
+ * (preserving the first occurrence's original casing). Used at every write site
+ * so the stored array is always canonical.
+ */
+export function normalizeTags(value: unknown): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new TodoValidationError("tags must be an array of strings", "tags");
+  }
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== "string") {
+      throw new TodoValidationError("tags must be an array of strings", "tags");
+    }
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) continue;
+    if (trimmed.length > MAX_TAG_LENGTH) {
+      throw new TodoValidationError("tag is too long", "tags");
+    }
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
+}
+
 export function createTodo(filePath: string, input: TodoCreateInput): Todo {
   const title = validateTitle(input.title);
   if (input.description !== undefined && typeof input.description !== "string") {
@@ -122,6 +157,7 @@ export function createTodo(filePath: string, input: TodoCreateInput): Todo {
   }
   const description = input.description;
   const deadline = validateOptionalDeadline(input.deadline);
+  const tags = normalizeTags(input.tags);
 
   const todos = readTodos(filePath);
   const todo: Todo = {
@@ -131,6 +167,7 @@ export function createTodo(filePath: string, input: TodoCreateInput): Todo {
     done: false,
     createdAt: Date.now(),
     deadline,
+    tags,
   };
   writeTodos(filePath, [todo, ...todos]);
   return todo;
@@ -172,6 +209,13 @@ export function updateTodo(filePath: string, id: string, patch: TodoUpdateInput)
       throw new TodoValidationError("deadline must be a number or null", "deadline");
     } else {
       next.deadline = patch.deadline;
+    }
+  }
+  if (patch.tags !== undefined) {
+    if (patch.tags === null) {
+      next.tags = [];
+    } else {
+      next.tags = normalizeTags(patch.tags);
     }
   }
 
@@ -235,6 +279,10 @@ export function listTodos(filePath: string, opts: TodoListOptions = {}): Todo[] 
       const inTitle = x.title.toLowerCase().includes(term);
       const inDesc = (x.description ?? "").toLowerCase().includes(term);
       if (!inTitle && !inDesc) return false;
+    }
+    if (opts.tags && opts.tags.length > 0) {
+      const wanted = new Set(opts.tags.map((t) => t.toLowerCase()));
+      if (!x.tags.some((t) => wanted.has(t.toLowerCase()))) return false;
     }
     return true;
   });

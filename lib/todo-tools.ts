@@ -61,7 +61,8 @@ function fmtDate(epochMs?: number): string {
 function fmtTodoLine(t: Todo): string {
   const check = t.done ? "[x]" : "[ ]";
   const deadline = t.deadline !== undefined ? `  (due ${fmtDate(t.deadline)})` : "";
-  return `${check} ${t.title}${deadline}  [id=${t.id}]`;
+  const tags = t.tags.length > 0 ? `  (tags: ${t.tags.join(", ")})` : "";
+  return `${check} ${t.title}${deadline}${tags}  [id=${t.id}]`;
 }
 
 function result<T>(text: string, details: T) {
@@ -96,6 +97,11 @@ const ListParams = Type.Object({
     }),
   ),
   deadlineFilter: Type.Optional(DeadlineFilterSchema),
+  tags: Type.Optional(
+    Type.Array(Type.String(), {
+      description: "Return only todos that have at least one of these tags (case-insensitive). Omit or pass [] to disable tag filtering.",
+    }),
+  ),
   limit: Type.Optional(
     Type.Number({
       description: `Max items to return. Default ${DEFAULT_LIST_LIMIT}, capped at ${MAX_LIST_LIMIT}.`,
@@ -110,6 +116,11 @@ const CreateParams = Type.Object({
   ),
   deadline: Type.Optional(
     Type.Number({ description: "Optional deadline as ms since epoch (local end-of-day recommended)." }),
+  ),
+  tags: Type.Optional(
+    Type.Array(Type.String(), {
+      description: "Optional tag list. Trimmed, deduped case-insensitively.",
+    }),
   ),
 });
 
@@ -131,6 +142,12 @@ const UpdateParams = Type.Object({
     Type.Union(
       [Type.Number(), Type.Null()],
       { description: "New deadline as ms since epoch, or null to clear it." },
+    ),
+  ),
+  tags: Type.Optional(
+    Type.Union(
+      [Type.Array(Type.String()), Type.Null()],
+      { description: "Replace the tag list, or null to clear all tags." },
     ),
   ),
 });
@@ -158,12 +175,14 @@ const todoListTool = defineTool<typeof ListParams, ListDetails>({
         done: params.done,
         search: params.search,
         deadlineFilter: params.deadlineFilter as DeadlineFilter | undefined,
+        tags: params.tags,
         limit: Number.MAX_SAFE_INTEGER,
       }).length;
       const todos = listTodos(TODOS_FILE, {
         done: params.done,
         search: params.search,
         deadlineFilter: params.deadlineFilter as DeadlineFilter | undefined,
+        tags: params.tags,
         limit,
       });
       const returned = todos.length;
@@ -194,6 +213,7 @@ const todoCreateTool = defineTool<typeof CreateParams, TodoDetails>({
         title: params.title,
         description: params.description,
         deadline: params.deadline,
+        tags: params.tags,
       });
       return result(`Created todo: ${fmtTodoLine(todo)}`, { todo });
     } catch (error) {
@@ -216,12 +236,13 @@ const todoUpdateTool = defineTool<typeof UpdateParams, TodoDetails>({
       const description = params.description === null
         ? undefined
         : params.description;
-      // For deadline, null IS the clear signal — pass through unchanged.
+      // For deadline and tags, null IS the clear signal — pass through unchanged.
       const todo = updateTodo(TODOS_FILE, params.id, {
         title: params.title,
         description,
         done: params.done,
         deadline: params.deadline,
+        tags: params.tags,
       });
       return result(`Updated: ${fmtTodoLine(todo)}`, { todo });
     } catch (error) {

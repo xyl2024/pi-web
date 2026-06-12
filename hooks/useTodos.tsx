@@ -12,16 +12,17 @@ export interface Todo {
   createdAt: number;
   completedAt?: number;
   deadline?: number;
+  tags: string[];
 }
 
-export type TodoPatch = Partial<Pick<Todo, "title" | "description" | "done" | "deadline">>;
+export type TodoPatch = Partial<Pick<Todo, "title" | "description" | "done" | "deadline" | "tags">>;
 
 interface TodoContextValue {
   todos: Todo[];
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  addTodo: (title: string, opts?: { description?: string; deadline?: number }) => Promise<Todo | null>;
+  addTodo: (title: string, opts?: { description?: string; deadline?: number; tags?: string[] }) => Promise<Todo | null>;
   updateTodo: (id: string, patch: TodoPatch) => Promise<void>;
   deleteTodo: (id: string) => Promise<void>;
   toggleDone: (id: string) => Promise<void>;
@@ -55,11 +56,12 @@ export function TodoProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
-  const addTodo = useCallback(async (title: string, opts?: { description?: string; deadline?: number }): Promise<Todo | null> => {
+  const addTodo = useCallback(async (title: string, opts?: { description?: string; deadline?: number; tags?: string[] }): Promise<Todo | null> => {
     const trimmed = title.trim();
     if (trimmed.length === 0) return null;
     const description = opts?.description;
     const deadline = opts?.deadline;
+    const tags = opts?.tags ?? [];
     // Optimistic placeholder
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const optimistic: Todo = {
@@ -69,13 +71,14 @@ export function TodoProvider({ children }: { children: ReactNode }) {
       done: false,
       createdAt: Date.now(),
       deadline,
+      tags,
     };
     setTodos((prev) => [optimistic, ...prev]);
     try {
       const res = await fetch("/api/todos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: trimmed, description, deadline }),
+        body: JSON.stringify({ title: trimmed, description, deadline, tags }),
       });
       if (!res.ok) {
         const { error } = (await res.json().catch(() => ({ error: "" }))) as { error?: string };

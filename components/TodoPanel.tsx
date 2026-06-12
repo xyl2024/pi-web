@@ -17,11 +17,36 @@ type DeadlineFilter = "all" | "overdue" | "today" | "thisWeek" | "noDeadline";
 type Filters = {
   status: StatusFilter;
   deadline: DeadlineFilter;
+  tags: string[];
 };
 
 type DeadlineTone = "overdue" | "today" | "future";
 
-const DEFAULT_FILTERS: Filters = { status: "all", deadline: "all" };
+const DEFAULT_FILTERS: Filters = { status: "all", deadline: "all", tags: [] };
+
+// Mirrors lib/todo-store.ts MAX_TAG_LENGTH. Kept in sync by hand; the server is
+// the source of truth and rejects anything longer.
+const MAX_TAG_LENGTH = 50;
+
+/**
+ * Aggregate every tag used across the visible todos, deduped case-insensitively
+ * (preserving first-seen casing) and sorted case-insensitively. Used to power
+ * the autocomplete suggestions inside TagChips and the filter popover.
+ */
+function aggregateTags(todos: Todo[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of todos) {
+    for (const tag of t.tags) {
+      const key = tag.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(tag);
+    }
+  }
+  out.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  return out;
+}
 
 const STATUS_FILTER_OPTIONS: { key: StatusFilter; labelKey: string }[] = [
   { key: "all", labelKey: "All" },
@@ -150,7 +175,7 @@ export function TodoPanel() {
   const [draftMode, setDraftMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filterActive = filters.status !== "all" || filters.deadline !== "all";
+  const filterActive = filters.status !== "all" || filters.deadline !== "all" || filters.tags.length > 0;
 
   const [now] = useState(() => Date.now());
   const startOfToday = startOfDay(now);
@@ -161,8 +186,13 @@ export function TodoPanel() {
   const daysToEndOfWeek = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
   const endOfThisWeek = startOfToday + daysToEndOfWeek * 24 * 60 * 60 * 1000;
 
+  const tagSuggestions = useMemo(() => aggregateTags(todos), [todos]);
+
   const visible = useMemo(() => {
     const sortKey: keyof Todo = filters.status === "done" ? "completedAt" : "createdAt";
+    const wantedTags = filters.tags.length > 0
+      ? new Set(filters.tags.map((t) => t.toLowerCase()))
+      : null;
     return [...todos]
       .filter((x) => {
         if (filters.status === "active" && x.done) return false;
@@ -191,6 +221,10 @@ export function TodoPanel() {
         return x.title.toLowerCase().includes(term) ||
           (x.description ?? "").toLowerCase().includes(term);
       })
+      .filter((x) => {
+        if (!wantedTags) return true;
+        return x.tags.some((t) => wantedTags.has(t.toLowerCase()));
+      })
       .sort((a, b) => {
         if (filters.status === "all" && a.done !== b.done) {
           return a.done ? 1 : -1; // active first, done last
@@ -207,13 +241,13 @@ export function TodoPanel() {
     setDraftMode(true);
   };
 
-  const handleDraftSubmit = async (value: { title: string; deadline?: number }) => {
+  const handleDraftSubmit = async (value: { title: string; deadline?: number; tags?: string[] }) => {
     const trimmed = value.title.trim();
     if (trimmed.length === 0) {
       setDraftMode(false);
       return;
     }
-    const todo = await addTodo(trimmed, { deadline: value.deadline });
+    const todo = await addTodo(trimmed, { deadline: value.deadline, tags: value.tags });
     setDraftMode(false);
     if (todo) setFilters((f) => ({ ...f, status: "active" }));
   };
@@ -239,6 +273,7 @@ export function TodoPanel() {
         onAdd={handleAddClick}
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
+        tagSuggestions={tagSuggestions}
       />
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 6px" }}>
         {loading && todos.length === 0 && (
@@ -252,7 +287,7 @@ export function TodoPanel() {
           </div>
         )}
         {draftMode && (
-          <DraftRow onSubmit={handleDraftSubmit} onCancel={() => setDraftMode(false)} />
+          <DraftRow onSubmit={handleDraftSubmit} onCancel={() => setDraftMode(false)} tagSuggestions={tagSuggestions} />
         )}
         {visible.map((todo) => (
           <TodoItem
@@ -262,6 +297,7 @@ export function TodoPanel() {
             onUpdate={(patch) => updateTodo(todo.id, patch)}
             onDelete={() => handleDelete(todo)}
             searchTerm={searchTerm}
+            tagSuggestions={tagSuggestions}
           />
         ))}
       </div>
@@ -278,6 +314,7 @@ function FilterBar({
   onAdd,
   searchTerm,
   onSearchChange,
+  tagSuggestions,
 }: {
   filters: Filters;
   onFiltersChange: (next: Filters) => void;
@@ -287,6 +324,7 @@ function FilterBar({
   onAdd: () => void;
   searchTerm: string;
   onSearchChange: (v: string) => void;
+  tagSuggestions: string[];
 }) {
   const { t } = useI18n();
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -413,6 +451,7 @@ function FilterBar({
             filters={filters}
             onChange={onFiltersChange}
             onClose={() => onFilterOpenChange(false)}
+            tagSuggestions={tagSuggestions}
           />
         )}
       </div>
@@ -446,10 +485,12 @@ function FilterPopover({
   filters,
   onChange,
   onClose,
+  tagSuggestions,
 }: {
   filters: Filters;
   onChange: (next: Filters) => void;
   onClose: () => void;
+  tagSuggestions: string[];
 }) {
   const { t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
@@ -475,6 +516,14 @@ function FilterPopover({
   }, [onClose]);
 
   const reset = () => onChange(DEFAULT_FILTERS);
+
+  const toggleTag = (tag: string) => {
+    const key = tag.toLowerCase();
+    const next = filters.tags.some((t) => t.toLowerCase() === key)
+      ? filters.tags.filter((t) => t.toLowerCase() !== key)
+      : [...filters.tags, tag];
+    onChange({ ...filters, tags: next });
+  };
 
   const renderOption = <K extends string>(
     options: { key: K; labelKey: string }[],
@@ -558,6 +607,62 @@ function FilterPopover({
         </div>
         {renderOption(DEADLINE_FILTER_OPTIONS, filters.deadline, (key) =>
           onChange({ ...filters, deadline: key as DeadlineFilter }),
+        )}
+      </div>
+      <div>
+        <div style={{ fontSize: 10, color: "var(--text-dim)", padding: "2px 8px 4px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          {t("Filter by tags")}
+        </div>
+        {tagSuggestions.length === 0 ? (
+          <div style={{ fontSize: 11, color: "var(--text-dim)", padding: "4px 8px" }}>
+            {t("No tags")}
+          </div>
+        ) : (
+          <div role="group" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            {tagSuggestions.map((tag) => {
+              const checked = filters.tags.some((t) => t.toLowerCase() === tag.toLowerCase());
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  onClick={() => toggleTag(tag)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    padding: "4px 8px",
+                    fontSize: 11,
+                    textAlign: "left",
+                    background: checked ? "var(--bg-selected)" : "transparent",
+                    border: "none",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                    color: checked ? "var(--text)" : "var(--text-muted)",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: 10, height: 10, flexShrink: 0,
+                      border: `1.2px solid ${checked ? "var(--accent)" : "var(--text-dim)"}`,
+                      borderRadius: 2,
+                      background: checked ? "var(--accent)" : "transparent",
+                      color: "var(--bg)",
+                    }}
+                  >
+                    {checked && (
+                      <svg width="7" height="7" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="2 5 4.5 7.5 8.5 2.5" />
+                      </svg>
+                    )}
+                  </span>
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
       <div style={{ borderTop: "1px solid var(--border)", paddingTop: 6, display: "flex", justifyContent: "flex-end" }}>
@@ -762,10 +867,202 @@ function AgentToolsPopover({ onClose }: { onClose: () => void }) {
   );
 }
 
-function DraftRow({ onSubmit, onCancel }: { onSubmit: (value: { title: string; deadline?: number }) => void; onCancel: () => void }) {
+function TagChips({
+  tags,
+  editable,
+  suggestions,
+  onChange,
+  placeholder,
+}: {
+  tags: string[];
+  editable: boolean;
+  suggestions?: string[];
+  onChange?: (next: string[]) => void;
+  placeholder?: string;
+}) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const [draft, setDraft] = useState("");
+  const [focused, setFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Returns true if the tag was added (caller should clear the input). False
+  // means rejected (empty / duplicate / too long); input is left as-is so the
+  // user can correct it.
+  const tryAdd = (raw: string): boolean => {
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) return false;
+    if (trimmed.length > MAX_TAG_LENGTH) {
+      toast.show({ kind: "error", message: t("Tag is too long") });
+      return false;
+    }
+    const key = trimmed.toLowerCase();
+    if (tags.some((tg) => tg.toLowerCase() === key)) {
+      toast.show({ kind: "error", message: t("Tag already added") });
+      return false;
+    }
+    onChange?.([...tags, trimmed]);
+    return true;
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      if (tryAdd(draft)) setDraft("");
+    } else if (e.key === "Backspace" && draft === "" && tags.length > 0) {
+      e.preventDefault();
+      onChange?.(tags.slice(0, -1));
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setDraft("");
+      inputRef.current?.blur();
+    }
+  };
+
+  const handleBlur = () => {
+    setFocused(false);
+    if (tryAdd(draft)) setDraft("");
+    else if (draft.trim().length > 0) setDraft("");
+  };
+
+  const removeAt = (idx: number) => {
+    onChange?.(tags.filter((_, i) => i !== idx));
+  };
+
+  // Show suggestions only when focused, and only tags not already attached.
+  // Filter by current input (case-insensitive substring) so it doubles as
+  // autocomplete while typing.
+  const termKey = draft.trim().toLowerCase();
+  const visibleSuggestions = focused && suggestions
+    ? suggestions.filter((s) => {
+        const k = s.toLowerCase();
+        if (tags.some((tg) => tg.toLowerCase() === k)) return false;
+        if (termKey && !k.includes(termKey)) return false;
+        return true;
+      }).slice(0, 8)
+    : [];
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+        {tags.map((tg, i) => (
+          <span
+            key={`${tg}-${i}`}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 2,
+              padding: "1px 4px 1px 8px",
+              fontSize: 11,
+              background: "var(--bg-hover)",
+              color: "var(--text-muted)",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              lineHeight: 1.5,
+            }}
+          >
+            {tg}
+            {editable && (
+              <button
+                type="button"
+                onClick={() => removeAt(i)}
+                aria-label={t("Remove tag")}
+                style={{
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  width: 14, height: 14, padding: 0,
+                  background: "transparent",
+                  border: "none",
+                  borderRadius: 7,
+                  color: "var(--text-dim)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-dim)")}
+              >
+                <svg width="7" height="7" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <line x1="1" y1="1" x2="7" y2="7" />
+                  <line x1="7" y1="1" x2="1" y2="7" />
+                </svg>
+              </button>
+            )}
+          </span>
+        ))}
+        {editable && (
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={() => setFocused(true)}
+            onBlur={handleBlur}
+            placeholder={tags.length === 0 ? placeholder : ""}
+            style={{
+              flex: 1, minWidth: 60,
+              padding: "1px 4px",
+              fontSize: 11,
+              background: "transparent",
+              border: "none",
+              outline: "none",
+              color: "var(--text)",
+              fontFamily: "inherit",
+            }}
+          />
+        )}
+      </div>
+      {visibleSuggestions.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 2px)",
+            left: 0,
+            zIndex: 5,
+            minWidth: 120,
+            maxHeight: 160,
+            overflowY: "auto",
+            padding: 2,
+            background: "var(--bg-panel)",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.25)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 1,
+          }}
+        >
+          {visibleSuggestions.map((s) => (
+            <button
+              key={s}
+              type="button"
+              // mousedown (not click) so the input's blur doesn't fire first
+              // and wipe the draft before our handler runs.
+              onMouseDown={(e) => { e.preventDefault(); if (tryAdd(s)) setDraft(""); }}
+              style={{
+                padding: "3px 8px",
+                fontSize: 11,
+                textAlign: "left",
+                background: "transparent",
+                border: "none",
+                borderRadius: 3,
+                cursor: "pointer",
+                color: "var(--text-muted)",
+                fontFamily: "inherit",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DraftRow({ onSubmit, onCancel, tagSuggestions }: { onSubmit: (value: { title: string; deadline?: number; tags?: string[] }) => void; onCancel: () => void; tagSuggestions: string[] }) {
   const { t } = useI18n();
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState<number | undefined>(undefined);
+  const [tags, setTags] = useState<string[]>([]);
   const titleRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -773,7 +1070,7 @@ function DraftRow({ onSubmit, onCancel }: { onSubmit: (value: { title: string; d
   }, []);
 
   const submit = () => {
-    onSubmit({ title, deadline });
+    onSubmit({ title, deadline, tags });
   };
 
   return (
@@ -834,6 +1131,15 @@ function DraftRow({ onSubmit, onCancel }: { onSubmit: (value: { title: string; d
           }}
         />
       </div>
+      <div style={{ paddingLeft: 22 }}>
+        <TagChips
+          editable
+          tags={tags}
+          onChange={setTags}
+          suggestions={tagSuggestions}
+          placeholder={t("Add tag…")}
+        />
+      </div>
     </div>
   );
 }
@@ -844,12 +1150,14 @@ function TodoItem({
   onUpdate,
   onDelete,
   searchTerm,
+  tagSuggestions,
 }: {
   todo: Todo;
   onToggleDone: () => void;
-  onUpdate: (patch: { title?: string; description?: string; done?: boolean; deadline?: number }) => void;
+  onUpdate: (patch: { title?: string; description?: string; done?: boolean; deadline?: number; tags?: string[] }) => void;
   onDelete: () => void;
   searchTerm: string;
+  tagSuggestions: string[];
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -972,6 +1280,12 @@ function TodoItem({
     setEditingDesc(false);
   };
 
+  const commitTags = (next: string[]) => {
+    const same = next.length === todo.tags.length
+      && next.every((t, i) => t === todo.tags[i]);
+    if (!same) onUpdate({ tags: next });
+  };
+
   const hasLongDescription = (todo.description ?? "").split("\n").length > 5;
 
   return (
@@ -1052,6 +1366,17 @@ function TodoItem({
           onChange={(v) => onUpdate({ deadline: v })}
         />
       </div>
+      {todo.tags.length > 0 || !todo.done ? (
+        <div style={{ marginLeft: 22 }}>
+          <TagChips
+            editable={!todo.done}
+            tags={todo.tags}
+            onChange={commitTags}
+            suggestions={tagSuggestions}
+            placeholder={t("Add tag…")}
+          />
+        </div>
+      ) : null}
       {!todo.done && (editingDesc ? (
         <MarkdownEditor
           defaultValue={todo.description ?? ""}
