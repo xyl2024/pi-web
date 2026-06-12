@@ -323,6 +323,23 @@ span.linenumber {
   to   { stroke-dashoffset: 0;  opacity: 1; }
 }
 
+/* ── Toast: enter / exit (top-center stack) ───────────────── */
+@keyframes pi-toast-enter {
+  from { opacity: 0; transform: translateY(-12px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)     scale(1); }
+}
+@keyframes pi-toast-exit {
+  from { opacity: 1; transform: translateY(0)    scale(1); }
+  to   { opacity: 0; transform: translateY(-8px) scale(0.98); }
+}
+.pi-toast-enter {
+  animation: pi-toast-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.pi-toast-exit {
+  animation: pi-toast-exit 220ms cubic-bezier(0.4, 0, 1, 1) both;
+  pointer-events: none;
+}
+
 
 /* Desktop sidebar: width driven by inline style (drag-resize) */
 @media (min-width: 641px) {

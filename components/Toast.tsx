@@ -23,6 +23,7 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 const DEFAULT_DURATION_MS = 2500;
+const EXIT_ANIMATION_MS = 220;
 const MAX_VISIBLE = 4;
 const DEDUPE_WINDOW_MS = 1000;
 
@@ -34,17 +35,34 @@ function nextId(): string {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
+  const [exitingIds, setExitingIds] = useState<Set<string>>(new Set());
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastShownRef = useRef<Map<string, number>>(new Map());
 
-  const dismiss = useCallback((id: string) => {
+  const removeItem = useCallback((id: string) => {
+    setItems((prev) => (prev.some((it) => it.id === id) ? prev.filter((it) => it.id !== id) : prev));
+    setExitingIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     const t = timersRef.current.get(id);
     if (t) {
       clearTimeout(t);
       timersRef.current.delete(id);
     }
-    setItems((prev) => prev.filter((it) => it.id !== id));
   }, []);
+
+  const dismiss = useCallback((id: string) => {
+    setExitingIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    setTimeout(() => removeItem(id), EXIT_ANIMATION_MS);
+  }, [removeItem]);
 
   const show = useCallback((input: ToastInput) => {
     const kind = input.kind ?? "info";
@@ -76,7 +94,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <ToastViewport items={items} onDismiss={dismiss} />
+      <ToastViewport items={items} exitingIds={exitingIds} onDismiss={dismiss} />
     </ToastContext.Provider>
   );
 }
@@ -87,7 +105,15 @@ export function useToast(): ToastContextValue {
   return ctx;
 }
 
-function ToastViewport({ items, onDismiss }: { items: ToastItem[]; onDismiss: (id: string) => void }) {
+function ToastViewport({
+  items,
+  exitingIds,
+  onDismiss,
+}: {
+  items: ToastItem[];
+  exitingIds: Set<string>;
+  onDismiss: (id: string) => void;
+}) {
   if (items.length === 0) return null;
   return (
     <div
@@ -95,49 +121,110 @@ function ToastViewport({ items, onDismiss }: { items: ToastItem[]; onDismiss: (i
       aria-live="polite"
       style={{
         position: "fixed",
-        right: 12,
-        bottom: 12,
+        top: 16,
+        left: "50%",
+        transform: "translateX(-50%)",
         zIndex: 9999,
         display: "flex",
-        flexDirection: "column",
-        gap: 6,
+        flexDirection: "column-reverse",
+        alignItems: "center",
+        gap: 8,
         pointerEvents: "none",
-        maxWidth: 360,
+        maxWidth: "calc(100vw - 32px)",
       }}
     >
       {items.map((it) => (
-        <ToastCard key={it.id} item={it} onDismiss={() => onDismiss(it.id)} />
+        <ToastCard
+          key={it.id}
+          item={it}
+          exiting={exitingIds.has(it.id)}
+          onDismiss={() => onDismiss(it.id)}
+        />
       ))}
     </div>
   );
 }
 
-const KIND_BORDER: Record<ToastKind, string> = {
+const KIND_ACCENT: Record<ToastKind, string> = {
   success: "var(--accent)",
   error: "#f87171",
   info: "var(--text-muted)",
 };
 
-function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void }) {
+function ToastCard({
+  item,
+  exiting,
+  onDismiss,
+}: {
+  item: ToastItem;
+  exiting: boolean;
+  onDismiss: () => void;
+}) {
   return (
     <div
       onClick={onDismiss}
+      className={exiting ? "pi-toast-exit" : "pi-toast-enter"}
       style={{
         pointerEvents: "auto",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 10,
         background: "var(--bg-panel)",
         border: "1px solid var(--border)",
-        borderLeft: `3px solid ${KIND_BORDER[item.kind]}`,
-        borderRadius: 4,
-        padding: "8px 12px",
-        fontSize: 12,
+        borderLeft: `3px solid ${KIND_ACCENT[item.kind]}`,
+        borderRadius: 8,
+        padding: "8px 16px 8px 12px",
+        fontSize: 13,
+        lineHeight: 1.4,
         color: "var(--text)",
         cursor: "pointer",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
-        animation: "pi-toast-in 160ms ease-out",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.08)",
+        maxWidth: "100%",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        willChange: "transform, opacity",
       }}
     >
-      {item.message}
-      <style>{`@keyframes pi-toast-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      <ToastIcon kind={item.kind} />
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{item.message}</span>
     </div>
+  );
+}
+
+function ToastIcon({ kind }: { kind: ToastKind }) {
+  const color = KIND_ACCENT[kind];
+  const common = {
+    width: 14,
+    height: 14,
+    viewBox: "0 0 16 16",
+    fill: "none",
+    stroke: color,
+    strokeWidth: 2,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    style: { flexShrink: 0 },
+  };
+  if (kind === "success") {
+    return (
+      <svg {...common}>
+        <path d="M3 8.5l3.5 3.5 6.5-7" />
+      </svg>
+    );
+  }
+  if (kind === "error") {
+    return (
+      <svg {...common}>
+        <circle cx="8" cy="8" r="6" />
+        <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 7v4" />
+      <circle cx="8" cy="4.75" r="0.6" fill={color} stroke="none" />
+    </svg>
   );
 }
