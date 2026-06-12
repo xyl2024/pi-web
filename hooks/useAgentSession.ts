@@ -6,6 +6,8 @@ import { normalizeToolCalls } from "@/lib/normalize";
 import { sendAgentCommand } from "@/lib/agent-client";
 import type { ToolEntry } from "@/components/ToolPanel";
 import type { ToolCallStatsDispatch } from "./ToolCallStatsContext";
+import { useToast } from "@/components/Toast";
+import { useI18n } from "./useI18n";
 
 export interface SessionData {
   sessionId: string;
@@ -101,6 +103,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     modelsRefreshKey, onBranchDataChange, onSystemPromptChange, statsEmit,
     scrollToEntryId, onScrollComplete,
   } = opts;
+  const { t } = useI18n();
+  const toast = useToast();
   const statsEmitRef = useRef(statsEmit);
   statsEmitRef.current = statsEmit;
 
@@ -437,11 +441,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
     } catch (e) {
       console.error("Failed to send message:", e);
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to send message") });
       setAgentRunning(false);
       setAgentPhase(null);
       dispatch({ type: "end" });
     }
-  }, [isNew, newSessionCwd, newSessionModel, toolPreset, thinkingLevel, session, agentRunning, connectEvents, onSessionCreated]);
+  }, [isNew, newSessionCwd, newSessionModel, toolPreset, thinkingLevel, session, agentRunning, connectEvents, onSessionCreated, t, toast]);
 
   const handleAbort = useCallback(async () => {
     const sid = sessionIdRef.current;
@@ -450,8 +455,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       await sendAgentCommand(sid, { type: "abort" });
     } catch (e) {
       console.error("Failed to abort:", e);
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to stop agent") });
     }
-  }, []);
+  }, [t, toast]);
 
   const handleFork = useCallback(async (entryId: string) => {
     const sid = sessionIdRef.current;
@@ -468,10 +474,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
     } catch (e) {
       console.error("Fork failed:", e);
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Fork failed") });
     } finally {
       setForkingEntryId(null);
     }
-  }, [onSessionForked]);
+  }, [onSessionForked, t, toast]);
 
   const handleNavigate = useCallback(async (entryId: string) => {
     const sid = sessionIdRef.current;
@@ -503,8 +510,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setCurrentModelOverride({ provider, modelId });
     } catch (e) {
       console.error("Failed to set model:", e);
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to switch model") });
     }
-  }, [isNew, setNewSessionModel]);
+  }, [isNew, setNewSessionModel, t, toast]);
 
   const handleCompact = useCallback(async () => {
     const sid = sessionIdRef.current;
@@ -534,8 +542,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       });
     } catch (e) {
       console.error("Failed to steer:", e);
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to send message") });
     }
-  }, []);
+  }, [t, toast]);
 
   const handleFollowUp = useCallback(async (message: string, images?: AttachedImage[]) => {
     const sid = sessionIdRef.current;
@@ -550,8 +559,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       });
     } catch (e) {
       console.error("Failed to follow up:", e);
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to send message") });
     }
-  }, []);
+  }, [t, toast]);
 
   const handleAbortCompaction = useCallback(async () => {
     const sid = sessionIdRef.current;
@@ -560,8 +570,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       await sendAgentCommand(sid, { type: "abort_compaction" });
     } catch (e) {
       console.error("Failed to abort compaction:", e);
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to stop agent") });
     }
-  }, []);
+  }, [t, toast]);
 
   const handleThinkingLevelChange = useCallback(async (level: ThinkingLevelOption) => {
     setThinkingLevel(level);
@@ -572,8 +583,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       await sendAgentCommand(sid, { type: "set_thinking_level", level });
     } catch (e) {
       console.error("Failed to set thinking level:", e);
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to change thinking level") });
     }
-  }, []);
+  }, [t, toast]);
 
   const handleToolPresetChange = useCallback(async (preset: "none" | "full") => {
     const { PRESET_NONE } = await import("@/components/ToolPanel");
@@ -585,8 +597,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       await sendAgentCommand(sid, { type: "set_tools", toolNames });
     } catch (e) {
       console.error("Failed to set tools:", e);
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to change tool preset") });
     }
-  }, [setToolPresetState]);
+  }, [setToolPresetState, t, toast]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     messagesEndRef.current?.scrollIntoView({ behavior });
