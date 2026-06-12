@@ -8,6 +8,7 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTheme } from "@/hooks/useTheme";
+import { useToast } from "./Toast";
 import { useI18n } from "@/hooks/useI18n";
 import { Tooltip } from "./Tooltip";
 import { extractImageGallery, MarkdownImage, ImageLightbox } from "./ImageLightbox";
@@ -303,6 +304,7 @@ function DiffView({ oldContent, newContent }: { oldContent: string; newContent: 
 
 function ImageViewer({ filePath, cwd }: { filePath: string; cwd?: string }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [watching, setWatching] = useState(false);
   const [bust, setBust] = useState(0);
   const [size, setSize] = useState<number | null>(null);
@@ -415,7 +417,10 @@ function ImageViewer({ filePath, cwd }: { filePath: string; cwd?: string }) {
               const img = e.currentTarget;
               setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
             }}
-            onError={() => setError(t("Failed to load image"))}
+            onError={() => {
+              if (!error) toast.show({ kind: "error", message: t("Failed to load file") });
+              setError(t("Failed to load image"));
+            }}
             style={{
               maxWidth: "100%",
               maxHeight: "100%",
@@ -461,6 +466,7 @@ function formatDuration(seconds: number): string {
 
 function AudioViewer({ filePath, cwd }: { filePath: string; cwd?: string }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [watching, setWatching] = useState(false);
   const [bust, setBust] = useState(0);
   const [size, setSize] = useState<number | null>(null);
@@ -569,7 +575,10 @@ function AudioViewer({ filePath, cwd }: { filePath: string; cwd?: string }) {
             preload="metadata"
             src={src}
             onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-            onError={() => setError(t("Failed to load audio"))}
+            onError={() => {
+              if (!error) toast.show({ kind: "error", message: t("Failed to load file") });
+              setError(t("Failed to load audio"));
+            }}
             style={{ width: "100%" }}
           />
         </div>
@@ -580,6 +589,7 @@ function AudioViewer({ filePath, cwd }: { filePath: string; cwd?: string }) {
 
 function ExcalidrawViewer({ filePath, cwd }: Props) {
   const { t } = useI18n();
+  const toast = useToast();
   const [initialData, setInitialData] = useState<object | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -613,6 +623,7 @@ function ExcalidrawViewer({ filePath, cwd }: Props) {
         if (cancelled) return;
         if ((d as FileData & { error?: string }).error) {
           setError((d as FileData & { error?: string }).error!);
+          toast.show({ kind: "error", message: t("Failed to load file") });
           return;
         }
         try {
@@ -635,15 +646,20 @@ function ExcalidrawViewer({ filePath, cwd }: Props) {
             }
           }
           setInitialData(restored);
-        } catch (e) {
+        } catch {
           setError(t("Invalid Excalidraw file"));
+          toast.show({ kind: "error", message: t("Failed to load file") });
         }
       })
-      .catch((e) => { if (!cancelled) setError(String(e)); })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(String(e));
+        toast.show({ kind: "error", message: t("Failed to load file") });
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [filePath, t]);
+  }, [filePath, t, toast]);
 
   const handleEdit = useCallback(() => {
     setIsEditing(true);
@@ -690,12 +706,14 @@ function ExcalidrawViewer({ filePath, cwd }: Props) {
       }
       setInitialData(fresh);
       setDirty(false);
+      toast.show({ kind: "success", message: t("File saved") });
     } catch (e) {
       console.error("Excalidraw save failed", e);
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to save file") });
     } finally {
       setSaving(false);
     }
-  }, [filePath]);
+  }, [filePath, t, toast]);
 
   const handleChange = useCallback((elements: readonly unknown[], appState: unknown, files: unknown) => {
     sceneRef.current = { elements, appState, files };
@@ -805,6 +823,7 @@ function ExcalidrawViewer({ filePath, cwd }: Props) {
 
 function PdfViewer({ filePath, cwd }: Props) {
   const { t } = useI18n();
+  const toast = useToast();
   const [numPages, setNumPages] = useState(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [manualScale, setManualScale] = useState(1);
@@ -1202,7 +1221,10 @@ function PdfViewer({ filePath, cwd }: Props) {
           <Document
             file={src}
             onLoadSuccess={onDocumentLoadSuccess}
-            onLoadError={() => setError(t("Failed to load PDF"))}
+            onLoadError={() => {
+              if (!error) toast.show({ kind: "error", message: t("Failed to load file") });
+              setError(t("Failed to load PDF"));
+            }}
             loading={
               <div style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 40 }}>
                 {t("Loading...")}
@@ -1261,6 +1283,7 @@ export function FileViewer({ filePath, cwd }: Props) {
 function TextFileViewer({ filePath, cwd }: Props) {
   const { isDark } = useTheme();
   const { t } = useI18n();
+  const toast = useToast();
   const [data, setData] = useState<FileData | null>(null);
   const [prevContent, setPrevContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1356,12 +1379,14 @@ function TextFileViewer({ filePath, cwd }: Props) {
       editingRef.current = false;
       setIsEditing(false);
       setExternalChangeWhileEditing(false);
+      toast.show({ kind: "success", message: t("File saved") });
     } catch (e) {
       console.error("Text file save failed", e);
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to save file") });
     } finally {
       setSaving(false);
     }
-  }, [data, editContent, filePath]);
+  }, [data, editContent, filePath, t, toast]);
 
   const handleTextareaKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Tab") {
