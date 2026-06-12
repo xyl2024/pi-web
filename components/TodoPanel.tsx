@@ -168,7 +168,7 @@ function highlightDeep(node: ReactNode, term: string): ReactNode {
 
 export function TodoPanel() {
   const { t } = useI18n();
-  const { todos, loading, addTodo, updateTodo, deleteTodo, toggleDone } = useTodos();
+  const { todos, loading, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo } = useTodos();
   const confirm = useConfirm();
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -296,6 +296,7 @@ export function TodoPanel() {
             onToggleDone={() => toggleDone(todo.id)}
             onUpdate={(patch) => updateTodo(todo.id, patch)}
             onDelete={() => handleDelete(todo)}
+            onExport={() => exportTodo(todo.id)}
             searchTerm={searchTerm}
             tagSuggestions={tagSuggestions}
           />
@@ -1149,6 +1150,7 @@ function TodoItem({
   onToggleDone,
   onUpdate,
   onDelete,
+  onExport,
   searchTerm,
   tagSuggestions,
 }: {
@@ -1156,6 +1158,7 @@ function TodoItem({
   onToggleDone: () => void;
   onUpdate: (patch: { title?: string; description?: string; done?: boolean; deadline?: number; tags?: string[] }) => void;
   onDelete: () => void;
+  onExport: () => Promise<void>;
   searchTerm: string;
   tagSuggestions: string[];
 }) {
@@ -1249,6 +1252,15 @@ function TodoItem({
             onSelect: () => onUpdate({ deadline: undefined }),
           }]
         : []),
+      {
+        key: "export",
+        label: t("Export as zip"),
+        onSelect: () => {
+          onExport().catch((e) =>
+            toast.show({ kind: "error", message: t("Export failed") + ": " + String(e) }),
+          );
+        },
+      },
       {
         key: "delete",
         label: t("Delete"),

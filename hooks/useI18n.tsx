@@ -367,6 +367,8 @@ const ZH_TRANSLATIONS = {
   "No tags": "暂无标签",
   "Filter by tags": "按标签过滤",
   "Remove tag": "移除标签",
+  "Export as zip": "导出为压缩包",
+  "Export failed": "导出失败",
   "(untitled)": "（无标题）",
   "No messages yet": "暂无消息",
   "No activity in this workspace yet": "此工作区暂无活动",

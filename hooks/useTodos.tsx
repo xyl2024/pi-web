@@ -26,6 +26,7 @@ interface TodoContextValue {
   updateTodo: (id: string, patch: TodoPatch) => Promise<void>;
   deleteTodo: (id: string) => Promise<void>;
   toggleDone: (id: string) => Promise<void>;
+  exportTodo: (id: string) => Promise<void>;
 }
 
 const TodoContext = createContext<TodoContextValue | null>(null);
@@ -177,9 +178,38 @@ export function TodoProvider({ children }: { children: ReactNode }) {
     }
   }, [toast, t]);
 
+  // Download a zip of one todo (markdown + referenced images). Parses both
+  // RFC 5987 `filename*=UTF-8''...` and legacy `filename="..."` forms of
+  // Content-Disposition so CJK titles round-trip correctly.
+  const exportTodo = useCallback(async (id: string) => {
+    const res = await fetch(`/api/todos/${encodeURIComponent(id)}/export`);
+    if (!res.ok) {
+      const { error } = (await res.json().catch(() => ({ error: "" }))) as { error?: string };
+      throw new Error(error || `status ${res.status}`);
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get("content-disposition") ?? "";
+    let filename = `todo-${id}.zip`;
+    const mStar = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+    if (mStar) {
+      try { filename = decodeURIComponent(mStar[1]); } catch { /* keep fallback */ }
+    } else {
+      const mPlain = /filename="?([^";]+)"?/i.exec(cd);
+      if (mPlain) filename = mPlain[1];
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, []);
+
   const value = useMemo<TodoContextValue>(() => ({
-    todos, loading, error, refresh, addTodo, updateTodo, deleteTodo, toggleDone,
-  }), [todos, loading, error, refresh, addTodo, updateTodo, deleteTodo, toggleDone]);
+    todos, loading, error, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo,
+  }), [todos, loading, error, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo]);
 
   return <TodoContext.Provider value={value}>{children}</TodoContext.Provider>;
 }
