@@ -211,7 +211,7 @@ export function MarkdownEditorInner({
   const viewRef = useRef<EditorView | null>(null);
 
   const [previewText, setPreviewText] = useState(defaultValue);
-  const [previewCollapsed, setPreviewCollapsed] = useState(false);
+  const [previewCollapsed, setPreviewCollapsed] = useState(true);
   const [splitPx, setSplitPx] = useState<number | null>(null);
 
   const handleSave = useCallback(() => {
