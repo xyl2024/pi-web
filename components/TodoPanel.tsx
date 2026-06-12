@@ -1167,7 +1167,7 @@ function TodoItem({
   const cm = useContextMenu();
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [detailsVisible, setDetailsVisible] = useState(!todo.done);
   const [titleDraft, setTitleDraft] = useState(todo.title);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const deadlineInputRef = useRef<HTMLInputElement | null>(null);
@@ -1298,8 +1298,6 @@ function TodoItem({
     if (!same) onUpdate({ tags: next });
   };
 
-  const hasLongDescription = (todo.description ?? "").split("\n").length > 5;
-
   return (
     <div
       onContextMenu={handleContextMenu}
@@ -1333,6 +1331,24 @@ function TodoItem({
             </svg>
           )}
         </button>
+        <span
+          aria-hidden="true"
+          style={{
+            flexShrink: 0,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 10,
+            height: 10,
+            color: "var(--text-dim)",
+            transform: detailsVisible ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform 0.1s",
+          }}
+        >
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="2.5 1.5 5.5 4 2.5 6.5" />
+          </svg>
+        </span>
         {editingTitle ? (
           <input
             value={titleDraft}
@@ -1357,13 +1373,23 @@ function TodoItem({
           />
         ) : (
           <span
+            onClick={() => setDetailsVisible((v) => !v)}
             onDoubleClick={() => { setTitleDraft(todo.title); setEditingTitle(true); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setDetailsVisible((v) => !v);
+              }
+            }}
+            role="button"
+            tabIndex={editingTitle ? -1 : 0}
+            aria-expanded={detailsVisible}
             style={{
               flex: 1, minWidth: 0,
               fontSize: 13, fontWeight: 500,
               color: todo.done ? "var(--text-muted)" : "var(--accent)",
               textDecoration: todo.done ? "line-through" : "none",
-              cursor: "text",
+              cursor: "pointer",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -1378,7 +1404,7 @@ function TodoItem({
           onChange={(v) => onUpdate({ deadline: v })}
         />
       </div>
-      {todo.tags.length > 0 || !todo.done ? (
+      {detailsVisible && (todo.tags.length > 0 || !todo.done) ? (
         <div style={{ marginLeft: 22 }}>
           <TagChips
             editable={!todo.done}
@@ -1389,7 +1415,7 @@ function TodoItem({
           />
         </div>
       ) : null}
-      {!todo.done && (editingDesc ? (
+      {detailsVisible && (editingDesc && !todo.done ? (
         <MarkdownEditor
           defaultValue={todo.description ?? ""}
           onSave={commitDescription}
@@ -1399,7 +1425,7 @@ function TodoItem({
       ) : (
         <div style={{ marginLeft: 22 }}>
           <div
-            onDoubleClick={() => setEditingDesc(true)}
+            onDoubleClick={todo.done ? undefined : () => setEditingDesc(true)}
             style={{
               minHeight: 18,
               fontSize: 12,
@@ -1407,7 +1433,7 @@ function TodoItem({
               color: todo.done ? "var(--text-dim)" : "var(--text-muted)",
               textDecoration: todo.done ? "line-through" : "none",
               textDecorationColor: todo.done ? "var(--text-muted)" : undefined,
-              cursor: "text",
+              cursor: todo.done ? "default" : "text",
               padding: "2px 0",
             }}
           >
@@ -1416,14 +1442,6 @@ function TodoItem({
                 className="markdown-body"
                 style={{
                   fontSize: 12,
-                  ...(hasLongDescription && !expanded
-                    ? {
-                        display: "-webkit-box",
-                        WebkitLineClamp: 5,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                      }
-                    : {}),
                 }}
               >
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{todo.description}</ReactMarkdown>
@@ -1432,23 +1450,6 @@ function TodoItem({
               <span style={{ color: "var(--text-dim)", fontStyle: "italic" }}>{t("Add description...")}</span>
             )}
           </div>
-          {hasLongDescription && (
-            <button
-              onClick={() => setExpanded((v) => !v)}
-              style={{
-                marginTop: 2,
-                padding: 0,
-                background: "none",
-                border: "none",
-                color: "var(--accent)",
-                fontSize: 11,
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              {expanded ? t("Collapse") : t("Expand")}
-            </button>
-          )}
         </div>
       ))}
       {lightboxIndex !== null && gallery.length > 0 && !todo.done && (
