@@ -1,5 +1,16 @@
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
+/**
+ * Todo storage — SQLite-backed (via lib/db.ts).
+ *
+ * The public API (types, validation, exported function signatures) is
+ * preserved from the previous JSON-file implementation so the HTTP routes,
+ * the agent tool wrappers, and the React layer need no changes.
+ *
+ * The first parameter on the mutating functions (`filePath: string`) is
+ * kept for source compatibility with prior call sites but is no longer
+ * used — all reads and writes go through the singleton DB handle.
+ */
+
+import { getDb } from "@/lib/db";
 
 export interface Todo {
   id: string;
@@ -57,47 +68,10 @@ export class TodoNotFoundError extends Error {
   public readonly id: string;
 }
 
-function isTodo(v: unknown): v is Todo {
-  if (!v || typeof v !== "object") return false;
-  const o = v as Record<string, unknown>;
-  return (
-    typeof o.id === "string" &&
-    typeof o.title === "string" &&
-    typeof o.done === "boolean" &&
-    typeof o.createdAt === "number" &&
-    (o.description === undefined || typeof o.description === "string") &&
-    (o.completedAt === undefined || typeof o.completedAt === "number") &&
-    (o.deadline === undefined || typeof o.deadline === "number") &&
-    (o.tags === undefined || (Array.isArray(o.tags) && o.tags.every((t) => typeof t === "string")))
-  );
-}
-
-export function readTodos(filePath: string): Todo[] {
-  try {
-    const raw = readFileSync(filePath, "utf-8");
-    const data = JSON.parse(raw) as unknown;
-    if (!Array.isArray(data)) return [];
-    return data.filter(isTodo).map((t) => ({ ...t, tags: t.tags ?? [] }));
-  } catch {
-    return [];
-  }
-}
-
-export function writeTodos(filePath: string, todos: Todo[]): void {
-  mkdirSync(dirname(filePath), { recursive: true });
-  writeFileSync(filePath, JSON.stringify(todos, null, 2), "utf-8");
-}
-
-export function generateTodoId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-}
-
-function findIndex(todos: Todo[], id: string): number {
-  return todos.findIndex((t) => t.id === id);
-}
+// ---------------------------------------------------------------------------
+// Validation helpers — ported verbatim from the JSON implementation so the
+// public contract of createTodo / updateTodo / normalizeTags is unchanged.
+// ---------------------------------------------------------------------------
 
 function validateTitle(value: unknown): string {
   if (typeof value !== "string") {
@@ -150,7 +124,61 @@ export function normalizeTags(value: unknown): string[] {
   return out;
 }
 
-export function createTodo(filePath: string, input: TodoCreateInput): Todo {
+export function generateTodoId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Row mapping — SQLite row (with a `tags_json` column from the SELECT in
+// listTodos) → Todo. Centralized so the column-to-field mapping is in one
+// place.
+// ---------------------------------------------------------------------------
+
+interface TodoRow {
+  id: string;
+  title: string;
+  description: string | null;
+  done: number;
+  created_at: number;
+  completed_at: number | null;
+  deadline: number | null;
+  tags_json?: string;
+}
+
+function parseTagsJson(raw: string | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((t): t is string => typeof t === "string");
+    }
+  } catch {
+    /* fall through */
+  }
+  return [];
+}
+
+function rowToTodo(row: TodoRow): Todo {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description ?? undefined,
+    done: row.done === 1,
+    createdAt: row.created_at,
+    completedAt: row.completed_at ?? undefined,
+    deadline: row.deadline ?? undefined,
+    tags: parseTagsJson(row.tags_json),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Public CRUD — signatures preserved from the JSON implementation.
+// ---------------------------------------------------------------------------
+
+export function createTodo(_filePath: string, input: TodoCreateInput): Todo {
   const title = validateTitle(input.title);
   if (input.description !== undefined && typeof input.description !== "string") {
     throw new TodoValidationError("description must be a string", "description");
@@ -159,81 +187,129 @@ export function createTodo(filePath: string, input: TodoCreateInput): Todo {
   const deadline = validateOptionalDeadline(input.deadline);
   const tags = normalizeTags(input.tags);
 
-  const todos = readTodos(filePath);
-  const todo: Todo = {
-    id: generateTodoId(),
+  const id = generateTodoId();
+  const createdAt = Date.now();
+  const db = getDb();
+
+  const insert = db.transaction(() => {
+    db.prepare(
+      `INSERT INTO todos (id, title, description, done, created_at, deadline)
+       VALUES (?, ?, ?, 0, ?, ?)`,
+    ).run(id, title, description ?? null, createdAt, deadline ?? null);
+    const tagStmt = db.prepare(
+      `INSERT INTO todo_tags (todo_id, tag) VALUES (?, ?)`,
+    );
+    for (const t of tags) tagStmt.run(id, t);
+  });
+  insert();
+
+  return {
+    id,
     title,
     description,
     done: false,
-    createdAt: Date.now(),
+    createdAt,
     deadline,
     tags,
   };
-  writeTodos(filePath, [todo, ...todos]);
-  return todo;
 }
 
-export function updateTodo(filePath: string, id: string, patch: TodoUpdateInput): Todo {
+export function updateTodo(_filePath: string, id: string, patch: TodoUpdateInput): Todo {
   if (typeof id !== "string") {
     throw new TodoValidationError("id must be a string", "id");
   }
-  const todos = readTodos(filePath);
-  const idx = findIndex(todos, id);
-  if (idx === -1) throw new TodoNotFoundError(id);
-  const prev = todos[idx];
-  const next: Todo = { ...prev };
+  const db = getDb();
 
-  if (patch.title !== undefined) {
-    next.title = validateTitle(patch.title);
-  }
-  if (patch.description !== undefined) {
-    if (typeof patch.description !== "string") {
-      throw new TodoValidationError("description must be a string", "description");
-    }
-    next.description = patch.description;
-  }
-  if (patch.done !== undefined) {
-    if (typeof patch.done !== "boolean") {
-      throw new TodoValidationError("done must be a boolean", "done");
-    }
-    // Server manages completedAt: false→true stamps, true→false clears.
-    if (patch.done !== prev.done) {
-      next.done = patch.done;
-      next.completedAt = patch.done ? Date.now() : undefined;
-    }
-  }
-  if (patch.deadline !== undefined) {
-    if (patch.deadline === null) {
-      delete next.deadline;
-    } else if (typeof patch.deadline !== "number" || !Number.isFinite(patch.deadline)) {
-      throw new TodoValidationError("deadline must be a number or null", "deadline");
-    } else {
-      next.deadline = patch.deadline;
-    }
-  }
-  if (patch.tags !== undefined) {
-    if (patch.tags === null) {
-      next.tags = [];
-    } else {
-      next.tags = normalizeTags(patch.tags);
-    }
-  }
+  const apply = db.transaction(() => {
+    const row = db
+      .prepare(`SELECT * FROM todos WHERE id = ?`)
+      .get(id) as TodoRow | undefined;
+    if (!row) throw new TodoNotFoundError(id);
+    const next: Todo = rowToTodo(row);
 
-  const updated = [...todos];
-  updated[idx] = next;
-  writeTodos(filePath, updated);
-  return next;
+    if (patch.title !== undefined) {
+      next.title = validateTitle(patch.title);
+    }
+    if (patch.description !== undefined) {
+      if (typeof patch.description !== "string") {
+        throw new TodoValidationError("description must be a string", "description");
+      }
+      next.description = patch.description;
+    }
+    if (patch.done !== undefined) {
+      if (typeof patch.done !== "boolean") {
+        throw new TodoValidationError("done must be a boolean", "done");
+      }
+      // Server manages completedAt: false→true stamps, true→false clears.
+      if (patch.done !== next.done) {
+        next.done = patch.done;
+        next.completedAt = patch.done ? Date.now() : undefined;
+      }
+    }
+    if (patch.deadline !== undefined) {
+      if (patch.deadline === null) {
+        delete next.deadline;
+      } else if (typeof patch.deadline !== "number" || !Number.isFinite(patch.deadline)) {
+        throw new TodoValidationError("deadline must be a number or null", "deadline");
+      } else {
+        next.deadline = patch.deadline;
+      }
+    }
+    if (patch.tags !== undefined) {
+      if (patch.tags === null) {
+        next.tags = [];
+      } else {
+        next.tags = normalizeTags(patch.tags);
+      }
+    }
+
+    db.prepare(
+      `UPDATE todos
+         SET title = ?, description = ?, done = ?,
+             completed_at = ?, deadline = ?
+       WHERE id = ?`,
+    ).run(
+      next.title,
+      next.description ?? null,
+      next.done ? 1 : 0,
+      next.completedAt ?? null,
+      next.deadline ?? null,
+      id,
+    );
+    db.prepare(`DELETE FROM todo_tags WHERE todo_id = ?`).run(id);
+    const tagStmt = db.prepare(
+      `INSERT INTO todo_tags (todo_id, tag) VALUES (?, ?)`,
+    );
+    for (const t of next.tags) tagStmt.run(id, t);
+    return next;
+  });
+  return apply();
 }
 
-export function deleteTodo(filePath: string, id: string): void {
+export function deleteTodo(_filePath: string, id: string): void {
   if (typeof id !== "string" || id.length === 0) {
     throw new TodoValidationError("id is required", "id");
   }
-  const todos = readTodos(filePath);
-  const idx = findIndex(todos, id);
-  if (idx === -1) throw new TodoNotFoundError(id);
-  const next = [...todos.slice(0, idx), ...todos.slice(idx + 1)];
-  writeTodos(filePath, next);
+  const db = getDb();
+  const result = db.prepare(`DELETE FROM todos WHERE id = ?`).run(id);
+  if (result.changes === 0) throw new TodoNotFoundError(id);
+}
+
+/** Look up a single todo by id. Used by the export route. */
+export function getTodoById(id: string): Todo | undefined {
+  if (typeof id !== "string" || id.length === 0) return undefined;
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT t.*, COALESCE(
+         (SELECT json_group_array(tag) FROM todo_tags WHERE todo_id = t.id),
+         '[]'
+       ) AS tags_json
+         FROM todos t
+        WHERE t.id = ?`,
+    )
+    .get(id) as TodoRow | undefined;
+  return row ? rowToTodo(row) : undefined;
 }
 
 function startOfDay(ts: number): number {
@@ -243,11 +319,12 @@ function startOfDay(ts: number): number {
 }
 
 /**
- * List todos with optional filters. Filter semantics mirror the UI in
- * components/TodoPanel.tsx so the agent sees the same buckets the user does.
+ * List todos with optional filters. Filter and sort semantics mirror the UI
+ * in components/TodoPanel.tsx so the agent sees the same buckets the user
+ * does.
  */
-export function listTodos(filePath: string, opts: TodoListOptions = {}): Todo[] {
-  const todos = readTodos(filePath);
+export function listTodos(_filePath: string, opts: TodoListOptions = {}): Todo[] {
+  const db = getDb();
   const now = opts.now ?? Date.now();
   const startOfToday = startOfDay(now);
   const startOfTomorrow = startOfToday + 24 * 60 * 60 * 1000;
@@ -257,6 +334,17 @@ export function listTodos(filePath: string, opts: TodoListOptions = {}): Todo[] 
   const endOfThisWeek = startOfToday + daysToEndOfWeek * 24 * 60 * 60 * 1000;
   const term = opts.search?.trim().toLowerCase() ?? "";
 
+  const rows = db
+    .prepare(
+      `SELECT t.*, COALESCE(
+         (SELECT json_group_array(tag) FROM todo_tags WHERE todo_id = t.id),
+         '[]'
+       ) AS tags_json
+         FROM todos t`,
+    )
+    .all() as TodoRow[];
+
+  const todos = rows.map(rowToTodo);
   const filtered = todos.filter((x) => {
     if (opts.done !== undefined && x.done !== opts.done) return false;
     switch (opts.deadlineFilter) {

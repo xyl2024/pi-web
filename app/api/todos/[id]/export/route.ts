@@ -4,11 +4,10 @@ import { join, resolve } from "path";
 import { homedir } from "os";
 import JSZip from "jszip";
 import { createLogger, elapsedMs } from "@/lib/logger";
-import { readTodos } from "@/lib/todo-store";
+import { getTodoById } from "@/lib/todo-store";
 import { extractTodoImageFilenames } from "@/lib/todo-images-utils";
 
 const log = createLogger("api/todos/[id]/export");
-const TODOS_FILE = join(homedir(), ".pi-web", "todos.json");
 const TODO_IMAGES_DIR = join(homedir(), ".pi-web", "todo_images");
 
 // Build a filesystem-safe slug from the todo title. Keep ASCII letters/digits
@@ -46,8 +45,7 @@ export async function GET(
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    const todos = readTodos(TODOS_FILE);
-    const todo = todos.find((t) => t.id === id);
+    const todo = getTodoById(id);
     if (!todo) {
       return NextResponse.json({ error: "todo not found" }, { status: 404 });
     }

@@ -3,7 +3,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { createLogger, elapsedMs } from "@/lib/logger";
 import {
-  readTodos,
+  listTodos,
   createTodo,
   updateTodo,
   deleteTodo,
@@ -22,7 +22,7 @@ function validationResponse(err: TodoValidationError) {
 export async function GET() {
   const startedAt = Date.now();
   try {
-    const todos = readTodos(TODOS_FILE);
+    const todos = listTodos(TODOS_FILE);
     log.info("todos read", { count: todos.length, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ todos });
   } catch (error) {
