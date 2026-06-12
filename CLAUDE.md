@@ -327,3 +327,21 @@ When adding or modifying frontend components:
 - Extract every user-facing string (labels, placeholders, tooltips, aria-labels, status messages, error text) into the i18n dictionary at `hooks/useI18n.tsx`.
 - Use the project's existing i18n mechanism (`t('key')` from `useI18n()`) — don't invent a new pattern.
 - Keys are the English source string itself; add the Chinese translation in the `ZH_TRANSLATIONS` map. Look at nearby keys before creating new ones.
+
+---
+
+## Toast Notifications for New Frontend Interactions
+
+**Any new user-initiated frontend action that can fail or completes silently needs a toast — see `components/Toast.tsx` for the global system.**
+
+When adding or modifying frontend interactions, decide whether a toast is needed:
+
+- **Add a toast** for: server-bound actions (save, delete, rename, fork, send, copy, fetch, OAuth login, install, export) and for successes of operations that otherwise complete silently.
+- **Skip a toast** for: actions whose feedback is purely local UI state (toggles, expand/collapse, theme switch, sound on/off) and for forms where the error must stay inline next to the field (rename conflicts, validation messages, modal-internal footer text).
+
+Conventions:
+- Call `useToast()` from `./Toast` (or `@/components/Toast`) and invoke `toast.show({ kind, message })` — don't invent a parallel notification mechanism.
+- Prefer the server-provided error string and fall back to a generic i18n key: `e instanceof Error && e.message ? e.message : t("Network error")`.
+- Past-tense keys cover most successes (`t("Saved")`, `t("Renamed")`, `t("Copied")`, `t("Deleted")`); add new keys to `hooks/useI18n.tsx` only when none fits. The "Common-operation toasts" comment in `useI18n.tsx` is the canonical place to add them.
+- Modal-internal feedback (the "Saved" button label, red footer text) should stay in addition to the toast — the toast is the cross-area confirmation that survives outside the modal.
+- The 1-second dedupe in `Toast.tsx` handles repeated onerror events; don't add your own.
