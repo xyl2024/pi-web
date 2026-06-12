@@ -221,8 +221,21 @@ export function updateTodo(_filePath: string, id: string, patch: TodoUpdateInput
   const db = getDb();
 
   const apply = db.transaction(() => {
+    // Load the row together with its current tags from the separate
+    // todo_tags table. A bare `SELECT *` only sees the todos columns, which
+    // would leave `tags_json` undefined and cause rowToTodo() to report an
+    // empty list — and the DELETE+re-INSERT below would then wipe the real
+    // tags on every PATCH that doesn't carry an explicit `tags` field
+    // (description edit, title rename, done toggle, deadline change, …).
     const row = db
-      .prepare(`SELECT * FROM todos WHERE id = ?`)
+      .prepare(
+        `SELECT t.*, COALESCE(
+           (SELECT json_group_array(tag) FROM todo_tags WHERE todo_id = t.id),
+           '[]'
+         ) AS tags_json
+           FROM todos t
+          WHERE t.id = ?`,
+      )
       .get(id) as TodoRow | undefined;
     if (!row) throw new TodoNotFoundError(id);
     const next: Todo = rowToTodo(row);
