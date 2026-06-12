@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/hooks/useI18n";
+import { useToast } from "./Toast";
 
 interface PromptTemplate {
   name: string;
@@ -117,6 +118,7 @@ function AddPromptPanel({
   onCreated: (filePath: string) => void;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [scope, setScope] = useState<"global" | "project">("global");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -143,15 +145,18 @@ function AddPromptPanel({
       const d = (await res.json()) as { success?: boolean; filePath?: string; error?: string };
       if (!res.ok || d.error || !d.filePath) {
         setError(d.error ?? `HTTP ${res.status}`);
+        toast.show({ kind: "error", message: d.error ?? `HTTP ${res.status}` });
         return;
       }
       onCreated(d.filePath);
+      toast.show({ kind: "success", message: t("Prompt created") });
     } catch (e) {
       setError(String(e));
+      toast.show({ kind: "error", message: String(e) });
     } finally {
       setSaving(false);
     }
-  }, [argumentHint, content, cwd, description, name, onCreated, saving, scope]);
+  }, [argumentHint, content, cwd, description, name, onCreated, saving, scope, t, toast]);
 
   const targetPath = scope === "global" ? "~/.pi/agent/prompts/" : `${shortenPath(cwd)}/.pi/prompts/`;
 

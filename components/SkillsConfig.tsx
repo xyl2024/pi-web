@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { SkillSearchResult } from "@/app/api/skills/search/route";
 import { useI18n } from "@/hooks/useI18n";
+import { useToast } from "./Toast";
 import { useTheme } from "@/hooks/useTheme";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vs } from "react-syntax-highlighter/dist/cjs/styles/prism";
@@ -503,6 +504,7 @@ function AddSkillPanel({
   onInstalled: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SkillSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -558,17 +560,20 @@ function AddSkillPanel({
         const d = (await res.json()) as { success?: boolean; error?: string };
         if (!res.ok || d.error) {
           setInstallError(d.error ?? `HTTP ${res.status}`);
+          toast.show({ kind: "error", message: d.error ?? `HTTP ${res.status}` });
           return;
         }
         setInstalledPkgs((prev) => new Set(prev).add(pkg));
         onInstalled();
+        toast.show({ kind: "success", message: t("Skill installed") });
       } catch (e) {
         setInstallError(String(e));
+        toast.show({ kind: "error", message: String(e) });
       } finally {
         setInstalling(null);
       }
     },
-    [onInstalled, scope, cwd],
+    [onInstalled, scope, cwd, t, toast],
   );
 
   const installPath =

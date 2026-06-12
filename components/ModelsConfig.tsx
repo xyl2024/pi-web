@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useI18n } from "@/hooks/useI18n";
+import { useToast } from "./Toast";
 import { Tooltip } from "./Tooltip";
 // Color icons (have their own fill colors — no background needed)
 import AnthropicIcon from "@lobehub/icons/es/Anthropic/components/Mono";
@@ -575,6 +576,7 @@ function ModelDetail({ model, onChange, onDelete }: { model: ModelEntry; onChang
 
 function OAuthDetail({ provider, onRefresh }: { provider: OAuthProvider; onRefresh: () => void }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [loginState, setLoginState] = useState<OAuthLoginState>({ phase: "idle" });
   const [inputValue, setInputValue] = useState("");
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -635,6 +637,7 @@ function OAuthDetail({ provider, onRefresh }: { provider: OAuthProvider; onRefre
         es.close();
         setLoginState({ phase: "success" });
         onRefresh();
+        toast.show({ kind: "success", message: t("Connected") });
       } else if (data.type === "error") {
         es.close();
         setLoginState({ phase: "error", message: data.message! });
@@ -647,7 +650,7 @@ function OAuthDetail({ provider, onRefresh }: { provider: OAuthProvider; onRefre
       es.close();
       setLoginState((prev) => prev.phase === "success" ? prev : { phase: "error", message: "Connection lost" });
     };
-  }, [provider.id, onRefresh]);
+  }, [provider.id, onRefresh, t, toast]);
 
   const handleLogout = useCallback(async () => {
     await fetch(`/api/auth/logout/${encodeURIComponent(provider.id)}`, { method: "POST" });
@@ -835,6 +838,7 @@ function OAuthDetail({ provider, onRefresh }: { provider: OAuthProvider; onRefre
 
 function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRefresh: () => void }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -862,18 +866,21 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
       const d = await res.json() as { success?: boolean; error?: string };
       if (!res.ok || d.error) {
         setError(d.error ?? `HTTP ${res.status}`);
+        toast.show({ kind: "error", message: d.error ?? `HTTP ${res.status}` });
       } else {
         setApiKey("");
         setSavedOk(true);
         setTimeout(() => setSavedOk(false), 2000);
         onRefresh();
+        toast.show({ kind: "success", message: t("API key saved") });
       }
     } catch (e) {
       setError(String(e));
+      toast.show({ kind: "error", message: String(e) });
     } finally {
       setSaving(false);
     }
-  }, [apiKey, provider.id, onRefresh]);
+  }, [apiKey, provider.id, onRefresh, t, toast]);
 
   const handleRemove = useCallback(async () => {
     setRemoving(true);
@@ -881,14 +888,20 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
     try {
       const res = await fetch(`/api/auth/api-key/${encodeURIComponent(provider.id)}`, { method: "DELETE" });
       const d = await res.json() as { success?: boolean; error?: string };
-      if (!res.ok || d.error) setError(d.error ?? `HTTP ${res.status}`);
-      else onRefresh();
+      if (!res.ok || d.error) {
+        setError(d.error ?? `HTTP ${res.status}`);
+        toast.show({ kind: "error", message: d.error ?? `HTTP ${res.status}` });
+      } else {
+        onRefresh();
+        toast.show({ kind: "success", message: t("API key removed") });
+      }
     } catch (e) {
       setError(String(e));
+      toast.show({ kind: "error", message: String(e) });
     } finally {
       setRemoving(false);
     }
-  }, [provider.id, onRefresh]);
+  }, [provider.id, onRefresh, t, toast]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -1114,6 +1127,7 @@ function AddProviderPicker({
 
 export function ModelsConfig({ onClose }: { onClose: () => void }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [config, setConfig] = useState<ModelsJson>({ providers: {} });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1147,11 +1161,14 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
         const keys = Object.keys(normalized.providers ?? {});
         if (keys.length > 0) setSelection({ type: "provider", name: keys[0] });
       })
-      .catch(() => setConfig({ providers: {} }))
+      .catch(() => {
+        setConfig({ providers: {} });
+        toast.show({ kind: "error", message: t("Failed to load models") });
+      })
       .finally(() => setLoading(false));
     loadOAuthProviders();
     loadApiKeyProviders();
-  }, [loadOAuthProviders, loadApiKeyProviders]);
+  }, [loadOAuthProviders, loadApiKeyProviders, t, toast]);
 
   const addCustomProvider = useCallback(() => {
     let finalName = "new-provider";
@@ -1237,14 +1254,21 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
         body: JSON.stringify(config),
       });
       const d = await res.json() as { success?: boolean; error?: string };
-      if (!res.ok || d.error) setSaveError(d.error ?? `HTTP ${res.status}`);
-      else { setSavedOk(true); setTimeout(() => setSavedOk(false), 2000); }
+      if (!res.ok || d.error) {
+        setSaveError(d.error ?? `HTTP ${res.status}`);
+        toast.show({ kind: "error", message: d.error ?? `HTTP ${res.status}` });
+      } else {
+        setSavedOk(true);
+        setTimeout(() => setSavedOk(false), 2000);
+        toast.show({ kind: "success", message: t("Models saved") });
+      }
     } catch (e) {
       setSaveError(String(e));
+      toast.show({ kind: "error", message: String(e) });
     } finally {
       setSaving(false);
     }
-  }, [config]);
+  }, [config, t, toast]);
 
   const providers = Object.entries(config.providers ?? {});
   const activeOAuth = oauthProviders.filter((p) => p.loggedIn);

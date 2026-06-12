@@ -3,11 +3,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Tooltip } from "./Tooltip";
 import { useI18n } from "@/hooks/useI18n";
+import { useToast } from "./Toast";
 import { WeChatSettingsSection } from "./WeChatSettingsSection";
 import type { PiWebConfig } from "@/lib/config";
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [config, setConfig] = useState<PiWebConfig | null>(null);
   const [originalConfig, setOriginalConfig] = useState<PiWebConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,12 +111,13 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       setOriginalConfig(config);
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 1500);
-    } catch {
-      // Failure is conveyed by the button staying in non-Saved state
+      toast.show({ kind: "success", message: t("Settings saved") });
+    } catch (e) {
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to save settings") });
     } finally {
       setSaving(false);
     }
-  }, [config]);
+  }, [config, t, toast]);
 
   // Intercept close: warn if there are unsaved changes
   const savedOkRef = useRef(savedOk);
