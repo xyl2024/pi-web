@@ -26,11 +26,15 @@ export function extractImageGallery(
 }
 
 // Custom <img> for ReactMarkdown. Calls onImageClick with the resolved src.
-export function MarkdownImage({ src, alt, resolveSrc, onImageClick }: {
+// maxWidth caps the rendered width relative to the container; defaults to
+// filling it (100%). Pass a smaller value (e.g. "50%") to shrink inline
+// previews in dense layouts like the todo panel.
+export function MarkdownImage({ src, alt, resolveSrc, onImageClick, maxWidth = "100%" }: {
   src?: string | Blob;
   alt?: string;
   resolveSrc: (raw: string) => string;
   onImageClick?: (finalSrc: string) => void;
+  maxWidth?: string;
 }) {
   const { t } = useI18n();
   const [errored, setErrored] = useState(false);
@@ -69,7 +73,7 @@ export function MarkdownImage({ src, alt, resolveSrc, onImageClick }: {
       alt={alt ?? ""}
       onClick={handleClick}
       onError={() => setErrored(true)}
-      style={{ maxWidth: "100%", cursor: onImageClick ? "zoom-in" : "default" }}
+      style={{ maxWidth, cursor: onImageClick ? "zoom-in" : "default" }}
     />
   );
 }

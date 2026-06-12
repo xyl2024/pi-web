@@ -1193,6 +1193,7 @@ function TodoItem({
         src={props.src}
         alt={props.alt}
         resolveSrc={(s) => s}
+        maxWidth="50%"
         onImageClick={(src) => {
           const idx = gallery.findIndex((g) => g.src === src);
           if (idx >= 0) setLightboxIndex(idx);
