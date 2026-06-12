@@ -64,6 +64,35 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
+## 5. Never Destroy User Data
+
+**Treat any file in a user data directory as irreplaceable until proven otherwise.**
+
+A single careless command can wipe data that has no backup, is not in git, and cannot be recovered. This is not a theoretical risk — it has happened here.
+
+### The hard rules
+
+- **NEVER** run overwrite commands (`cat > file`, `echo > file`, `> file`, `tee file`, `sed -i`, `python3 -c "open(p,'w').write(...)"`) on any file in `~/.pi-web/`, `~/.pi/`, `~/.config/...`, or any other user data directory. These truncate the file before the new content is written; if the new content is malformed, the original is gone with no undo.
+- **NEVER** use shell heredoc (`<< EOF ... EOF`) to "create a small test file" at a path that overlaps with a real file. Heredoc + `>` overwrites silently.
+- **For tests that need to touch user data**: copy the file to `/tmp/` first, work on the copy, and never write back to the original path. If a test must hit the real file, drive it through the app's own API (POST/PATCH/DELETE) — those code paths are tested and validated.
+- **For JSON modification**: use `jq` (in-place with `jq ... file.json > tmp && mv tmp file.json`) or run a Node script. Do not use raw shell redirection.
+- **Before any write to user data**: take a backup with `cp file file.bak.$(date +%s)` first. If something goes wrong, restore the backup.
+
+### Why this is so dangerous in this project specifically
+
+- `~/.pi-web/todos.json` is the **only** copy of the user's todo data. It is not git-tracked. There are no automatic backups.
+- The `cat > ~/.pi-web/todos.json` idiom is the kind of thing that looks safe in a one-liner test script but truncates the file immediately. If the heredoc body is wrong, the file is `0 bytes` and unrecoverable.
+- Other irreplaceable user data in this project: `~/.pi-web/todo_images/`, `~/.pi-web/workspace/`, `~/.pi/agent/sessions/`, `~/.pi/agent/models.json`, `~/.pi-web/pinned.json`.
+
+### If a write goes wrong
+
+1. **Stop.** Do not run more commands. Every subsequent write makes recovery harder.
+2. Check if the user's browser app is still open and the React state still has the data. If so, do **not** let them refresh. Have them copy the state out via DevTools (`copy(JSON.stringify(window))` in Console, or React DevTools → TodoProvider state) before anything else.
+3. Look for backups in `/tmp/`, `~/.*.bak`, `~/.local/share/Trash/`, the project's `.cache/`, or the running server's memory (`/proc/<pid>/maps` → `heap` region).
+4. Only after exhausting recovery options, tell the user what was lost and what remains.
+
+**The cost of "I'll just write a small test file to that path" can be the user's entire data. Don't take that bet.**
+
 # Pi Agent Web
 
 ## Quick Start
