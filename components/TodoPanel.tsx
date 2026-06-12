@@ -178,7 +178,7 @@ function highlightDeep(node: ReactNode, term: string): ReactNode {
 
 export function TodoPanel() {
   const { t } = useI18n();
-  const { todos, loading, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo } = useTodos();
+  const { todos, loading, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo } = useTodos();
   const confirm = useConfirm();
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -298,6 +298,8 @@ export function TodoPanel() {
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
         tagSuggestions={tagSuggestions}
+        onRefresh={refresh}
+        refreshing={loading}
       />
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 6px" }}>
         {loading && todos.length === 0 && (
@@ -340,6 +342,8 @@ function FilterBar({
   searchTerm,
   onSearchChange,
   tagSuggestions,
+  onRefresh,
+  refreshing,
 }: {
   filters: Filters;
   onFiltersChange: (next: Filters) => void;
@@ -350,6 +354,8 @@ function FilterBar({
   searchTerm: string;
   onSearchChange: (v: string) => void;
   tagSuggestions: string[];
+  onRefresh: () => void;
+  refreshing: boolean;
 }) {
   const { t } = useI18n();
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -418,6 +424,41 @@ function FilterBar({
           </button>
         )}
       </div>
+      <button
+        onClick={onRefresh}
+        disabled={refreshing}
+        aria-label={t("Refresh")}
+        title={t("Refresh")}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: 22, height: 22, padding: 0,
+          flexShrink: 0,
+          background: "transparent",
+          border: "1px solid var(--border)",
+          borderRadius: 4,
+          cursor: refreshing ? "default" : "pointer",
+          color: "var(--text-muted)",
+          fontFamily: "inherit",
+        }}
+      >
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            flexShrink: 0,
+            animation: refreshing ? "spin 0.8s linear infinite" : undefined,
+          }}
+        >
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <path d="M3 3v5h5" />
+        </svg>
+      </button>
       <div style={{ position: "relative", flexShrink: 0 }}>
         <button
           onClick={() => setAgentToolsOpen(!agentToolsOpen)}
@@ -452,24 +493,23 @@ function FilterBar({
           aria-haspopup="dialog"
           aria-expanded={filterOpen}
           aria-label={t("Filter")}
+          title={t("Filter")}
           style={{
-            display: "flex", alignItems: "center", gap: 4,
-            padding: "3px 10px",
-            fontSize: 11,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 22, height: 22, padding: 0,
             flexShrink: 0,
             background: filterActive || filterOpen ? "var(--bg-selected)" : "transparent",
             border: "1px solid var(--border)",
-            borderRadius: 10,
+            borderRadius: 4,
             cursor: "pointer",
             color: filterActive || filterOpen ? "var(--text)" : "var(--text-muted)",
             transition: "background 0.1s, color 0.1s",
             fontFamily: "inherit",
           }}
         >
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
             <polygon points="1,1.5 9,1.5 6.2,5.2 6.2,8.5 3.8,8.5 3.8,5.2" />
           </svg>
-          {t("Filter")}
         </button>
         {filterOpen && (
           <FilterPopover
@@ -482,25 +522,24 @@ function FilterBar({
       </div>
       <button
         onClick={onAdd}
+        aria-label={t("Add")}
+        title={t("Add")}
         style={{
-          display: "flex", alignItems: "center", gap: 4,
-          padding: "3px 10px",
-          fontSize: 11,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: 22, height: 22, padding: 0,
           flexShrink: 0,
           background: "var(--accent)",
           border: "none",
-          borderRadius: 10,
+          borderRadius: 4,
           color: "var(--bg)",
           cursor: "pointer",
-          fontWeight: 500,
           fontFamily: "inherit",
         }}
       >
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <line x1="5" y1="1" x2="5" y2="9" />
           <line x1="1" y1="5" x2="9" y2="5" />
         </svg>
-        {t("Add")}
       </button>
     </div>
   );
