@@ -82,7 +82,7 @@ A single careless command can wipe data that has no backup, is not in git, and c
 
 - The todo list is stored in `~/.pi-web/todos.db` (SQLite via `better-sqlite3`). The legacy `todos.json` was renamed to `todos.json.migrated.<ts>` on first DB read — it is **not** deleted and can be inspected with `cat`. To roll back: run `npx tsx scripts/todos-restore.ts` (writes a fresh `todos.json` from the DB; never overwrites an existing one).
 - The `cat > ~/.pi-web/todos.db` (or `todos.json`) idiom is the kind of thing that looks safe in a one-liner test script but truncates the file immediately. If the heredoc body is wrong, the file is `0 bytes` and unrecoverable.
-- Other irreplaceable user data in this project: `~/.pi-web/todo_images/`, `~/.pi-web/workspace/`, `~/.pi/agent/sessions/`, `~/.pi/agent/models.json`, `~/.pi-web/pinned.json`, `~/.pi-web/todo-tools.json`.
+- Other irreplaceable user data in this project: `~/.pi-web/todo_images/`, `~/.pi-web/workspace/`, `~/.pi-web/payloads/`, `~/.pi-web/config.yaml`, `~/.pi/agent/sessions/`, `~/.pi/agent/models.json`, `~/.pi-web/pinned.json`, `~/.pi-web/todo-tools.json`.
 
 ### If a write goes wrong
 
@@ -148,36 +148,106 @@ Browser                Next.js Server              AgentSession (in-process)
 
 ```
 app/api/
-  sessions/route.ts               GET  list all sessions
-  sessions/[id]/route.ts          GET/PATCH/DELETE session
-  sessions/[id]/context/route.ts  GET ?leafId= — context for a specific leaf
-  sessions/new/route.ts           returns 410 (no longer used)
-  agent/new/route.ts              POST { cwd, type, message, toolNames?, provider?, modelId?, thinkingLevel? }
-  agent/[id]/route.ts             GET { running, state } | POST any command
-  agent/[id]/events/route.ts      GET SSE stream
-  files/[...path]/route.ts        GET file contents for viewer
-  models/route.ts                 GET { models, modelList, defaultModel }
-  models-config/route.ts          GET/PUT — read/write ~/.pi/agent/models.json
+  sessions/route.ts                 GET  list all sessions (optional ?cwd=)
+  sessions/[id]/route.ts            GET/PATCH/DELETE — GET supports ?includeState
+  sessions/[id]/context/route.ts    GET ?leafId= — context for a specific leaf
+  sessions/[id]/search/route.ts     GET in-session keyword search
+  sessions/search/route.ts          GET cross-session keyword search
+  agent/new/route.ts                POST { cwd, type, message, toolNames?, provider?, modelId?, thinkingLevel? }
+  agent/[id]/route.ts               GET { running, state } | POST any command
+  agent/[id]/events/route.ts        GET SSE stream
+  agent/[id]/payloads/route.ts      GET captured provider request/response payloads
+  files/[...path]/route.ts          GET/PUT/POST/DELETE/PATCH — list/read/watch + write/create/rename/delete
+  models/route.ts                   GET { models, modelList, defaultModel, thinkingLevels, thinkingLevelMaps }
+  models-config/route.ts            GET/PUT — read/write ~/.pi/agent/models.json
+  auth/{providers,all-providers,login/[provider],logout/[provider],api-key/[provider]}
+                                    provider auth flows (OAuth login + API-key set/clear)
+  context/route.ts                  GET ?cwd= — AGENTS.md files for a cwd (cached 30s)
+  create-space/route.ts             POST { dir_name } — mkdir ~/.pi-web/workspace/<dir>
+  default-cwd/route.ts              POST — ensure ~/.pi-web/workspace/pi-cwd-default exists
+  home/route.ts                     GET { home } — homedir for the UI
+  github/contributions/route.ts     GET GitHub contribution heatmap data
+  pinned-cwds/route.ts              GET/PUT pinned project list (~/.pi-web/pinned.json)
+  pinned-sessions/route.ts          GET/PUT pinned session list
+  prompts/route.ts                  GET/POST slash-command prompt templates
+  slash-commands/route.ts           GET aggregated slash commands for a cwd
+  skills/{route,detail,install,search}
+                                    list, inspect, install (npm/git), and search marketplace skills
+  settings/route.ts                 GET/PUT — read/write ~/.pi-web/config.yaml
+  todos/route.ts                    GET/POST/PATCH/DELETE todos
+  todos/[id]/export/route.ts        GET export todo as zip (markdown + images)
+  todo-images/route.ts              POST upload image to ~/.pi-web/todo_images/
+  todo-images/[filename]/route.ts   GET/DELETE one todo image
+  todo-tools/route.ts               GET/PUT enabled-todo-tool config
+  weixin/{login,login/verify-code,logout,status,contacts,test-send,inbound,workspace}
+                                    WeChat login, contacts, send/receive, push-to-workspace
 
 lib/
-  rpc-manager.ts      AgentSessionWrapper + registry + startRpcSession
-  session-reader.ts   parse .jsonl; buildSessionContext, buildTree, path cache
-  types.ts            shared TypeScript types
-  normalize.ts        normalizeToolCalls() — field name mismatch between file format and our types
+  rpc-manager.ts        AgentSessionWrapper + registry + startRpcSession
+  session-reader.ts     parse .jsonl; buildSessionContext, buildTree, path cache
+  agent-client.ts       sendAgentCommand() — single fetch helper used by hooks
+  types.ts              shared frontend types (AgentMessage, SessionEntry, etc.)
+  pi-types.ts           narrowed shapes for the pi SDK objects we touch
+  normalize.ts          normalizeToolCalls() — field name mismatch between file format and our types
+  config.ts             read/write ~/.pi-web/config.yaml (system_prompt_replacements, github_username)
+  db.ts                 SQLite handle for ~/.pi-web/todos.db (+ one-shot JSON→DB migration)
+  todo-store.ts         CRUD + validation on top of db.ts
+  todo-tools.ts         pi customTools that expose the todo store to the agent
+  todo-tools-config.ts  read enabled-tool flags from ~/.pi-web/todo-tools.json
+  todo-images-utils.ts  helpers for ~/.pi-web/todo_images/
+  payload-capture.ts    inline pi-extension hooks → ~/.pi-web/payloads/<sessionId>.jsonl
+  json-array-store.ts   read/write a JSON file containing a string array
+  file-paths.ts         path normalization + /api/files URL encoding
+  file-name.ts          validateFileName() for create/rename routes
+  logger.ts             structured logger used by every route + lib file
+  npx.ts                helpers to run `npm` / `npx` from the server (skill install)
+  fonts/                next/font Inter loader
+  wechat/               WeChat client + workspace push utilities
 
 components/
-  AppShell.tsx        layout + URL state + tab management
-  SessionSidebar.tsx  session tree + FileExplorer
-  ChatWindow.tsx      messages + streaming + SSE + fork/navigate logic
-  ChatInput.tsx       input bar + model/thinking/tools/compact controls
-  MessageView.tsx     renders one message (user/assistant/toolCall/toolResult)
-  BranchNavigator.tsx in-session branch switcher
-  ChatMinimap.tsx     scroll minimap alongside the message list
-  ToolPanel.tsx       exports PRESET_NONE/DEFAULT/FULL + getPresetFromTools
-  ModelsConfig.tsx    modal for editing models.json (opened from sidebar bottom)
-  FileExplorer.tsx    file tree inside sidebar
-  FileViewer.tsx      file content in a tab
-  TabBar.tsx          tab bar (Chat + open file tabs)
+  AppShell.tsx          layout + URL state + tab management
+  SessionSidebar.tsx    session tree + FileExplorer
+  ChatWindow.tsx        message list + minimap + sticky-scroll wiring
+  ChatInput.tsx         input bar + model/thinking/tools/compact controls
+  MessageView.tsx       renders one message (user/assistant/toolCall/toolResult)
+  BranchNavigator.tsx   in-session branch switcher
+  ChatMinimap.tsx       scroll minimap alongside the message list
+  ToolPanel.tsx         exports PRESET_NONE + getPresetFromTools (only "none" / "full")
+  ModelsConfig.tsx      modal for editing ~/.pi/agent/models.json
+  SkillsConfig.tsx      modal for installing / browsing / toggling skills
+  PromptsConfig.tsx     modal for managing slash-command prompts
+  SettingsModal.tsx     modal for ~/.pi-web/config.yaml (replacements, github username)
+  PayloadsModal.tsx     modal for inspecting captured provider payloads
+  FileExplorer.tsx      file tree inside sidebar
+  FileViewer.tsx        file content in a tab (text, image, audio, pdf)
+  TabBar.tsx            tab bar (Chat + open file tabs + Todo)
+  TodoPanel.tsx         todo list panel
+  ToolCallStatsDrawer.tsx  per-tool call statistics for the active turn
+  SessionSearch.tsx     in-session and cross-session keyword search UI
+  SessionHeatmap.tsx    session activity heatmap
+  GithubHeatmap.tsx     GitHub contribution heatmap
+  CommandPalette.tsx    ⌘K palette
+  ContextMenu.tsx       reusable right-click menu
+  ConfirmDialog.tsx     reusable confirm dialog
+  Toast.tsx             toast notifications
+  Tooltip.tsx           Radix-backed tooltip wrapper
+  MarkdownEditor.tsx + MarkdownEditorInner.tsx
+                        CodeMirror markdown editor (used in TodoPanel)
+  ImageLightbox.tsx     image preview overlay
+  FileIcons.tsx         file-type icon set
+  WeChatSettingsSection.tsx
+                        WeChat login + send-to-workspace settings
+
+hooks/
+  useAgentSession.ts    everything chat-window-related: load, stream, fork,
+                        navigate, set model/tools/thinking, compact, steer
+  useI18n.tsx           en/zh dictionary + locale toggle (t() / useI18n())
+  useTheme.ts           CSS theme preset toggle
+  useTodos.tsx          todos provider + hook for TodoPanel
+  useToolCallStats.ts + ToolCallStatsContext.tsx
+                        per-turn tool-call statistics
+  useDragDrop.ts        drag-and-drop file/image upload
+  useAudio.ts           tone for agent-end notifications
 ```
 
 ---
@@ -202,16 +272,16 @@ components/
 `parentSession` in the header is **display metadata only** — has zero effect on chat content. Safe to `writeFileSync` the entire file (pi does this itself during migrations). Used when cascade-reparenting children on delete.
 
 ### ToolCall field normalization
-Pi stores toolCall blocks as `{type:"toolCall", id, name, arguments}` but `ToolCallContent` uses `{toolCallId, toolName, input}`. `normalizeToolCalls()` in `lib/normalize.ts` handles this — called when loading messages from session files (`session-reader.ts`) and when processing streaming events in `ChatWindow`.
+Pi stores toolCall blocks as `{type:"toolCall", id, name, arguments}` but `ToolCallContent` uses `{toolCallId, toolName, input}`. `normalizeToolCalls()` in `lib/normalize.ts` handles this — called when loading messages from session files (`session-reader.ts`) and when processing streaming events in `useAgentSession`.
 
 ### New session tool preset
-Tool names are passed at session creation (`POST /api/agent/new` → `toolNames[]`). For existing sessions, the active preset is inferred on mount via `get_tools` → `getPresetFromTools()`. When tools are fully disabled (`toolNames = []`), `rpc-manager.ts` clears `agent.state.systemPrompt` directly.
+Tool names are passed at session creation (`POST /api/agent/new` → `toolNames[]`). `ToolPanel` exports only two presets — `"none"` (empty array) and `"full"` (every tool pi registers at runtime); `PRESET_NONE` is the single named export. When tools are fully disabled (`toolNames = []`), `rpc-manager.ts` clears `agent.state.systemPrompt` directly.
 
 ### Model defaults for new sessions
-`GET /api/models` returns `defaultModel` read from `~/.pi/agent/settings.json`. `ChatWindow` pre-selects this on mount for new sessions.
+`GET /api/models` returns `defaultModel` read from `~/.pi/agent/settings.json`, plus per-model `thinkingLevels` and `thinkingLevelMaps`. `useAgentSession` pre-selects `defaultModel` on mount for new sessions.
 
 ### SSE reconnect on page refresh mid-stream
-On `ChatWindow` mount, `GET /api/agent/[id]` is called. If `state.isStreaming === true`, SSE is reconnected automatically. `thinkingLevel` and `isCompacting` are also synced from this response.
+On `useAgentSession` mount, `GET /api/sessions/[id]?includeState` is called. If `agentState.state.isStreaming === true`, SSE is reconnected automatically. `thinkingLevel`, `isCompacting`, and `contextUsage` are also synced from this response.
 
 ### Compaction SSE events
 Newer pi emits `compaction_start` / `compaction_end`; older versions emitted `auto_compaction_start` / `auto_compaction_end`. `handleAgentEvent` accepts both sets to keep `isCompacting` in sync. Manual compact is a blocking POST — the button stays disabled until the response returns.
@@ -238,10 +308,12 @@ Location: `~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`
 
 ## CSS Variables (`app/globals.css`)
 
+Theme presets (`.theme-default`, `.theme-midnight`, `.theme-synthwave`, `.theme-forest`, …) set these vars; pick from `useTheme`.
+
 ```
---bg --bg-panel --bg-hover --bg-selected --border
+--bg --bg-panel --bg-hover --bg-selected --bg-subtle --border
 --text --text-muted --text-dim
---accent --user-bg --tool-bg
+--accent --accent-hover --user-bg --assistant-bg --tool-bg
 --font-mono
 ```
 
@@ -252,6 +324,6 @@ Location: `~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`
 **All user-visible strings in new components must go through i18n — never hardcode display text.**
 
 When adding or modifying frontend components:
-- Extract every user-facing string (labels, placeholders, tooltips, aria-labels, status messages, error text) into the i18n dictionary.
-- Use the project's existing i18n mechanism (`t('key')` / `useTranslation()`) — don't invent a new pattern.
-- Key naming: follow the existing convention (e.g. `namespace.camelCase` or dot-separated). Look at nearby keys before creating new ones.
+- Extract every user-facing string (labels, placeholders, tooltips, aria-labels, status messages, error text) into the i18n dictionary at `hooks/useI18n.tsx`.
+- Use the project's existing i18n mechanism (`t('key')` from `useI18n()`) — don't invent a new pattern.
+- Keys are the English source string itself; add the Chinese translation in the `ZH_TRANSLATIONS` map. Look at nearby keys before creating new ones.
