@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import type { SessionInfo } from "@/lib/types";
 import { FileExplorer } from "./FileExplorer";
 import { useI18n } from "@/hooks/useI18n";
+import { useToast } from "./Toast";
 import { Tooltip } from "./Tooltip";
 
 interface Props {
@@ -200,6 +201,7 @@ function PiAgentTitle() {
 
 export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted }: Props) {
   const { t } = useI18n();
+  const toast = useToast();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -333,6 +335,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
       const data = await res.json() as { cwd?: string; error?: string };
       if (!res.ok || !data.cwd) {
         setCreateSpaceError(data.error ?? `HTTP ${res.status}`);
+        toast.show({ kind: "error", message: data.error ?? `HTTP ${res.status}` });
         return;
       }
       setSelectedCwd(data.cwd);
@@ -343,12 +346,14 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
       setCustomPathValue("");
       setDropdownOpen(false);
       setExplorerKey((k) => k + 1);
+      toast.show({ kind: "success", message: t("Space created") });
     } catch (e) {
       setCreateSpaceError(String(e));
+      toast.show({ kind: "error", message: String(e) });
     } finally {
       setCreatingSpace(false);
     }
-  }, [createSpaceValue, creatingSpace]);
+  }, [createSpaceValue, creatingSpace, t, toast]);
 
   const handleDefaultCwd = useCallback(async () => {
     try {
@@ -393,8 +398,9 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     } catch {
       // revert on failure
       setPinnedCwds(pinnedCwds);
+      toast.show({ kind: "error", message: t("Failed to update pin") });
     }
-  }, [pinnedCwds]);
+  }, [pinnedCwds, t, toast]);
 
   const toggleSessionPin = useCallback(async (sessionId: string) => {
     const next = pinnedSessions.includes(sessionId)
@@ -410,8 +416,9 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     } catch {
       // revert on failure
       setPinnedSessions(pinnedSessions);
+      toast.show({ kind: "error", message: t("Failed to update pin") });
     }
-  }, [pinnedSessions]);
+  }, [pinnedSessions, t, toast]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -1224,6 +1231,7 @@ function SessionItem({
   onTogglePin?: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [hovered, setHovered] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -1245,16 +1253,18 @@ function SessionItem({
     setRenaming(false);
     if (name === (session.name ?? "")) return;
     try {
-      await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       onRenamed?.();
-    } catch {
-      // ignore
+      toast.show({ kind: "success", message: t("Session renamed") });
+    } catch (e) {
+      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to rename session") });
     }
-  }, [renameValue, session.id, session.name, onRenamed]);
+  }, [renameValue, session.id, session.name, onRenamed, t, toast]);
 
   const handleDeleteClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1266,12 +1276,15 @@ function SessionItem({
     setConfirmDelete(false);
     setDeleting(true);
     try {
-      await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       onDeleted?.(session.id);
-    } catch {
+      toast.show({ kind: "success", message: t("Session deleted") });
+    } catch (err) {
       setDeleting(false);
+      toast.show({ kind: "error", message: err instanceof Error && err.message ? err.message : t("Failed to delete session") });
     }
-  }, [session.id, onDeleted]);
+  }, [session.id, onDeleted, t, toast]);
 
   const handleDeleteCancel = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
