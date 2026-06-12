@@ -143,10 +143,9 @@ function formatSlashContent(item: SlashResource, argsString = "", appendUnusedAr
   }
 
   const name = item.name.replace(/"/g, "&quot;");
-  const path = item.path.replace(/"/g, "&quot;");
-  const skillBlock = `<skill name="${name}" location="${path}">\n${content}\n</skill>`;
+  const skillReference = `Use this skill: ${name}`;
   const args = argsString.trim();
-  return args ? `${skillBlock}\n\n${args}` : skillBlock;
+  return args ? `${args}\n\n${skillReference}` : skillReference;
 }
 
 function findDirectSlashResource(message: string, resources: SlashResource[]): { item: SlashResource; args: string } | null {
