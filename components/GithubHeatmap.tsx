@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Tooltip } from "./Tooltip";
 import { useI18n } from "@/hooks/useI18n";
+import { useToast } from "./Toast";
 
 const COLS = 52;
 const ROWS = 7;
@@ -38,6 +39,7 @@ interface Props {
 
 export function GithubHeatmap({ username }: Props) {
   const { t, locale } = useI18n();
+  const toast = useToast();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,10 +54,11 @@ export function GithubHeatmap({ username }: Props) {
       setError(null);
     } catch (e) {
       setError(String(e));
+      toast.show({ kind: "error", message: t("Couldn't load GitHub activity") });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t, toast]);
 
   useEffect(() => {
     setLoading(true);

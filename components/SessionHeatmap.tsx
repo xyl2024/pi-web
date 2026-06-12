@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SessionInfo } from "@/lib/types";
 import { useI18n } from "@/hooks/useI18n";
+import { useToast } from "./Toast";
 import { Tooltip } from "./Tooltip";
 
 const COLS = 52;
@@ -27,6 +28,7 @@ interface Props {
 
 export function SessionHeatmap({ cwd, onOpenSession }: Props) {
   const { t, locale } = useI18n();
+  const toast = useToast();
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,10 +43,11 @@ export function SessionHeatmap({ cwd, onOpenSession }: Props) {
       setError(null);
     } catch (e) {
       setError(String(e));
+      toast.show({ kind: "error", message: t("Couldn't load activity") });
     } finally {
       setLoading(false);
     }
-  }, [cwd]);
+  }, [cwd, t, toast]);
 
   useEffect(() => {
     setLoading(true);

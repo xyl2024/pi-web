@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Tooltip } from "./Tooltip";
 import { useI18n } from "@/hooks/useI18n";
+import { useToast } from "./Toast";
 
 interface CapturedPayload {
   index: number;
@@ -17,6 +18,7 @@ interface CapturedPayload {
 
 export function PayloadsModal({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [items, setItems] = useState<CapturedPayload[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -26,8 +28,11 @@ export function PayloadsModal({ sessionId, onClose }: { sessionId: string; onClo
     fetch(`/api/agent/${encodeURIComponent(sessionId)}/payloads`)
       .then((r) => r.json())
       .then((d: { items?: CapturedPayload[] }) => setItems(d.items ?? []))
-      .catch((e) => setError(String(e)));
-  }, [sessionId]);
+      .catch((e) => {
+        setError(String(e));
+        toast.show({ kind: "error", message: t("Failed to load payloads") });
+      });
+  }, [sessionId, t, toast]);
 
   useEffect(() => {
     load();
@@ -54,8 +59,9 @@ export function PayloadsModal({ sessionId, onClose }: { sessionId: string; onClo
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
+      toast.show({ kind: "success", message: t("Copied") });
     } catch {
-      // ignore
+      toast.show({ kind: "error", message: t("Copy failed") });
     }
   };
 
