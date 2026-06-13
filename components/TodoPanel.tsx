@@ -9,6 +9,7 @@ import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { DatePicker } from "./DatePicker";
 import { extractImageGallery, MarkdownImage, ImageLightbox } from "./ImageLightbox";
 
 type StatusFilter = "all" | "active" | "done";
@@ -67,24 +68,6 @@ const DEADLINE_FILTER_OPTIONS: { key: DeadlineFilter; labelKey: string }[] = [
 function startOfDay(ts: number): number {
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function endOfDayFromInput(value: string): number | undefined {
-  // <input type="date"> emits "YYYY-MM-DD" in local time. Store as end-of-day so
-  // overdue detection flips at midnight local time the day after.
-  if (!value) return undefined;
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!m) return undefined;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 23, 59, 59, 999);
-  return d.getTime();
-}
-
-function startOfDayFromInput(value: string): number | undefined {
-  if (!value) return undefined;
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!m) return undefined;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0);
   return d.getTime();
 }
 
@@ -686,61 +669,43 @@ function FilterPopover({
         <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "2px 8px" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-muted)" }}>
             <span style={{ width: 36, flexShrink: 0 }}>{t("From")}</span>
-            <input
-              type="date"
-              value={filters.dateRange.from != null ? formatDateForInput(filters.dateRange.from) : ""}
-              onChange={(e) => {
-                const next = startOfDayFromInput(e.target.value);
+            <DatePicker
+              value={filters.dateRange.from}
+              onChange={(ts) => {
                 onChange({
                   ...filters,
                   dateRange: {
-                    from: next ?? null,
+                    from: ts,
                     to: filters.dateRange.to,
                   },
                   // Selecting a range clears the deadline preset.
-                  deadline: next != null ? "all" : filters.deadline,
+                  deadline: ts != null ? "all" : filters.deadline,
                 });
               }}
-              style={{
-                flex: 1, minWidth: 0,
-                padding: "1px 4px",
-                fontSize: 11,
-                background: "transparent",
-                border: "1px solid var(--border)",
-                borderRadius: 3,
-                outline: "none",
-                color: "var(--text-muted)",
-                fontFamily: "inherit",
-              }}
+              ariaLabel={t("From")}
             />
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-muted)" }}>
             <span style={{ width: 36, flexShrink: 0 }}>{t("To")}</span>
-            <input
-              type="date"
-              value={filters.dateRange.to != null ? formatDateForInput(filters.dateRange.to) : ""}
-              onChange={(e) => {
-                const next = endOfDayFromInput(e.target.value);
+            <DatePicker
+              value={filters.dateRange.to}
+              onChange={(ts) => {
+                // DatePicker emits start-of-day; bump to end-of-day so the
+                // "To" upper bound is inclusive of the picked day.
+                const next =
+                  ts != null
+                    ? new Date(new Date(ts).setHours(23, 59, 59, 999)).getTime()
+                    : null;
                 onChange({
                   ...filters,
                   dateRange: {
                     from: filters.dateRange.from,
-                    to: next ?? null,
+                    to: next,
                   },
                   deadline: next != null ? "all" : filters.deadline,
                 });
               }}
-              style={{
-                flex: 1, minWidth: 0,
-                padding: "1px 4px",
-                fontSize: 11,
-                background: "transparent",
-                border: "1px solid var(--border)",
-                borderRadius: 3,
-                outline: "none",
-                color: "var(--text-muted)",
-                fontFamily: "inherit",
-              }}
+              ariaLabel={t("To")}
             />
           </label>
           {(filters.dateRange.from != null || filters.dateRange.to != null) && (
@@ -1267,23 +1232,15 @@ function DraftRow({ onSubmit, onCancel, tagSuggestions }: { onSubmit: (value: { 
           <CalendarIcon />
           {t("Deadline")}
         </span>
-        <input
-          type="date"
-          value={deadline !== undefined ? formatDateForInput(deadline) : ""}
-          onChange={(e) => setDeadline(endOfDayFromInput(e.target.value))}
-          aria-label={t("Pick a date")}
-          style={{
-            flex: 1, minWidth: 0,
-            padding: "1px 4px",
-            fontSize: 11,
-            background: "transparent",
-            border: "1px solid var(--border)",
-            borderRadius: 3,
-            outline: "none",
-            color: "var(--text-muted)",
-            fontFamily: "inherit",
-            colorScheme: "dark",
+        <DatePicker
+          value={deadline}
+          onChange={(ts) => {
+            // DatePicker emits start-of-day; bump to end-of-day so the
+            // deadline flips at midnight local time the day after.
+            if (ts == null) setDeadline(undefined);
+            else setDeadline(new Date(new Date(ts).setHours(23, 59, 59, 999)).getTime());
           }}
+          ariaLabel={t("Pick a date")}
         />
       </div>
       <div style={{ paddingLeft: 22 }}>
@@ -1324,14 +1281,9 @@ function TodoItem({
   const [detailsVisible, setDetailsVisible] = useState(!todo.done);
   const [titleDraft, setTitleDraft] = useState(todo.title);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const deadlineInputRef = useRef<HTMLInputElement | null>(null);
+  const [deadlinePickerOpen, setDeadlinePickerOpen] = useState(false);
 
-  const openDeadlinePicker = () => {
-    const el = deadlineInputRef.current;
-    if (!el) return;
-    if (typeof el.showPicker === "function") el.showPicker();
-    else el.focus();
-  };
+  const openDeadlinePicker = () => setDeadlinePickerOpen(true);
 
   // Gallery of every image reference in the description, for lightbox
   // prev/next navigation. Todo image URLs are already absolute
@@ -1555,7 +1507,8 @@ function TodoItem({
         )}
         <DeadlineControl
           todo={todo}
-          inputRef={deadlineInputRef}
+          open={deadlinePickerOpen}
+          onOpenChange={setDeadlinePickerOpen}
           onChange={(v) => onUpdate({ deadline: v })}
         />
       </div>
@@ -1621,74 +1574,56 @@ function TodoItem({
 
 function DeadlineControl({
   todo,
-  inputRef,
+  open,
+  onOpenChange,
   onChange,
 }: {
   todo: Todo;
-  inputRef: React.RefObject<HTMLInputElement | null>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onChange: (v: number | undefined) => void;
 }) {
   const { t, locale } = useI18n();
 
-  // Always render a hidden-but-layout-present <input type="date">. The visible
-  // button calls showPicker() on it so the user gets the native calendar in one
-  // click, with no intermediate "edit box" state.
-  const hiddenInput = (
-    <input
-      ref={inputRef}
-      type="date"
-      value={todo.deadline !== undefined ? formatDateForInput(todo.deadline) : ""}
-      onChange={(e) => {
-        const v = endOfDayFromInput(e.target.value);
-        if (v !== undefined) onChange(v);
-      }}
-      style={{
-        position: "absolute",
-        width: 1,
-        height: 1,
-        padding: 0,
-        margin: 0,
-        border: 0,
-        opacity: 0,
-        pointerEvents: "none",
-      }}
-      tabIndex={-1}
-      aria-hidden
-    />
-  );
-
-  const handleClick = () => {
-    const el = inputRef.current;
-    if (!el) return;
-    if (typeof el.showPicker === "function") el.showPicker();
-    else el.focus();
-  };
-
   if (todo.deadline === undefined) {
     return (
-      <span style={{ position: "relative", display: "inline-flex" }}>
-        {hiddenInput}
-        <button
-          onClick={handleClick}
-          aria-label={t("Set deadline")}
-          title={t("Set deadline")}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            width: 20, height: 20, padding: 0,
-            flexShrink: 0,
-            background: "transparent",
-            border: "none",
-            color: "var(--text-dim)",
-            cursor: "pointer",
-            borderRadius: 3,
-            fontFamily: "inherit",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-dim)")}
-        >
-          <CalendarIcon />
-        </button>
-      </span>
+      <DatePicker
+        value={null}
+        onChange={(ts) => {
+          if (ts == null) return;
+          // Bump to end-of-day so the deadline flips at midnight local time
+          // the day after.
+          onChange(new Date(new Date(ts).setHours(23, 59, 59, 999)).getTime());
+        }}
+        open={open}
+        onOpenChange={onOpenChange}
+        ariaLabel={t("Set deadline")}
+        renderTrigger={({ open: isOpen, ref, onClick }) => (
+          <button
+            ref={ref}
+            onClick={onClick}
+            aria-label={t("Set deadline")}
+            title={t("Set deadline")}
+            aria-haspopup="dialog"
+            aria-expanded={isOpen}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 20, height: 20, padding: 0,
+              flexShrink: 0,
+              background: "transparent",
+              border: "none",
+              color: isOpen ? "var(--text)" : "var(--text-dim)",
+              cursor: "pointer",
+              borderRadius: 3,
+              fontFamily: "inherit",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = isOpen ? "var(--text)" : "var(--text-dim)")}
+          >
+            <CalendarIcon />
+          </button>
+        )}
+      />
     );
   }
 
@@ -1702,29 +1637,44 @@ function DeadlineControl({
     : tone === "today"   ? ` (${t("Due today")})`
     : ` (${t("In {n} days").replace("{n}", String(daysAhead))})`;
   return (
-    <span style={{ position: "relative", display: "inline-flex" }}>
-      {hiddenInput}
-      <button
-        onClick={handleClick}
-        aria-label={t("Change deadline")}
-        title={t("Change deadline")}
-        style={{
-          display: "flex", alignItems: "center", gap: 4,
-          padding: "1px 6px", fontSize: 11,
-          flexShrink: 0,
-          background: "transparent",
-          border: "none",
-          color,
-          cursor: "pointer",
-          borderRadius: 3,
-          fontFamily: "inherit",
-          textDecoration: todo.done ? "line-through" : "none",
-        }}
-        onMouseEnter={(e) => { if (!todo.done) e.currentTarget.style.color = "var(--text)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = color; }}
-      >
-        <CalendarIcon /> {label}{suffix}
-      </button>
-    </span>
+    <DatePicker
+      value={todo.deadline}
+      onChange={(ts) => {
+        if (ts == null) {
+          onChange(undefined);
+          return;
+        }
+        onChange(new Date(new Date(ts).setHours(23, 59, 59, 999)).getTime());
+      }}
+      open={open}
+      onOpenChange={onOpenChange}
+      ariaLabel={t("Change deadline")}
+      renderTrigger={({ open: isOpen, ref, onClick }) => (
+        <button
+          ref={ref}
+          onClick={onClick}
+          aria-label={t("Change deadline")}
+          title={t("Change deadline")}
+          aria-haspopup="dialog"
+          aria-expanded={isOpen}
+          style={{
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "1px 6px", fontSize: 11,
+            flexShrink: 0,
+            background: "transparent",
+            border: "none",
+            color: isOpen ? "var(--text)" : color,
+            cursor: "pointer",
+            borderRadius: 3,
+            fontFamily: "inherit",
+            textDecoration: todo.done ? "line-through" : "none",
+          }}
+          onMouseEnter={(e) => { if (!todo.done) e.currentTarget.style.color = "var(--text)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = isOpen ? "var(--text)" : color; }}
+        >
+          <CalendarIcon /> {label}{suffix}
+        </button>
+      )}
+    />
   );
 }
