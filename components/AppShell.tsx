@@ -294,8 +294,8 @@ export function AppShell() {
     try { localStorage.setItem(STORAGE_KEY_RIGHT, String(def)); } catch {}
   }, []);
 
-  const handleAtMention = useCallback((relativePath: string) => {
-    chatInputRef.current?.insertText("`" + relativePath + "`");
+  const handleAtMention = useCallback((filePath: string) => {
+    chatInputRef.current?.insertText("`" + filePath + "`");
   }, []);
 
   const [initialSessionId] = useState<string | null>(() => searchParams.get("session"));

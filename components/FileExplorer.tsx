@@ -30,7 +30,7 @@ interface Props {
   cwd: string;
   onOpenFile: (filePath: string, fileName: string) => void;
   refreshKey?: number;
-  onAtMention?: (relativePath: string) => void;
+  onAtMention?: (filePath: string) => void;
   onFileMutated?: () => void;
   onFileDeleted?: (filePath: string) => void;
 }
@@ -67,7 +67,7 @@ function TreeNode({
   depth: number;
   cwd: string;
   onOpenFile: (filePath: string, fileName: string) => void;
-  onAtMention?: (relativePath: string) => void;
+  onAtMention?: (filePath: string) => void;
   expandedPaths: Set<string>;
   onToggleExpanded: (fullPath: string, open: boolean) => void;
   refreshKey?: number;
@@ -371,7 +371,7 @@ function TreeNode({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onAtMention(getRelativeFilePath(node.fullPath, cwd));
+              onAtMention(node.fullPath);
             }}
             style={{
               position: "absolute",

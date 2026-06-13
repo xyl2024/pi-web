@@ -20,7 +20,7 @@ interface Props {
   onCwdChange?: (cwd: string | null) => void;
   onOpenFile?: (filePath: string, fileName: string) => void;
   explorerRefreshKey?: number;
-  onAtMention?: (relativePath: string) => void;
+  onAtMention?: (filePath: string) => void;
   onOpenSearch?: () => void;
   onFileDeleted?: (filePath: string) => void;
   onOpenScheduledSession?: (sessionId: string) => void;
