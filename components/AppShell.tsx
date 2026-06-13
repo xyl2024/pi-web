@@ -428,9 +428,9 @@ export function AppShell() {
       try {
         const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { session?: SessionInfo };
-        if (!data.session) return;
-        handleSelectSession(data.session);
+        const data = (await res.json()) as { info?: SessionInfo };
+        if (!data.info) return;
+        handleSelectSession(data.info);
       } catch {
         // Fallback: navigate via URL so the page rehydrates from the session file
         router.replace(`?session=${encodeURIComponent(sessionId)}`, { scroll: false });
