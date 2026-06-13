@@ -439,6 +439,7 @@ const ZH_TRANSLATIONS = {
   "Never": "从未",
   "Runs history": "运行历史",
   "No runs yet": "暂无运行记录",
+  "View runs": "查看运行历史",
   "Open session": "打开会话",
   "Copy output": "复制输出",
   "Task name": "任务名称",

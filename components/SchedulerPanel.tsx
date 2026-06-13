@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
 import { Tooltip } from "./Tooltip";
@@ -86,7 +86,7 @@ export function SchedulerPanel({ onOpenSession }: Props) {
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [runsModalTaskId, setRunsModalTaskId] = useState<string | null>(null);
   const [runs, setRuns] = useState<TaskRun[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -95,7 +95,6 @@ export function SchedulerPanel({ onOpenSession }: Props) {
   const [saving, setSaving] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [triggering, setTriggering] = useState<string | null>(null);
-  const formRef = useRef<HTMLDivElement>(null);
 
   const loadTasks = useCallback(async () => {
     setLoading(true);
@@ -131,18 +130,18 @@ export function SchedulerPanel({ onOpenSession }: Props) {
   }, [open, loadTasks]);
 
   useEffect(() => {
-    if (selectedId) void loadRuns(selectedId);
-  }, [selectedId, loadRuns]);
+    if (runsModalTaskId) void loadRuns(runsModalTaskId);
+  }, [runsModalTaskId, loadRuns]);
 
   // Auto-refresh runs while a run is in flight.
   useEffect(() => {
     const inFlight = runs.some((r) => r.status === "running");
-    if (!selectedId || !inFlight) return;
-    const timer = setInterval(() => { void loadRuns(selectedId); }, 2000);
+    if (!runsModalTaskId || !inFlight) return;
+    const timer = setInterval(() => { void loadRuns(runsModalTaskId); }, 2000);
     return () => clearInterval(timer);
-  }, [selectedId, runs, loadRuns]);
+  }, [runsModalTaskId, runs, loadRuns]);
 
-  const selectedTask = tasks.find((t) => t.id === selectedId) ?? null;
+  const runsModalTask = tasks.find((t) => t.id === runsModalTaskId) ?? null;
 
   const openNewForm = () => {
     setEditingId(null);
@@ -242,8 +241,8 @@ export function SchedulerPanel({ onOpenSession }: Props) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast.show({ kind: "success", message: t("Task deleted") });
       setConfirmDeleteId(null);
-      if (selectedId === id) {
-        setSelectedId(null);
+      if (runsModalTaskId === id) {
+        setRunsModalTaskId(null);
         setRuns([]);
       }
       void loadTasks();
@@ -259,7 +258,7 @@ export function SchedulerPanel({ onOpenSession }: Props) {
       const res = await fetch(`/api/scheduled-tasks/${encodeURIComponent(task.id)}/run`, { method: "POST" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast.show({ kind: "success", message: t("Task triggered") });
-      setSelectedId(task.id);
+      setRunsModalTaskId(task.id);
       void loadRuns(task.id);
     } catch (e) {
       toast.show({ kind: "error", message: t("Failed to trigger task") + ": " + String(e) });
@@ -371,7 +370,8 @@ export function SchedulerPanel({ onOpenSession }: Props) {
             {tasks.map((task) => (
               <div
                 key={task.id}
-                onClick={() => setSelectedId(task.id)}
+                onClick={() => setRunsModalTaskId(task.id)}
+                title={t("View runs")}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -379,7 +379,7 @@ export function SchedulerPanel({ onOpenSession }: Props) {
                   padding: "6px 10px",
                   cursor: "pointer",
                   borderBottom: "1px solid var(--border)",
-                  background: selectedId === task.id ? "var(--bg-selected)" : "transparent",
+                  background: "transparent",
                   opacity: task.enabled ? 1 : 0.55,
                 }}
               >
@@ -435,153 +435,186 @@ export function SchedulerPanel({ onOpenSession }: Props) {
             ))}
           </div>
 
-          {/* Selected task: runs history */}
-          {selectedTask && (
-            <div
-              ref={formRef}
-              style={{
-                borderTop: "1px solid var(--border)",
-                display: "flex",
-                flexDirection: "column",
-                overflow: "hidden",
-                maxHeight: 200,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "6px 10px",
-                  flexShrink: 0,
-                  borderBottom: "1px solid var(--border)",
-                }}
-              >
-                <span style={{ flex: 1, fontSize: 11, fontWeight: 600, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {t("Runs history")}: {selectedTask.name}
-                </span>
-                <Tooltip content={t("Run now")}>
-                  <button
-                    onClick={() => void triggerNow(selectedTask)}
-                    disabled={triggering === selectedTask.id}
-                    aria-label={t("Run now")}
-                    style={{
-                      padding: "3px 8px",
-                      background: "var(--bg-hover)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 5,
-                      color: "var(--text-muted)",
-                      fontSize: 10,
-                      cursor: triggering === selectedTask.id ? "default" : "pointer",
-                      opacity: triggering === selectedTask.id ? 0.6 : 1,
-                    }}
-                  >
-                    {triggering === selectedTask.id ? t("Triggering...") : t("Run now")}
-                  </button>
-                </Tooltip>
-                <Tooltip content={t("Edit task")}>
-                  <button
-                    onClick={() => openEditForm(selectedTask)}
-                    aria-label={t("Edit task")}
-                    style={{
-                      width: 22, height: 22, padding: 0,
-                      background: "var(--bg-hover)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 5,
-                      color: "var(--text-muted)",
-                      cursor: "pointer",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                    </svg>
-                  </button>
-                </Tooltip>
-                <Tooltip content={t("Delete task")}>
-                  <button
-                    onClick={() => setConfirmDeleteId(selectedTask.id)}
-                    aria-label={t("Delete task")}
-                    style={{
-                      width: 22, height: 22, padding: 0,
-                      background: "var(--bg-hover)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 5,
-                      color: "#ef4444",
-                      cursor: "pointer",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                    </svg>
-                  </button>
-                </Tooltip>
+          {/* Selected task: runs history (moved to modal) */}
+        </div>
+      )}
+
+      {/* Runs history modal */}
+      {runsModalTask && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) { setRunsModalTaskId(null); setRuns([]); } }}
+          style={{
+            position: "fixed", inset: 0, zIndex: 1100,
+            background: "rgba(0,0,0,0.35)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              background: "var(--bg)",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              padding: 16,
+              width: 560,
+              maxWidth: "94vw",
+              maxHeight: "85vh",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {t("Runs history")}: {runsModalTask.name}
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "var(--font-mono)", marginTop: 2 }}>
+                  {runsModalTask.cron} · {runsModalTask.enabled ? `${t("Next run")} ${formatDateTime(runsModalTask.nextRunAt)}` : t("disabled")}
+                </div>
               </div>
-              <div style={{ overflowY: "auto", flex: 1 }}>
-                {runsLoading && runs.length === 0 && (
-                  <div style={{ padding: "10px 12px", color: "var(--text-muted)", fontSize: 11 }}>{t("Loading...")}</div>
-                )}
-                {!runsLoading && runs.length === 0 && (
-                  <div style={{ padding: "12px", color: "var(--text-dim)", fontSize: 11, textAlign: "center" }}>
-                    {t("No runs yet")}
-                  </div>
-                )}
-                {runs.map((run) => (
-                  <div
-                    key={run.id}
-                    style={{
-                      padding: "6px 10px",
-                      borderBottom: "1px solid var(--border)",
-                      fontSize: 11,
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ color: statusColor(run.status), flexShrink: 0 }}>{statusSymbol(run.status)}</span>
-                      <span style={{ color: "var(--text-muted)", flex: 1, fontFamily: "var(--font-mono)", fontSize: 10 }}>
-                        {formatDateTime(run.startedAt)}
-                      </span>
-                      {run.durationMs != null && (
-                        <span style={{ color: "var(--text-dim)", fontSize: 10 }}>
-                          {(run.durationMs / 1000).toFixed(1)}s
-                        </span>
-                      )}
-                      {run.sessionId && onOpenSession && (
-                        <Tooltip content={t("Open session")}>
-                          <button
-                            onClick={() => onOpenSession(run.sessionId!)}
-                            aria-label={t("Open session")}
-                            style={{
-                              padding: "1px 6px",
-                              background: "var(--bg-hover)",
-                              border: "1px solid var(--border)",
-                              borderRadius: 4,
-                              color: "var(--text-muted)",
-                              fontSize: 10,
-                              cursor: "pointer",
-                            }}
-                          >
-                            ↗
-                          </button>
-                        </Tooltip>
-                      )}
-                    </div>
-                    {run.error && (
-                      <div style={{ marginTop: 3, color: "#f87171", fontSize: 10, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                        {run.error.slice(0, 200)}
-                      </div>
-                    )}
-                    {run.replyText && (
-                      <div style={{ marginTop: 3, color: "var(--text)", fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                        {run.replyText.slice(0, 200)}{run.replyText.length > 200 ? "…" : ""}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <Tooltip content={t("Run now")}>
+                <button
+                  onClick={() => void triggerNow(runsModalTask)}
+                  disabled={triggering === runsModalTask.id}
+                  aria-label={t("Run now")}
+                  style={{
+                    padding: "4px 10px",
+                    background: "var(--bg-hover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 5,
+                    color: "var(--text-muted)",
+                    fontSize: 11,
+                    cursor: triggering === runsModalTask.id ? "default" : "pointer",
+                    opacity: triggering === runsModalTask.id ? 0.6 : 1,
+                  }}
+                >
+                  {triggering === runsModalTask.id ? t("Triggering...") : t("Run now")}
+                </button>
+              </Tooltip>
+              <Tooltip content={t("Edit task")}>
+                <button
+                  onClick={() => { openEditForm(runsModalTask); setRunsModalTaskId(null); setRuns([]); }}
+                  aria-label={t("Edit task")}
+                  style={{
+                    width: 26, height: 26, padding: 0,
+                    background: "var(--bg-hover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 5,
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                  </svg>
+                </button>
+              </Tooltip>
+              <Tooltip content={t("Delete task")}>
+                <button
+                  onClick={() => setConfirmDeleteId(runsModalTask.id)}
+                  aria-label={t("Delete task")}
+                  style={{
+                    width: 26, height: 26, padding: 0,
+                    background: "var(--bg-hover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 5,
+                    color: "#ef4444",
+                    cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  </svg>
+                </button>
+              </Tooltip>
+              <Tooltip content={t("Close")}>
+                <button
+                  onClick={() => { setRunsModalTaskId(null); setRuns([]); }}
+                  aria-label={t("Close")}
+                  style={{
+                    width: 26, height: 26, padding: 0,
+                    background: "var(--bg-hover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 5,
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </Tooltip>
             </div>
-          )}
+
+            <div style={{ overflowY: "auto", flex: 1, borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
+              {runsLoading && runs.length === 0 && (
+                <div style={{ padding: "14px", color: "var(--text-muted)", fontSize: 12, textAlign: "center" }}>{t("Loading...")}</div>
+              )}
+              {!runsLoading && runs.length === 0 && (
+                <div style={{ padding: "20px", color: "var(--text-dim)", fontSize: 12, textAlign: "center" }}>
+                  {t("No runs yet")}
+                </div>
+              )}
+              {runs.map((run) => (
+                <div
+                  key={run.id}
+                  style={{
+                    padding: "8px 10px",
+                    borderBottom: "1px solid var(--border)",
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ color: statusColor(run.status), flexShrink: 0, fontSize: 12 }}>{statusSymbol(run.status)}</span>
+                    <span style={{ color: "var(--text-muted)", flex: 1, fontFamily: "var(--font-mono)", fontSize: 11 }}>
+                      {formatDateTime(run.startedAt)}
+                    </span>
+                    {run.durationMs != null && (
+                      <span style={{ color: "var(--text-dim)", fontSize: 10 }}>
+                        {(run.durationMs / 1000).toFixed(1)}s
+                      </span>
+                    )}
+                    {run.sessionId && onOpenSession && (
+                      <Tooltip content={t("Open session")}>
+                        <button
+                          onClick={() => onOpenSession(run.sessionId!)}
+                          aria-label={t("Open session")}
+                          style={{
+                            padding: "2px 8px",
+                            background: "var(--bg-hover)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 4,
+                            color: "var(--text-muted)",
+                            fontSize: 10,
+                            cursor: "pointer",
+                          }}
+                        >
+                          ↗
+                        </button>
+                      </Tooltip>
+                    )}
+                  </div>
+                  {run.error && (
+                    <div style={{ marginTop: 4, color: "#f87171", fontSize: 11, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                      {run.error}
+                    </div>
+                  )}
+                  {run.replyText && (
+                    <div style={{ marginTop: 4, color: "var(--text)", fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                      {run.replyText}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
