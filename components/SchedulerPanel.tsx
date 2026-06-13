@@ -423,13 +423,20 @@ export function SchedulerPanel({ onOpenSession }: Props) {
                     {task.cron} · {task.enabled ? `${t("Next run")} ${formatDateTime(task.nextRunAt)}` : t("disabled")}
                   </div>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={task.enabled}
-                  onChange={(e) => { e.stopPropagation(); void toggleEnabled(task); }}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ flexShrink: 0, cursor: "pointer" }}
+                <span
+                  onClick={(e) => { e.stopPropagation(); void toggleEnabled(task); }}
                   title={task.enabled ? t("Disable") : t("Enable")}
+                  aria-label={task.enabled ? t("Disable") : t("Enable")}
+                  style={{
+                    display: "inline-block",
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background: task.enabled ? "#4ade80" : "#f87171",
+                    flexShrink: 0,
+                    cursor: "pointer",
+                    boxShadow: task.enabled ? "0 0 4px rgba(74, 222, 128, 0.6)" : "0 0 4px rgba(248, 113, 113, 0.6)",
+                  }}
                 />
               </div>
             ))}
@@ -472,6 +479,14 @@ export function SchedulerPanel({ onOpenSession }: Props) {
                 <div style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "var(--font-mono)", marginTop: 2 }}>
                   {runsModalTask.cron} · {runsModalTask.enabled ? `${t("Next run")} ${formatDateTime(runsModalTask.nextRunAt)}` : t("disabled")}
                 </div>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 11, color: "var(--text-muted)", cursor: "pointer", userSelect: "none" }}>
+                  <input
+                    type="checkbox"
+                    checked={runsModalTask.enabled}
+                    onChange={() => void toggleEnabled(runsModalTask)}
+                  />
+                  {runsModalTask.enabled ? t("enabled") : t("disabled")}
+                </label>
               </div>
               <Tooltip content={t("Run now")}>
                 <button
@@ -584,7 +599,7 @@ export function SchedulerPanel({ onOpenSession }: Props) {
                     {run.sessionId && onOpenSession && (
                       <Tooltip content={t("Open session")}>
                         <button
-                          onClick={() => onOpenSession(run.sessionId!)}
+                          onClick={() => { onOpenSession(run.sessionId!); setRunsModalTaskId(null); setRuns([]); }}
                           aria-label={t("Open session")}
                           style={{
                             padding: "2px 8px",
