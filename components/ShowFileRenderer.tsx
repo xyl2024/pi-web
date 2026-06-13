@@ -1,8 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useI18n } from "@/hooks/useI18n";
 import { encodeFilePathForApi, joinFilePath } from "@/lib/file-paths";
+
+// Heavy client-only component; lazy-load with SSR off so show_file
+// doesn't pull the excalidraw bundle until an .excalidraw file is shown.
+const Excalidraw = dynamic(
+  async () => (await import("@excalidraw/excalidraw")).Excalidraw,
+  { ssr: false },
+);
 
 interface Props {
   filePath: string;
@@ -19,9 +27,10 @@ const AUDIO_EXTS = new Set([
 ]);
 const PDF_EXTS = new Set(["pdf"]);
 const HTML_EXTS = new Set(["html", "htm"]);
+const EXCALIDRAW_EXTS = new Set(["excalidraw"]);
 const MARKDOWN_EXTS = new Set(["md", "markdown"]);
 
-type Category = "image" | "video" | "audio" | "pdf" | "html" | "markdown" | "text" | "binary";
+type Category = "image" | "video" | "audio" | "pdf" | "html" | "excalidraw" | "markdown" | "text" | "binary";
 
 function getExt(filePath: string): string {
   const dot = filePath.lastIndexOf(".");
@@ -35,6 +44,7 @@ function categorize(filePath: string): Category {
   if (AUDIO_EXTS.has(ext)) return "audio";
   if (PDF_EXTS.has(ext)) return "pdf";
   if (HTML_EXTS.has(ext)) return "html";
+  if (EXCALIDRAW_EXTS.has(ext)) return "excalidraw";
   if (MARKDOWN_EXTS.has(ext)) return "markdown";
   return "text";
 }
@@ -122,6 +132,10 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
 
   if (category === "html") {
     return <HtmlContent url={url} />;
+  }
+
+  if (category === "excalidraw") {
+    return <ExcalidrawContent url={url} />;
   }
 
   if (category === "markdown" || category === "text") {
@@ -291,5 +305,104 @@ function TextContent({ url, ext }: { url: string; ext: string }) {
       </span>
       {state.content}
     </pre>
+  );
+}
+
+function ExcalidrawContent({ url }: { url: string }) {
+  const { t } = useI18n();
+  const [state, setState] = useState<
+    | { kind: "loading" }
+    | { kind: "ready"; initialData: object }
+    | { kind: "error"; message: string }
+  >({ kind: "loading" });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ kind: "loading" });
+
+    Promise.all([
+      fetch(url).then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${r.status}`);
+        }
+        return r.json() as Promise<{ content: string }>;
+      }),
+      import("@excalidraw/excalidraw").then((m) => m.restore),
+    ])
+      .then(([data, restore]) => {
+        if (cancelled) return;
+        try {
+          const raw = JSON.parse(data.content);
+          const restored = restore(
+            { elements: raw.elements, appState: raw.appState, files: raw.files },
+            null,
+            null,
+          ) as Record<string, unknown> & { appState?: Record<string, unknown> };
+          // Ensure collaborators is a Map (matches FileViewer robustness fix)
+          if (restored.appState) {
+            const collab = restored.appState.collaborators;
+            if (!(collab instanceof Map)) {
+              restored.appState.collaborators = new Map(
+                Array.isArray(collab) ? collab : Object.entries(collab ?? {}),
+              );
+            }
+          }
+          setState({ kind: "ready", initialData: restored });
+        } catch {
+          setState({ kind: "error", message: t("Invalid Excalidraw file") });
+        }
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const message = e instanceof Error ? e.message : String(e);
+        setState({ kind: "error", message });
+      });
+
+    return () => { cancelled = true; };
+  }, [url, t]);
+
+  if (state.kind === "loading") {
+    return (
+      <div style={{ padding: "8px 10px", color: "var(--text-dim)", fontSize: 12 }}>
+        {t("Loading…")}
+      </div>
+    );
+  }
+  if (state.kind === "error") {
+    return (
+      <div
+        style={{
+          padding: "8px 10px",
+          color: "#f87171",
+          fontSize: 12,
+          border: "1px solid rgba(248,113,113,0.3)",
+          borderRadius: 6,
+          background: "rgba(248,113,113,0.05)",
+        }}
+      >
+        {t("Failed to load file")}: {state.message}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "block",
+        width: "100%",
+        height: "70vh",
+        border: "1px solid var(--border)",
+        borderRadius: 6,
+        background: "#fff",
+        overflow: "hidden",
+      }}
+    >
+      <Excalidraw
+        initialData={state.initialData}
+        viewModeEnabled
+        zenModeEnabled
+      />
+    </div>
   );
 }

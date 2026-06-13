@@ -61,7 +61,7 @@ export const showFileTool = defineTool<typeof ShowFileParams, ShowFileDetails>({
   name: SHOW_FILE_TOOL_NAME,
   label: "Show File",
   description:
-    "Display a file in the chat UI below the tool call. Renders images inline, plays video/audio with native controls, shows PDFs, displays HTML in a sandboxed iframe (scripts allowed, same-origin denied), and renders text/markdown as a code block. Use this whenever the user should see the actual file content rather than just hear about it. The file must be inside the session's working directory or another allowed root.",
+    "Display a file in the chat UI below the tool call. Renders images inline, plays video/audio with native controls, shows PDFs, displays HTML in a sandboxed iframe (scripts allowed, same-origin denied), renders Excalidraw scenes read-only, and renders text/markdown as a code block. Use this whenever the user should see the actual file content rather than just hear about it. The file must be inside the session's working directory or another allowed root.",
   parameters: ShowFileParams,
   executionMode: "sequential",
   async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

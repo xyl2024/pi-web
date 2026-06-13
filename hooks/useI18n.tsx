@@ -428,6 +428,7 @@ const ZH_TRANSLATIONS = {
   "Failed to save file": "保存文件失败",
   "Failed to load file": "加载文件失败",
   "Unsupported file type: {ext}": "不支持的文件类型：{ext}",
+  "Invalid Excalidraw file": "Excalidraw 文件格式无效",
   "Failed to load payloads": "加载请求记录失败",
   "Scheduled tasks": "定时任务",
   "No scheduled tasks yet": "暂无定时任务",
