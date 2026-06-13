@@ -48,6 +48,16 @@ const AUDIO_EXT_TO_MIME: Record<string, string> = {
   webm: "audio/webm",
 };
 
+const VIDEO_EXT_TO_MIME: Record<string, string> = {
+  mp4: "video/mp4",
+  m4v: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  mkv: "video/x-matroska",
+  ogv: "video/ogg",
+  ogg: "video/ogg",
+};
+
 const PDF_EXT_TO_MIME: Record<string, string> = {
   pdf: "application/pdf",
 };
@@ -63,6 +73,10 @@ function getImageMime(filePath: string): string | null {
 
 function getAudioMime(filePath: string): string | null {
   return AUDIO_EXT_TO_MIME[getExt(filePath)] ?? null;
+}
+
+function getVideoMime(filePath: string): string | null {
+  return VIDEO_EXT_TO_MIME[getExt(filePath)] ?? null;
 }
 
 function getPdfMime(filePath: string): string | null {
@@ -254,6 +268,17 @@ export async function GET(
           durationMs: elapsedMs(startedAt),
         });
         return streamFile(filePath, stat, audioMime, request.headers.get("range"));
+      }
+      const videoMime = getVideoMime(filePath);
+      if (videoMime) {
+        log.info("video read streamed", {
+          path: filePath,
+          size: stat.size,
+          contentType: videoMime,
+          range: request.headers.get("range") ?? undefined,
+          durationMs: elapsedMs(startedAt),
+        });
+        return streamFile(filePath, stat, videoMime, request.headers.get("range"));
       }
       const pdfMime = getPdfMime(filePath);
       if (pdfMime) {
