@@ -427,6 +427,7 @@ const ZH_TRANSLATIONS = {
   "File saved": "文件已保存",
   "Failed to save file": "保存文件失败",
   "Failed to load file": "加载文件失败",
+  "Unsupported file type: {ext}": "不支持的文件类型：{ext}",
   "Failed to load payloads": "加载请求记录失败",
   "Scheduled tasks": "定时任务",
   "No scheduled tasks yet": "暂无定时任务",

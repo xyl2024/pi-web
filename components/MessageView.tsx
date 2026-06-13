@@ -9,6 +9,8 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { Tooltip } from "./Tooltip";
 import { useTheme } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
+import { ShowFileRenderer } from "./ShowFileRenderer";
+import { SHOW_FILE_TOOL_NAME } from "@/lib/show-file-tool-types";
 import type {
   AgentMessage,
   UserMessage,
@@ -40,6 +42,8 @@ interface Props {
   highlightEntryId?: string | null;
   /** Whether this message contains a search match (for highlight) */
   isSearchMatch?: boolean;
+  /** Session working directory — used to render show_file tool calls */
+  cwd?: string;
 }
 
 function formatTime(ts?: number): string | null {
@@ -97,7 +101,7 @@ function highlightKeywords(text: string, keywords?: string[], isSearchMatch?: bo
   return parts.length > 0 ? parts : text;
 }
 
-export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, prevTimestamp, keywords, highlightEntryId, isSearchMatch }: Props) {
+export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, prevTimestamp, keywords, highlightEntryId, isSearchMatch, cwd }: Props) {
   const isFocused = !!(highlightEntryId && entryId === highlightEntryId);
 
   if (message.role === "user") {
@@ -110,7 +114,7 @@ export function MessageView({ message, isStreaming, toolResults, modelNames, ent
   if (message.role === "assistant") {
     return (
       <div className={isFocused ? "search-flash" : undefined}>
-        <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} keywords={keywords} isSearchMatch={isSearchMatch} />
+        <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} />
       </div>
     );
   }
@@ -334,6 +338,7 @@ function AssistantMessageView({
   prevTimestamp,
   keywords,
   isSearchMatch,
+  cwd,
 }: {
   message: AssistantMessage;
   isStreaming?: boolean;
@@ -343,6 +348,7 @@ function AssistantMessageView({
   prevTimestamp?: number;
   keywords?: string[];
   isSearchMatch?: boolean;
+  cwd?: string;
 }) {
   const { t } = useI18n();
   const time = showTimestamp ? formatTime(message.timestamp) : null;
@@ -503,7 +509,7 @@ function AssistantMessageView({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {blocks.map((block, i) => (
-          <BlockView key={i} block={block} toolResults={toolResults} isStreaming={isStreaming} streamingDuration={streamingDurations.get(i) ?? (block.type === "thinking" ? thinkingDurationFromFile : undefined)} toolCallDurations={toolCallDurations} keywords={keywords} isSearchMatch={isSearchMatch} />
+          <BlockView key={i} block={block} toolResults={toolResults} isStreaming={isStreaming} streamingDuration={streamingDurations.get(i) ?? (block.type === "thinking" ? thinkingDurationFromFile : undefined)} toolCallDurations={toolCallDurations} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} />
         ))}
       </div>
 
@@ -557,7 +563,7 @@ function AssistantMessageView({
   );
 }
 
-function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCallDurations, keywords, isSearchMatch }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; streamingDuration?: number; toolCallDurations?: Map<string, number>; keywords?: string[]; isSearchMatch?: boolean }) {
+function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCallDurations, keywords, isSearchMatch, cwd }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; streamingDuration?: number; toolCallDurations?: Map<string, number>; keywords?: string[]; isSearchMatch?: boolean; cwd?: string }) {
   if (block.type === "text") {
     return <TextBlock block={block as TextContent} keywords={keywords} isSearchMatch={isSearchMatch} />;
   }
@@ -568,7 +574,7 @@ function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCal
     const tc = block as ToolCallContent;
     const result = toolResults?.get(tc.toolCallId);
     const duration = toolCallDurations?.get(tc.toolCallId);
-    return <ToolCallBlock block={tc} result={result} isRunning={isStreaming && !result} duration={duration} />;
+    return <ToolCallBlock block={tc} result={result} isRunning={isStreaming && !result} duration={duration} cwd={cwd} />;
   }
   return null;
 }
@@ -676,7 +682,7 @@ function ThinkingBlock({ block, duration, keywords, isSearchMatch }: { block: Th
 }
 
 
-function ToolCallBlock({ block, result, isRunning, duration }: { block: ToolCallContent; result?: ToolResultMessage; isRunning?: boolean; duration?: number }) {
+function ToolCallBlock({ block, result, isRunning, duration, cwd }: { block: ToolCallContent; result?: ToolResultMessage; isRunning?: boolean; duration?: number; cwd?: string }) {
   const [expanded, setExpanded] = useState(false);
   const inputStr = JSON.stringify(block.input, null, 2);
 
@@ -686,6 +692,14 @@ function ToolCallBlock({ block, result, isRunning, duration }: { block: ToolCall
     : null;
   const resultIsEmpty = resultText === null ? false : (resultText.trim() === "(no output)" || resultText.trim() === "");
   const isError = result?.isError ?? false;
+
+  // Special render for show_file: keep the standard tool call card and append a
+  // rendered viewer below it. The viewer is mounted speculatively from
+  // block.input.path so it starts loading while the tool is still running.
+  const isShowFile = block.toolName === SHOW_FILE_TOOL_NAME;
+  const showFilePath = isShowFile && block.input && typeof block.input.path === "string"
+    ? block.input.path
+    : null;
 
   return (
     <div
@@ -756,6 +770,19 @@ function ToolCallBlock({ block, result, isRunning, duration }: { block: ToolCall
           isEmpty={resultIsEmpty}
           isError={isError}
         />
+      )}
+
+      {/* ── show_file inline renderer (below generic UI) ── */}
+      {isShowFile && showFilePath && (
+        <div
+          style={{
+            padding: "10px",
+            borderTop: "1px solid rgba(34,197,94,0.2)",
+            background: "var(--bg)",
+          }}
+        >
+          <ShowFileRenderer filePath={showFilePath} cwd={cwd} />
+        </div>
       )}
     </div>
   );
