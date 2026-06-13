@@ -13,7 +13,9 @@
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { bootstrap } = await import("@/lib/wechat/startup");
-    bootstrap();
+    const { bootstrap: wechatBootstrap } = await import("@/lib/wechat/startup");
+    wechatBootstrap();
+    const { bootstrap: schedulerBootstrap } = await import("@/lib/scheduler/startup");
+    schedulerBootstrap();
   }
 }

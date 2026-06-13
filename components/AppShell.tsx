@@ -421,6 +421,23 @@ export function AppShell() {
     router.replace(`?session=${encodeURIComponent(session.id)}`, { scroll: false });
   }, [router]);
 
+  // Called by SchedulerPanel "Open session" — fetches minimal session info
+  // and routes through the same selection path as the sidebar.
+  const handleOpenScheduledSession = useCallback((sessionId: string) => {
+    void (async () => {
+      try {
+        const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { session?: SessionInfo };
+        if (!data.session) return;
+        handleSelectSession(data.session);
+      } catch {
+        // Fallback: navigate via URL so the page rehydrates from the session file
+        router.replace(`?session=${encodeURIComponent(sessionId)}`, { scroll: false });
+      }
+    })();
+  }, [handleSelectSession, router]);
+
   const handleAgentEnd = useCallback(() => {
     setRefreshKey((k) => k + 1);
     setExplorerRefreshKey((k) => k + 1);
@@ -534,6 +551,7 @@ export function AppShell() {
         onAtMention={handleAtMention}
         onOpenSearch={() => setPaletteOpen(true)}
         onFileDeleted={handleFileDeleted}
+        onOpenScheduledSession={handleOpenScheduledSession}
       />
       <div style={{ padding: "8px", flexShrink: 0, display: "flex", justifyContent: "space-between", gap: 4 }}>
         {([

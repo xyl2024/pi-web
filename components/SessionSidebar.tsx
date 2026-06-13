@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import type { SessionInfo } from "@/lib/types";
 import { FileExplorer } from "./FileExplorer";
+import { SchedulerPanel } from "./SchedulerPanel";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
 import { Tooltip } from "./Tooltip";
@@ -22,6 +23,7 @@ interface Props {
   onAtMention?: (relativePath: string) => void;
   onOpenSearch?: () => void;
   onFileDeleted?: (filePath: string) => void;
+  onOpenScheduledSession?: (sessionId: string) => void;
 }
 
 function formatRelativeTime(dateStr: string, t: ReturnType<typeof useI18n>["t"]): string {
@@ -199,7 +201,7 @@ function PiAgentTitle() {
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted }: Props) {
+export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, onOpenScheduledSession }: Props) {
   const { t } = useI18n();
   const toast = useToast();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
@@ -1130,6 +1132,8 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
           )}
         </div>
       )}
+
+      <SchedulerPanel onOpenSession={onOpenScheduledSession} />
     </div>
   );
 }
