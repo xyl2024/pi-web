@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useI18n } from "@/hooks/useI18n";
 import { ImageLightbox } from "@/components/ImageLightbox";
+import { AudioPlayer } from "@/components/AudioPlayer";
 import { encodeFilePathForApi, joinFilePath } from "@/lib/file-paths";
 
 // Heavy client-only component; lazy-load with SSR off so show_file
@@ -134,14 +135,7 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
   }
 
   if (category === "audio") {
-    return (
-      <audio
-        controls
-        src={url}
-        preload="metadata"
-        style={{ display: "block", width: "100%" }}
-      />
-    );
+    return <AudioPlayer src={url} title={filePath} />;
   }
 
   if (category === "pdf") {
