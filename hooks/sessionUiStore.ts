@@ -60,13 +60,43 @@ function emit() {
 
 /**
  * Shallow-merge a patch into the store. If no field actually changed, the
- * listeners are NOT notified — this is what replaces the old "scalar key"
- * workaround in ChatWindow.
+ * listeners are NOT notified.
+ *
+ * For object/array fields, reference equality is too strict — values
+ * computed inline (e.g. `sessionStats` is an IIFE inside useAgentSession)
+ * are a fresh object on every render even when their contents are identical,
+ * which would cause the store to re-publish on every render and AppShell
+ * to re-render its 522-session tree dozens of times per second. So we
+ * compare object/array values by content instead of by reference.
  */
+function isContentEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === null || b === null || a === undefined || b === undefined) return false;
+  if (typeof a !== typeof b) return false;
+  if (typeof a !== "object") return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!isContentEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  const ak = Object.keys(a as object);
+  const bk = Object.keys(b as object);
+  if (ak.length !== bk.length) return false;
+  for (const k of ak) {
+    if (!isContentEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])) return false;
+  }
+  return true;
+}
+
 export function setSessionUiState(patch: Partial<SessionUiState>) {
   let changed = false;
   for (const k in patch) {
-    if (patch[k as keyof SessionUiState] !== state[k as keyof SessionUiState]) {
+    const next = patch[k as keyof SessionUiState];
+    const cur = state[k as keyof SessionUiState];
+    if (!isContentEqual(next, cur)) {
       changed = true;
       break;
     }
