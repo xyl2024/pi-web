@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useI18n } from "@/hooks/useI18n";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import { encodeFilePathForApi, joinFilePath } from "@/lib/file-paths";
 
 // Heavy client-only component; lazy-load with SSR off so show_file
@@ -64,22 +65,53 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
   const category = categorize(resolved);
   const url = fileApiUrl(resolved);
 
+  // One lightbox at a time. Image uses the rich ImageLightbox (zoom/pan);
+  // HTML and Excalidraw use a generic FullscreenOverlay that wraps the
+  // rendered content at viewport size.
+  const [lightbox, setLightbox] = useState<
+    | { kind: "image"; src: string; alt: string }
+    | { kind: "content"; title: string; node: React.ReactNode }
+    | null
+  >(null);
+
   if (category === "image") {
+    const alt = filePath;
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={url}
-        alt={filePath}
-        loading="lazy"
-        style={{
-          display: "block",
-          maxWidth: "100%",
-          maxHeight: "60vh",
-          borderRadius: 6,
-          border: "1px solid var(--border)",
-          background: "var(--bg)",
-        }}
-      />
+      <>
+        <div
+          style={{
+            position: "relative",
+            display: "block",
+            maxWidth: "100%",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            overflow: "hidden",
+            background: "var(--bg)",
+            lineHeight: 0,
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt={alt}
+            loading="lazy"
+            style={{
+              display: "block",
+              maxWidth: "100%",
+              maxHeight: "60vh",
+            }}
+          />
+          <ExpandButton onClick={() => setLightbox({ kind: "image", src: url, alt })} />
+        </div>
+        {lightbox?.kind === "image" && (
+          <ImageLightbox
+            images={[{ src: lightbox.src, alt: lightbox.alt }]}
+            index={0}
+            onClose={() => setLightbox(null)}
+            onIndexChange={() => {}}
+          />
+        )}
+      </>
     );
   }
 
@@ -131,11 +163,35 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
   }
 
   if (category === "html") {
-    return <HtmlContent url={url} />;
+    return (
+      <>
+        <HtmlContent
+          url={url}
+          onExpand={(node, title) => setLightbox({ kind: "content", title, node })}
+        />
+        {lightbox?.kind === "content" && (
+          <FullscreenOverlay title={lightbox.title} onClose={() => setLightbox(null)}>
+            {lightbox.node}
+          </FullscreenOverlay>
+        )}
+      </>
+    );
   }
 
   if (category === "excalidraw") {
-    return <ExcalidrawContent url={url} />;
+    return (
+      <>
+        <ExcalidrawContent
+          url={url}
+          onExpand={(node, title) => setLightbox({ kind: "content", title, node })}
+        />
+        {lightbox?.kind === "content" && (
+          <FullscreenOverlay title={lightbox.title} onClose={() => setLightbox(null)}>
+            {lightbox.node}
+          </FullscreenOverlay>
+        )}
+      </>
+    );
   }
 
   if (category === "markdown" || category === "text") {
@@ -158,7 +214,7 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
   );
 }
 
-function HtmlContent({ url }: { url: string }) {
+function HtmlContent({ url, onExpand }: { url: string; onExpand: (node: React.ReactNode, title: string) => void }) {
   const { t } = useI18n();
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -211,20 +267,54 @@ function HtmlContent({ url }: { url: string }) {
       </div>
     );
   }
+
+  // `key="thumb"` vs `key="fullscreen"` forces a fresh iframe when expanding,
+  // so the fullscreen instance re-runs scripts in the new layout.
   return (
-    <iframe
-      title="html-content"
-      srcDoc={state.content}
-      sandbox="allow-scripts"
+    <div
       style={{
+        position: "relative",
         display: "block",
         width: "100%",
-        height: "70vh",
         border: "1px solid var(--border)",
         borderRadius: 6,
+        overflow: "hidden",
         background: "#fff",
       }}
-    />
+    >
+      <iframe
+        key="thumb"
+        title="html-content"
+        srcDoc={state.content}
+        sandbox="allow-scripts"
+        style={{
+          display: "block",
+          width: "100%",
+          height: "70vh",
+          border: "none",
+        }}
+      />
+      <ExpandButton
+        onClick={() =>
+          onExpand(
+            <iframe
+              key="fullscreen"
+              title="html-content-fullscreen"
+              srcDoc={state.content}
+              sandbox="allow-scripts"
+              style={{
+                display: "block",
+                width: "100%",
+                height: "100%",
+                border: "none",
+                background: "#fff",
+              }}
+            />,
+            t("html"),
+          )
+        }
+      />
+    </div>
   );
 }
 
@@ -308,7 +398,7 @@ function TextContent({ url, ext }: { url: string; ext: string }) {
   );
 }
 
-function ExcalidrawContent({ url }: { url: string }) {
+function ExcalidrawContent({ url, onExpand }: { url: string; onExpand: (node: React.ReactNode, title: string) => void }) {
   const { t } = useI18n();
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -386,23 +476,171 @@ function ExcalidrawContent({ url }: { url: string }) {
     );
   }
 
+  // The fullscreen instance uses a different `key` so Excalidraw re-measures
+  // its canvas against the new (viewport-sized) parent container.
   return (
     <div
       style={{
+        position: "relative",
         display: "block",
         width: "100%",
-        height: "70vh",
         border: "1px solid var(--border)",
         borderRadius: 6,
-        background: "#fff",
         overflow: "hidden",
+        background: "#fff",
       }}
     >
-      <Excalidraw
-        initialData={state.initialData}
-        viewModeEnabled
-        zenModeEnabled
+      <div
+        style={{
+          display: "block",
+          width: "100%",
+          height: "70vh",
+          background: "#fff",
+        }}
+      >
+        <Excalidraw
+          key="excalidraw-thumb"
+          initialData={state.initialData}
+          viewModeEnabled
+          zenModeEnabled
+        />
+      </div>
+      <ExpandButton
+        onClick={() =>
+          onExpand(
+            <Excalidraw
+              key="excalidraw-fullscreen"
+              initialData={state.initialData}
+              viewModeEnabled
+              zenModeEnabled
+            />,
+            t("excalidraw"),
+          )
+        }
       />
+    </div>
+  );
+}
+
+// Corner button used to open the lightbox/overlay from image, HTML, and
+// Excalidraw previews. Sits in the top-right of its `position:relative`
+// parent and only becomes fully opaque on hover so it doesn't fight the
+// content underneath.
+function ExpandButton({ onClick }: { onClick: () => void }) {
+  const { t } = useI18n();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={t("Click to expand")}
+      title={t("Click to expand")}
+      style={{
+        position: "absolute",
+        top: 6,
+        right: 6,
+        width: 26,
+        height: 26,
+        padding: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer",
+        background: "rgba(0, 0, 0, 0.55)",
+        color: "#fff",
+        border: "1px solid rgba(255,255,255,0.2)",
+        borderRadius: 5,
+        fontSize: 14,
+        lineHeight: 1,
+        opacity: 0.55,
+        transition: "opacity 0.1s ease-out, background 0.1s ease-out",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.opacity = "1";
+        e.currentTarget.style.background = "rgba(0, 0, 0, 0.8)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.opacity = "0.55";
+        e.currentTarget.style.background = "rgba(0, 0, 0, 0.55)";
+      }}
+    >
+      {/* simple magnifier glyph */}
+      <span aria-hidden="true">⛶</span>
+    </button>
+  );
+}
+
+// Viewport-sized overlay used to expand non-image content (HTML iframe,
+// Excalidraw scene) fullscreen. Esc or backdrop click closes. The child
+// node is mounted fresh on each open via the caller's `key` strategy.
+function FullscreenOverlay({ title, onClose, children }: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const { t } = useI18n();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0, 0, 0, 0.9)",
+        zIndex: 9999,
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "8px 16px",
+          background: "rgba(0, 0, 0, 0.5)",
+          color: "rgba(255,255,255,0.9)",
+          fontSize: 12,
+          flexShrink: 0,
+        }}
+      >
+        <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{title}</span>
+        <button
+          onClick={onClose}
+          title={t("Close")}
+          style={{
+            marginLeft: "auto",
+            padding: "4px 10px",
+            fontSize: 12,
+            cursor: "pointer",
+            background: "rgba(255,255,255,0.08)",
+            color: "rgba(255,255,255,0.9)",
+            border: "1px solid rgba(255,255,255,0.15)",
+            borderRadius: 5,
+            fontFamily: "var(--font-mono)",
+            lineHeight: 1.2,
+          }}
+        >
+          ✕
+        </button>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>{children}</div>
     </div>
   );
 }
