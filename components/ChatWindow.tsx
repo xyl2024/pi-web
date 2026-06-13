@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AgentMessage, SessionInfo, SessionTreeNode, AgentsFile } from "@/lib/types";
+import type { AgentMessage, SessionInfo } from "@/lib/types";
 import { MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { Tooltip } from "./Tooltip";
@@ -26,11 +26,6 @@ interface Props {
   onSessionForked?: (newSessionId: string) => void;
   modelsRefreshKey?: number;
   chatInputRef?: React.RefObject<ChatInputHandle | null>;
-  onBranchDataChange?: (tree: SessionTreeNode[], activeLeafId: string | null, onLeafChange: (leafId: string | null) => void) => void;
-  onSystemPromptChange?: (prompt: string | null) => void;
-  onAgentsFilesChange?: (files: AgentsFile[]) => void;
-  onSessionStatsChange?: (stats: { tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null) => void;
-  onContextUsageChange?: (usage: { percent: number | null; contextWindow: number; tokens: number | null } | null) => void;
   /** If set, navigate to this entry after the session finishes loading */
   scrollToEntryId?: string | null;
   /** Called after the scroll-to-entry navigation completes */
@@ -128,7 +123,7 @@ function Typewriter({ phrases }: { phrases: string[] }) {
   );
 }
 
-function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onAgentsFilesChange, onSessionStatsChange, onContextUsageChange, scrollToEntryId, onScrollComplete, onNewSessionRequest, onSelectSession }: Props) {
+function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest, onSelectSession }: Props) {
   const { locale, t } = useI18n();
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
 
@@ -138,11 +133,10 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const {
     loading, error, messages, entryIds, streamState,
     agentRunning, modelNames, modelList, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
-    retryInfo, contextUsage, forkingEntryId,
-    isCompacting, compactError, displayModel: displayModelValue, sessionStats,
+    retryInfo, forkingEntryId,
+    isCompacting, compactError, displayModel: displayModelValue,
     agentPhase,
     isNew,
-    agentsFiles,
     messagesEndRef, scrollContainerRef,
     lastUserMsgRef,
     handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
@@ -150,7 +144,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     handleToolPresetChange, handleThinkingLevelChange, handleAgentEventRef,
   } = useAgentSession({
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
-    modelsRefreshKey, onBranchDataChange, onSystemPromptChange,
+    modelsRefreshKey,
     statsEmit,
     scrollToEntryId,
     onScrollComplete,
@@ -317,35 +311,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       setTimeout(() => { isProgrammaticScrollRef.current = false; }, 150);
     }
   }, [streamState.streamingMessage, streamState.isStreaming]);
-
-  // Push session stats up to AppShell for the top bar.
-  // Compare scalar fields to avoid loops from new object identity each render.
-  const statsKey = sessionStats
-    ? `${sessionStats.tokens.input}|${sessionStats.tokens.output}|${sessionStats.tokens.cacheRead}|${sessionStats.tokens.cacheWrite}|${sessionStats.cost ?? 0}`
-    : null;
-  const sessionStatsRef = useRef(sessionStats);
-  sessionStatsRef.current = sessionStats;
-  useEffect(() => {
-    onSessionStatsChange?.(sessionStatsRef.current);
-  }, [statsKey, onSessionStatsChange]);
-  useEffect(() => () => { onSessionStatsChange?.(null); }, [onSessionStatsChange]);
-
-  // Push context usage up to AppShell as well.
-  const ctxKey = contextUsage
-    ? `${contextUsage.percent ?? "null"}|${contextUsage.contextWindow}|${contextUsage.tokens ?? "null"}`
-    : null;
-  const contextUsageRef = useRef(contextUsage);
-  contextUsageRef.current = contextUsage;
-  useEffect(() => {
-    onContextUsageChange?.(contextUsageRef.current);
-  }, [ctxKey, onContextUsageChange]);
-  useEffect(() => () => { onContextUsageChange?.(null); }, [onContextUsageChange]);
-
-  // Push agents files up to AppShell for the context panel
-  const agentsFilesRef = useRef(agentsFiles);
-  agentsFilesRef.current = agentsFiles;
-  useEffect(() => { onAgentsFilesChange?.(agentsFilesRef.current); }, [agentsFiles, onAgentsFilesChange]);
-  useEffect(() => () => { onAgentsFilesChange?.([]); }, [onAgentsFilesChange]);
 
   const onDrop = useCallback((files: File[]) => {
     chatInputRef?.current?.addImages(files);

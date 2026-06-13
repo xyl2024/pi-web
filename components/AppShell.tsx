@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSessionUiState, useSessionLeafChange, resetSessionUi } from "@/hooks/sessionUiStore";
 import { SessionSidebar } from "./SessionSidebar";
 import { ChatWindow } from "./ChatWindow";
 import { FileViewer } from "./FileViewer";
@@ -19,7 +20,7 @@ import { BranchNavigator } from "./BranchNavigator";
 import { CommandPalette } from "./CommandPalette";
 import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
-import type { SessionInfo, SessionTreeNode, AgentsFile, SessionSearchResult } from "@/lib/types";
+import type { SessionInfo, SessionSearchResult } from "@/lib/types";
 import type { ChatInputHandle } from "./ChatInput";
 import { sendAgentCommand } from "@/lib/agent-client";
 
@@ -70,47 +71,22 @@ export function AppShell() {
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
 
-  // Branch navigator state — populated by ChatWindow via onBranchDataChange
-  const [branchTree, setBranchTree] = useState<SessionTreeNode[]>([]);
-  const [branchActiveLeafId, setBranchActiveLeafId] = useState<string | null>(null);
-  const branchLeafChangeFnRef = useRef<((leafId: string | null) => void) | null>(null);
-
-  const handleBranchDataChange = useCallback((tree: SessionTreeNode[], activeLeafId: string | null, onLeafChange: (leafId: string | null) => void) => {
-    setBranchTree(tree);
-    setBranchActiveLeafId(activeLeafId);
-    branchLeafChangeFnRef.current = onLeafChange;
-  }, []);
-
-  const handleBranchLeafChange = useCallback((leafId: string | null) => {
-    branchLeafChangeFnRef.current?.(leafId);
-  }, []);
-
-  const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
+  // Session-level UI state (branch tree, system prompt, agents files, session
+  // stats, context usage) is owned by useAgentSession in ChatWindow and
+  // published to a module-level store. The top bar / branch navigator / context
+  // panel here read from that store.
+  const { branchTree, branchActiveLeafId, systemPrompt, agentsFiles, sessionStats, contextUsage } = useSessionUiState();
+  const handleBranchLeafChange = useSessionLeafChange();
   const systemBtnRef = useRef<HTMLButtonElement>(null);
 
-  const handleSystemPromptChange = useCallback((prompt: string | null) => {
-    setSystemPrompt(prompt);
-  }, []);
-
-  // Agents files (AGENTS.md) — populated by ChatWindow, displayed in context panel
-  const [agentsFiles, setAgentsFiles] = useState<AgentsFile[]>([]);
+  // agentsFiles is an array; AppShell owns the "which one is currently shown"
+  // index. Reset to 0 whenever the list contents change. The store's
+  // content-based change check guards against the IIFE-derived agentsFiles
+  // value re-firing this effect on every render.
   const [selectedAgentsFileIndex, setSelectedAgentsFileIndex] = useState<number>(0);
-  const handleAgentsFilesChange = useCallback((files: AgentsFile[]) => {
-    setAgentsFiles(files);
+  useEffect(() => {
     setSelectedAgentsFileIndex(0);
-  }, []);
-
-  // Session stats (tokens + cost) — populated by ChatWindow, displayed in top bar
-  const [sessionStats, setSessionStats] = useState<{ tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null>(null);
-  const handleSessionStatsChange = useCallback((stats: { tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null) => {
-    setSessionStats(stats);
-  }, []);
-
-  // Context usage — populated by ChatWindow, displayed in top bar
-  const [contextUsage, setContextUsage] = useState<{ percent: number | null; contextWindow: number; tokens: number | null } | null>(null);
-  const handleContextUsageChange = useCallback((usage: { percent: number | null; contextWindow: number; tokens: number | null } | null) => {
-    setContextUsage(usage);
-  }, []);
+  }, [agentsFiles]);
 
   // Tools list — fetched once per session, cached for button clicks
   const [tools, setTools] = useState<ToolInfo[]>([]);
@@ -344,10 +320,7 @@ export function AppShell() {
       return prev;
     });
     setSessionKey((k) => k + 1);
-    setBranchTree([]);
-    setBranchActiveLeafId(null);
-    setSystemPrompt(null);
-    setAgentsFiles([]);
+    resetSessionUi();
     setTools([]);
     setActiveTopPanel(null);
     router.replace("/", { scroll: false });
@@ -357,8 +330,7 @@ export function AppShell() {
     setNewSessionCwd(null);
     setSelectedSession(session);
     setSessionKey((k) => k + 1);
-    setSystemPrompt(null);
-    setAgentsFiles([]);
+    resetSessionUi();
     setTools([]);
     setInitialSessionRestored(true);
     if (isRestore) {
@@ -394,10 +366,7 @@ export function AppShell() {
     setSelectedSession(null);
     setNewSessionCwd(cwd);
     setSessionKey((k) => k + 1);
-    setBranchTree([]);
-    setBranchActiveLeafId(null);
-    setSystemPrompt(null);
-    setAgentsFiles([]);
+    resetSessionUi();
     setTools([]);
     setActiveTopPanel(null);
     router.replace("/", { scroll: false });
@@ -465,10 +434,7 @@ export function AppShell() {
       setSelectedSession(null);
       setNewSessionCwd(cwd ?? null);
       setSessionKey((k) => k + 1);
-      setBranchTree([]);
-      setBranchActiveLeafId(null);
-      setSystemPrompt(null);
-      setAgentsFiles([]);
+      resetSessionUi();
       setTools([]);
       setActiveTopPanel(null);
       router.replace("/", { scroll: false });
@@ -1143,13 +1109,8 @@ export function AppShell() {
               onSessionForked={handleSessionForked}
               modelsRefreshKey={modelsRefreshKey}
               chatInputRef={chatInputRef}
-              onBranchDataChange={handleBranchDataChange}
-              onSystemPromptChange={handleSystemPromptChange}
-              onAgentsFilesChange={handleAgentsFilesChange}
               scrollToEntryId={pendingScrollEntryId}
               onScrollComplete={() => setPendingScrollEntryId(null)}
-              onSessionStatsChange={handleSessionStatsChange}
-              onContextUsageChange={handleContextUsageChange}
               onNewSessionRequest={handleSlashNew}
               onSelectSession={handleSelectSession}
             />

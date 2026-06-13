@@ -4,10 +4,10 @@ import { useState, useCallback, useRef, useEffect, useReducer } from "react";
 import type { AgentMessage, SessionInfo, SessionTreeNode, AgentsFile } from "@/lib/types";
 import { normalizeToolCalls } from "@/lib/normalize";
 import { sendAgentCommand } from "@/lib/agent-client";
-import type { ToolEntry } from "@/components/ToolPanel";
 import type { ToolCallStatsDispatch } from "./ToolCallStatsContext";
 import { useToast } from "@/components/Toast";
 import { useI18n } from "./useI18n";
+import { setSessionUiState, setLeafChangeHandler } from "./sessionUiStore";
 
 export interface SessionData {
   sessionId: string;
@@ -65,8 +65,6 @@ export interface UseAgentSessionOptions {
   onSessionForked?: (newSessionId: string) => void;
   modelsRefreshKey?: number;
   chatInputRef?: React.RefObject<ChatInputHandle | null>;
-  onBranchDataChange?: (tree: SessionTreeNode[], activeLeafId: string | null, onLeafChange: (leafId: string | null) => void) => void;
-  onSystemPromptChange?: (prompt: string | null) => void;
   setNewSessionModel?: (model: { provider: string; modelId: string } | null) => void;
   setToolPreset?: (preset: "none" | "full") => void;
   /** Push tool lifecycle events to the stats panel */
@@ -100,7 +98,7 @@ export interface ChatInputHandle {
 export function useAgentSession(opts: UseAgentSessionOptions) {
   const {
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
-    modelsRefreshKey, onBranchDataChange, onSystemPromptChange, statsEmit,
+    modelsRefreshKey, statsEmit,
     scrollToEntryId, onScrollComplete,
   } = opts;
   const { t } = useI18n();
@@ -659,8 +657,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, []);
 
   useEffect(() => {
-    onSystemPromptChange?.(systemPrompt);
-  }, [systemPrompt, onSystemPromptChange]);
+    setSessionUiState({ systemPrompt });
+  }, [systemPrompt]);
 
   // Load agents files whenever cwd changes (session switch or new session)
   useEffect(() => {
@@ -670,9 +668,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, [session?.cwd, newSessionCwd, loadAgentsFiles]);
 
   useEffect(() => {
-    if (!onBranchDataChange) return;
-    onBranchDataChange(data?.tree ?? [], activeLeafId, handleLeafChange);
-  }, [data?.tree, activeLeafId, handleLeafChange, onBranchDataChange]);
+    setSessionUiState({ branchTree: data?.tree ?? [], branchActiveLeafId: activeLeafId });
+  }, [data?.tree, activeLeafId]);
+
+  // Keep the store's leaf-change handler ref pointing at the latest callback.
+  // We don't include this in a useEffect (it would lag one render behind); a
+  // direct call here means AppShell's BranchNavigator always calls the freshest
+  // handler when the user clicks a branch.
+  setLeafChangeHandler(handleLeafChange);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -713,6 +716,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     const t = setTimeout(() => setCompactError(null), 3000);
     return () => clearTimeout(t);
   }, [compactError]);
+
+  // Publish the remaining session-level state to the store. The shallow-equal
+  // guard inside setSessionUiState prevents re-rendering AppShell's top bar
+  // when an IIFE-derived value (sessionStats) gets a new object identity but
+  // the same scalar contents.
+  useEffect(() => { setSessionUiState({ sessionStats }); }, [sessionStats]);
+  useEffect(() => { setSessionUiState({ contextUsage }); }, [contextUsage]);
+  useEffect(() => { setSessionUiState({ agentsFiles }); }, [agentsFiles]);
 
   return {
     // State
