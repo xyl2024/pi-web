@@ -471,6 +471,12 @@ const ZH_TRANSLATIONS = {
   "error": "失败",
   "timeout": "超时",
   "running": "运行中",
+  "unread": "未读",
+  "Mark as read": "标记为已读",
+  "Mark as unread": "标记为未读",
+  "Mark all as read": "全部标记为已读",
+  "Failed to update runs": "更新运行历史失败",
+  "Failed to update run": "更新运行失败",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

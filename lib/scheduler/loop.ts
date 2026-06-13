@@ -101,6 +101,7 @@ function rowToTask(row: TaskRow): ScheduledTask {
     lastRunAt: row.last_run_at,
     nextRunAt: row.next_run_at,
     lastRunStatus: null,
+    unreadCount: 0,
   };
 }
 

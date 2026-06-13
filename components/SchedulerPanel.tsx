@@ -23,6 +23,7 @@ interface ScheduledTask {
   lastRunAt: number | null;
   nextRunAt: number | null;
   lastRunStatus: TaskRunStatus | null;
+  unreadCount: number;
 }
 
 interface TaskRun {
@@ -35,6 +36,7 @@ interface TaskRun {
   error: string | null;
   sessionId: string | null;
   durationMs: number | null;
+  readAt: number | null;
 }
 
 interface Props {
@@ -235,6 +237,42 @@ export function SchedulerPanel({ onOpenSession }: Props) {
     }
   };
 
+  const markAllRead = async (taskId: string) => {
+    try {
+      const res = await fetch(
+        `/api/scheduled-tasks/${encodeURIComponent(taskId)}/runs/mark-all-read`,
+        { method: "POST" },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      void loadRuns(taskId);
+      void loadTasks();
+    } catch (e) {
+      toast.show({ kind: "error", message: t("Failed to update runs") + ": " + String(e) });
+    }
+  };
+
+  const toggleRunRead = async (run: TaskRun) => {
+    const nextRead = run.readAt === null;
+    // Optimistic update
+    setRuns((prev) => prev.map((r) => (r.id === run.id ? { ...r, readAt: nextRead ? Date.now() : null } : r)));
+    try {
+      const res = await fetch(
+        `/api/scheduled-tasks/runs/${encodeURIComponent(run.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ read: nextRead }),
+        },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      void loadTasks();
+    } catch (e) {
+      // Revert on failure
+      setRuns((prev) => prev.map((r) => (r.id === run.id ? { ...r, readAt: run.readAt } : r)));
+      toast.show({ kind: "error", message: t("Failed to update run") + ": " + String(e) });
+    }
+  };
+
   const deleteTask = async (id: string) => {
     try {
       const res = await fetch(`/api/scheduled-tasks?id=${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -400,14 +438,44 @@ export function SchedulerPanel({ onOpenSession }: Props) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     style={{
-                      fontSize: 12,
-                      color: "var(--text)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
                       overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
                     }}
                   >
-                    {task.name}
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: "var(--text)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        fontWeight: task.unreadCount > 0 ? 600 : 400,
+                      }}
+                    >
+                      {task.name}
+                    </span>
+                    {task.unreadCount > 0 && (
+                      <span
+                        aria-label={`${task.unreadCount} ${t("unread")}`}
+                        title={`${task.unreadCount} ${t("unread")}`}
+                        style={{
+                          flexShrink: 0,
+                          background: "#ef4444",
+                          color: "#fff",
+                          fontSize: 9,
+                          fontWeight: 700,
+                          padding: "1px 6px",
+                          borderRadius: 9,
+                          lineHeight: 1.4,
+                          minWidth: 16,
+                          textAlign: "center",
+                        }}
+                      >
+                        {task.unreadCount > 99 ? "99+" : task.unreadCount}
+                      </span>
+                    )}
                   </div>
                   <div
                     style={{
@@ -487,6 +555,25 @@ export function SchedulerPanel({ onOpenSession }: Props) {
                   />
                   {runsModalTask.enabled ? t("enabled") : t("disabled")}
                 </label>
+                {runs.some((r) => r.readAt === null) && (
+                  <button
+                    onClick={() => void markAllRead(runsModalTask.id)}
+                    style={{
+                      display: "inline-block",
+                      marginTop: 6,
+                      marginLeft: 12,
+                      padding: "2px 8px",
+                      background: "none",
+                      border: "1px solid var(--border)",
+                      borderRadius: 4,
+                      color: "var(--text-muted)",
+                      fontSize: 10,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {t("Mark all as read")}
+                  </button>
+                )}
               </div>
               <Tooltip content={t("Run now")}>
                 <button
@@ -577,13 +664,18 @@ export function SchedulerPanel({ onOpenSession }: Props) {
                   {t("No runs yet")}
                 </div>
               )}
-              {runs.map((run) => (
+              {runs.map((run) => {
+                const isUnread = run.readAt === null;
+                return (
                 <div
                   key={run.id}
                   style={{
                     padding: "8px 10px",
                     borderBottom: "1px solid var(--border)",
                     fontSize: 12,
+                    background: isUnread ? "rgba(37,99,235,0.04)" : "transparent",
+                    borderLeft: isUnread ? "2px solid var(--accent)" : "2px solid transparent",
+                    paddingLeft: isUnread ? 8 : 10,
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -596,6 +688,26 @@ export function SchedulerPanel({ onOpenSession }: Props) {
                         {(run.durationMs / 1000).toFixed(1)}s
                       </span>
                     )}
+                    <Tooltip content={isUnread ? t("Mark as read") : t("Mark as unread")}>
+                      <button
+                        onClick={() => void toggleRunRead(run)}
+                        aria-label={isUnread ? t("Mark as read") : t("Mark as unread")}
+                        style={{
+                          padding: "2px 6px",
+                          background: "none",
+                          border: "1px solid var(--border)",
+                          borderRadius: 4,
+                          color: isUnread ? "var(--accent)" : "var(--text-dim)",
+                          fontSize: 10,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        {isUnread ? "●" : "○"}
+                      </button>
+                    </Tooltip>
                     {run.sessionId && onOpenSession && (
                       <Tooltip content={t("Open session")}>
                         <button
@@ -627,7 +739,8 @@ export function SchedulerPanel({ onOpenSession }: Props) {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
