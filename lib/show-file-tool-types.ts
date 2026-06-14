@@ -9,6 +9,9 @@
 
 export const SHOW_FILE_TOOL_NAME = "show_file";
 
+/** Maximum number of files a single `show_file` tool call may reference. */
+export const SHOW_FILE_MAX_PATHS = 5;
+
 const IMAGE_EXTS = new Set([
   "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif",
 ]);
@@ -32,7 +35,8 @@ const TEXT_EXTS = new Set([
 export type ShowFileCategory =
   | "image" | "video" | "audio" | "pdf" | "html" | "excalidraw" | "text" | "binary";
 
-export interface ShowFileDetails {
+/** Per-file entry in the `show_file` tool result. */
+export interface ShowFileEntry {
   /** Absolute path that was resolved and validated. */
   path: string;
   /** Whether the file existed and was readable at execution time. */
@@ -45,6 +49,13 @@ export interface ShowFileDetails {
   summary?: string;
   /** Error message when `exists` is false or access was denied. */
   error?: string;
+}
+
+export interface ShowFileDetails {
+  /** Per-file result entries, in the same order as `paths` was passed. */
+  files: ShowFileEntry[];
+  /** Human-readable summary across all files. */
+  summary: string;
 }
 
 export function categorizeByExt(filePath: string): ShowFileCategory {

@@ -1,7 +1,7 @@
 /**
  * Custom Pi Agent tool: `show_file`.
  *
- * Displays a file inline below the tool call in the chat UI.
+ * Displays one or more files inline below the tool call in the chat UI.
  * Supports images, video, audio, PDFs, HTML (sandbox iframe), and text.
  *
  * Validation reuses lib/file-access.ts so the path is restricted to the
@@ -20,34 +20,31 @@ import path from "node:path";
 import { getAllowedRoots, isPathAllowed } from "./file-access";
 import {
   SHOW_FILE_TOOL_NAME,
+  SHOW_FILE_MAX_PATHS,
   categorizeByExt,
   type ShowFileDetails,
+  type ShowFileEntry,
 } from "./show-file-tool-types";
 
-export { SHOW_FILE_TOOL_NAME, categorizeByExt };
-export type { ShowFileCategory, ShowFileDetails } from "./show-file-tool-types";
+export { SHOW_FILE_TOOL_NAME, SHOW_FILE_MAX_PATHS, categorizeByExt };
+export type { ShowFileCategory, ShowFileDetails, ShowFileEntry } from "./show-file-tool-types";
 
 const ShowFileParams = Type.Object({
-  path: Type.String({
-    description:
-      "Absolute path to the file to display. Relative paths are resolved against the session's working directory. Supports images (png/jpg/gif/webp/svg/...), video (mp4/webm/mov/...), audio (mp3/wav/...), PDFs, HTML files (rendered in a sandboxed iframe), and text/markdown files.",
-  }),
-  description: Type.Optional(
+  paths: Type.Array(
     Type.String({
-      description: "Optional caption shown above the rendered content. The model sees this in the tool result; the frontend may render it as a header in future updates.",
+      description:
+        "Absolute path to the file to display. Relative paths are resolved against the session's working directory. Supports images (png/jpg/gif/webp/svg/...), video (mp4/webm/mov/...), audio (mp3/wav/...), PDFs, HTML files (rendered in a sandboxed iframe), and text/markdown files.",
     }),
+    {
+      minItems: 1,
+      maxItems: SHOW_FILE_MAX_PATHS,
+      description: `1 to ${SHOW_FILE_MAX_PATHS} files to display together in a single tool call.`,
+    },
   ),
 });
 
 function result<T>(text: string, details: T) {
   return { content: [{ type: "text" as const, text }], details };
-}
-
-function errResult<T>(message: string, details: T) {
-  return {
-    content: [{ type: "text" as const, text: `Error: ${message}` }],
-    details,
-  };
 }
 
 function fmtSize(bytes: number): string {
@@ -57,68 +54,116 @@ function fmtSize(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
+function resolvePath(input: string, cwd: string): string {
+  return path.isAbsolute(input) ? path.normalize(input) : path.resolve(cwd, input);
+}
+
+function processOne(absPath: string): ShowFileEntry {
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(absPath);
+  } catch (e) {
+    return {
+      path: absPath,
+      exists: false,
+      error: `File not found: ${absPath} (${e instanceof Error ? e.message : String(e)})`,
+    };
+  }
+
+  if (!stat.isFile()) {
+    return {
+      path: absPath,
+      exists: false,
+      error: `Not a regular file: ${absPath}`,
+    };
+  }
+
+  const category = categorizeByExt(absPath);
+  const size = stat.size;
+  return {
+    path: absPath,
+    exists: true,
+    category,
+    size,
+    summary: `Displayed ${absPath} (${category}, ${fmtSize(size)})`,
+  };
+}
+
 export const showFileTool = defineTool<typeof ShowFileParams, ShowFileDetails>({
   name: SHOW_FILE_TOOL_NAME,
   label: "Show File",
   description:
-    "Display a file in the chat UI below the tool call. Renders images inline, plays video/audio with native controls, shows PDFs, displays HTML in a sandboxed iframe (scripts allowed, same-origin denied), renders Excalidraw scenes read-only, and renders text/markdown as a code block. Use this whenever the user should see the actual file content rather than just hear about it. The file must be inside the session's working directory or another allowed root.",
+    "Display up to 5 files inline in the chat (supported file types: images, video, audio, PDFs, HTML, Excalidraw, text/markdown).",
   parameters: ShowFileParams,
   executionMode: "sequential",
   async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-    const absPath = path.isAbsolute(params.path)
-      ? path.normalize(params.path)
-      : path.resolve(ctx.cwd, params.path);
+    const rawPaths = params.paths;
 
+    if (rawPaths.length === 0) {
+      return result<ShowFileDetails>(
+        "Error: At least one path is required.",
+        {
+          files: [],
+          summary: "No paths provided.",
+        },
+      );
+    }
+
+    if (rawPaths.length > SHOW_FILE_MAX_PATHS) {
+      return result<ShowFileDetails>(
+        `Error: Too many paths (${rawPaths.length}); maximum is ${SHOW_FILE_MAX_PATHS}.`,
+        {
+          files: [],
+          summary: `Too many paths (${rawPaths.length} > ${SHOW_FILE_MAX_PATHS}).`,
+        },
+      );
+    }
+
+    let allowedRoots: Set<string>;
     try {
-      const allowedRoots = await getAllowedRoots();
-      if (!isPathAllowed(absPath, allowedRoots)) {
-        const message = `Path not in allowed roots: ${absPath}`;
-        return errResult<ShowFileDetails>(message, {
-          path: absPath,
-          exists: false,
-          error: message,
-        });
-      }
+      allowedRoots = await getAllowedRoots();
     } catch (e) {
       const message = `Failed to check allowed roots: ${e instanceof Error ? e.message : String(e)}`;
-      return errResult<ShowFileDetails>(message, {
-        path: absPath,
-        exists: false,
-        error: message,
-      });
+      return result<ShowFileDetails>(
+        `Error: ${message}`,
+        {
+          files: rawPaths.map((p) => ({
+            path: typeof p === "string" ? resolvePath(p, ctx.cwd) : "",
+            exists: false,
+            error: message,
+          })),
+          summary: message,
+        },
+      );
     }
 
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(absPath);
-    } catch (e) {
-      const message = `File not found: ${absPath} (${e instanceof Error ? e.message : String(e)})`;
-      return errResult<ShowFileDetails>(message, {
-        path: absPath,
-        exists: false,
-        error: message,
-      });
-    }
-
-    if (!stat.isFile()) {
-      const message = `Not a regular file: ${absPath}`;
-      return errResult<ShowFileDetails>(message, {
-        path: absPath,
-        exists: false,
-        error: message,
-      });
-    }
-
-    const category = categorizeByExt(absPath);
-    const size = stat.size;
-    const summary = `Displayed ${absPath} (${category}, ${fmtSize(size)})`;
-    return result<ShowFileDetails>(summary, {
-      path: absPath,
-      exists: true,
-      category,
-      size,
-      summary,
+    const files: ShowFileEntry[] = rawPaths.map((p) => {
+      if (typeof p !== "string" || p.length === 0) {
+        return {
+          path: "",
+          exists: false,
+          error: "Path must be a non-empty string.",
+        };
+      }
+      const abs = resolvePath(p, ctx.cwd);
+      if (!isPathAllowed(abs, allowedRoots)) {
+        return {
+          path: abs,
+          exists: false,
+          error: `Path not in allowed roots: ${abs}`,
+        };
+      }
+      return processOne(abs);
     });
+
+    const okCount = files.filter((f) => f.exists).length;
+    const failCount = files.length - okCount;
+    const summary =
+      failCount === 0
+        ? `Displayed ${okCount} file${okCount === 1 ? "" : "s"}.`
+        : `Displayed ${okCount} of ${files.length} files; ${failCount} failed.`;
+
+    return result<ShowFileDetails>(summary, { files, summary });
   },
 });
 

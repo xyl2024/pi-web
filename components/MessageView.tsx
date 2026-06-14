@@ -699,11 +699,15 @@ function ToolCallBlock({ block, result, isRunning, duration, cwd }: { block: Too
 
   // Special render for show_file: keep the standard tool call card and append a
   // rendered viewer below it. The viewer is mounted speculatively from
-  // block.input.path so it starts loading while the tool is still running.
+  // block.input.paths so it starts loading while the tool is still running.
   const isShowFile = block.toolName === SHOW_FILE_TOOL_NAME;
-  const showFilePath = isShowFile && block.input && typeof block.input.path === "string"
-    ? block.input.path
-    : null;
+  const showFilePaths: string[] | null = (() => {
+    if (!isShowFile || !block.input) return null;
+    const raw = block.input.paths;
+    if (!Array.isArray(raw)) return null;
+    const filtered = raw.filter((p): p is string => typeof p === "string" && p.length > 0);
+    return filtered.length > 0 ? filtered : null;
+  })();
 
   return (
     <div
@@ -777,15 +781,20 @@ function ToolCallBlock({ block, result, isRunning, duration, cwd }: { block: Too
       )}
 
       {/* ── show_file inline renderer (below generic UI) ── */}
-      {isShowFile && showFilePath && (
+      {isShowFile && showFilePaths && (
         <div
           style={{
             padding: "10px",
             borderTop: "1px solid rgba(34,197,94,0.2)",
             background: "var(--bg)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
           }}
         >
-          <ShowFileRenderer filePath={showFilePath} cwd={cwd} />
+          {showFilePaths.map((p, i) => (
+            <ShowFileRenderer key={`${i}-${p}`} filePath={p} cwd={cwd} />
+          ))}
         </div>
       )}
     </div>
