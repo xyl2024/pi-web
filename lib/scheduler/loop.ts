@@ -32,7 +32,32 @@ export function isLoopRunning(): boolean {
 export function ensureLoop(): void {
   if (timer !== null) return;
   log.info("scheduler loop starting");
+  reconcileStaleTasks(Date.now());
   scheduleNext(0);
+}
+
+/**
+ * On loop start, advance any task whose stored `next_run_at` is already in
+ * the past to its next future trigger time. Skipping (not firing) missed
+ * triggers is the policy here — the cron expression is the source of truth,
+ * not "catch up to wherever we left off." Without this, restarting the
+ * server (or otherwise being down across a trigger time) would fire every
+ * task immediately on startup, even hours late.
+ */
+function reconcileStaleTasks(now: number): void {
+  const rows = getSchedulerDb()
+    .prepare(
+      `SELECT id, cron FROM scheduled_tasks
+        WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at < ?`,
+    )
+    .all(now) as Array<{ id: string; cron: string }>;
+  if (rows.length === 0) return;
+  log.info("skipping missed triggers — advancing to next future run", {
+    count: rows.length,
+  });
+  for (const row of rows) {
+    advanceNextRun(row.id, row.cron);
+  }
 }
 
 /** Stop the scheduling loop. Safe to call when not running. */
