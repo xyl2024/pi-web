@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
 import { useI18n } from "@/hooks/useI18n";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { AudioPlayer } from "@/components/AudioPlayer";
+import { MermaidBlock } from "@/components/MermaidBlock";
 import { encodeFilePathForApi, joinFilePath } from "@/lib/file-paths";
 
 // Heavy client-only component; lazy-load with SSR off so show_file
@@ -189,7 +193,11 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
     );
   }
 
-  if (category === "markdown" || category === "text") {
+  if (category === "markdown") {
+    return <MarkdownContent url={url} />;
+  }
+
+  if (category === "text") {
     return <TextContent url={url} ext={ext} />;
   }
 
@@ -309,6 +317,108 @@ function HtmlContent({ url, onExpand }: { url: string; onExpand: (node: React.Re
           )
         }
       />
+    </div>
+  );
+}
+
+function MarkdownContent({ url }: { url: string }) {
+  const { t } = useI18n();
+  const [state, setState] = useState<
+    | { kind: "loading" }
+    | { kind: "ready"; content: string }
+    | { kind: "error"; message: string }
+  >({ kind: "loading" });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(url)
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${r.status}`);
+        }
+        return r.json() as Promise<{ content: string }>;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setState({ kind: "ready", content: data.content });
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const message = e instanceof Error ? e.message : String(e);
+        setState({ kind: "error", message });
+      });
+    return () => { cancelled = true; };
+  }, [url]);
+
+  // Memoize the components map so ReactMarkdown doesn't see a new
+  // identity on every parent re-render. Without this, the new
+  // `code` closure produces a new <MermaidBlock> element on every
+  // render, which can cause the mermaid subtree to remount and
+  // re-parse — visible as flicker and scroll-position jumps.
+  const components = useMemo<Components>(() => {
+    const codeOverride: Components["code"] = ((props: { className?: string; children?: React.ReactNode }) => {
+      const className = props.className;
+      const children = props.children;
+      const lang = className?.replace("language-", "") ?? "";
+      const raw = String(children ?? "");
+      const isBlock = className?.includes("language-") || raw.includes("\n");
+      if (isBlock && lang === "mermaid") {
+        // Stable key keeps the MermaidBlock instance alive across
+        // re-renders even if the surrounding tree restructures.
+        return <MermaidBlock key={raw} code={raw.replace(/\n$/, "")} />;
+      }
+      return <code className={className}>{children}</code>;
+    }) as Components["code"];
+    const preOverride: Components["pre"] = (({ children }: { children?: React.ReactNode }) => <>{children}</>) as Components["pre"];
+    return { code: codeOverride, pre: preOverride };
+  }, []);
+
+  if (state.kind === "loading") {
+    return (
+      <div style={{ padding: "8px 10px", color: "var(--text-dim)", fontSize: 12 }}>
+        {t("Loading…")}
+      </div>
+    );
+  }
+  if (state.kind === "error") {
+    return (
+      <div
+        style={{
+          padding: "8px 10px",
+          color: "#f87171",
+          fontSize: 12,
+          border: "1px solid rgba(248,113,113,0.3)",
+          borderRadius: 6,
+          background: "rgba(248,113,113,0.05)",
+        }}
+      >
+        {t("Failed to load file")}: {state.message}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="markdown-body"
+      style={{
+        padding: "10px 12px",
+        color: "var(--text)",
+        background: "var(--bg)",
+        border: "1px solid var(--border)",
+        borderRadius: 6,
+        fontSize: 13,
+        lineHeight: 1.6,
+        maxHeight: "60vh",
+        overflow: "auto",
+      }}
+    >
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={components}
+      >
+        {state.content}
+      </ReactMarkdown>
     </div>
   );
 }
