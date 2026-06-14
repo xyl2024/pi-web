@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTheme } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
 
@@ -46,13 +46,24 @@ export function MermaidBlock({ code, isStreaming }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // useEffect: render once per (code, theme) change, but skip while
-  // streaming. Cleanup sets `cancelled` so a late `mermaid.render`
-  // response can't stomp on a newer render.
+  // Track the last code string that successfully produced an SVG. This
+  // makes the parse truly idempotent: if the effect re-runs for any
+  // reason (e.g. parent re-renders that pass the same code reference,
+  // or a dep that's technically stable but causes the effect to fire
+  // once more) we skip the parse and avoid clearing the displayed SVG.
+  const parsedCodeRef = useRef<string | null>(null);
+
+  // useEffect: render once per code change, but skip while streaming.
+  // Cleanup sets `cancelled` so a late `mermaid.render` response can't
+  // stomp on a newer render.
   useEffect(() => {
     if (isStreaming) {
       setSvg(null);
       setError(null);
+      parsedCodeRef.current = null;
+      return;
+    }
+    if (parsedCodeRef.current === code) {
       return;
     }
     let cancelled = false;
@@ -63,7 +74,9 @@ export function MermaidBlock({ code, isStreaming }: Props) {
       .then(async (mermaid) => {
         const id = `mermaid-${Math.random().toString(36).slice(2, 10)}`;
         const { svg: rendered } = await mermaid.render(id, code);
-        if (!cancelled) setSvg(rendered);
+        if (cancelled) return;
+        parsedCodeRef.current = code;
+        setSvg(rendered);
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -99,8 +112,12 @@ export function MermaidBlock({ code, isStreaming }: Props) {
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }, [svg]);
 
-  // Body: error → source + message; streaming → source only; ready → SVG.
-  const showSource = error || isStreaming;
+  // Body priority once an SVG exists: keep showing it. The diagram is
+  // expensive to parse and the container has a `min-height` so the
+  // surrounding page doesn't reflow if the SVG is briefly absent.
+  // Errors are surfaced in the red banner below; streaming falls back
+  // to the source `<pre>` until the parse completes.
+  const showSource = !svg && (error || isStreaming);
   const body = showSource ? (
     <pre
       style={{
@@ -114,6 +131,7 @@ export function MermaidBlock({ code, isStreaming }: Props) {
         background: "var(--bg)",
         overflow: "auto",
         maxHeight: "60vh",
+        minHeight: 80,
       }}
     >
       {code}
@@ -128,6 +146,7 @@ export function MermaidBlock({ code, isStreaming }: Props) {
         background: "var(--bg)",
         overflow: "auto",
         maxHeight: "60vh",
+        minHeight: 80,
       }}
     />
   ) : (
@@ -137,6 +156,7 @@ export function MermaidBlock({ code, isStreaming }: Props) {
         color: "var(--text-dim)",
         fontSize: 12,
         background: "var(--bg)",
+        minHeight: 80,
       }}
     >
       {t("Loading…")}
