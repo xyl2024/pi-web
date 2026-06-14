@@ -102,6 +102,16 @@ export function AudioPlayer({ src, title, subtitle, cover = DEFAULT_COVER }: Pro
     el.playbackRate = speed;
   }, [speed, ready]);
 
+  // Autoplay once the audio is ready. Browser autoplay policies may
+  // reject unmuted playback until the user has interacted with the page;
+  // we swallow that silently so the play button still works.
+  useEffect(() => {
+    if (!ready) return;
+    const el = audioRef.current;
+    if (!el) return;
+    el.play().catch(() => { /* autoplay blocked; user can click play */ });
+  }, [ready]);
+
   const togglePlay = useCallback(() => {
     const el = audioRef.current;
     if (!el) return;

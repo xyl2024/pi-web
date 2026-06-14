@@ -120,6 +120,7 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
     return (
       <video
         controls
+        autoPlay
         src={url}
         preload="metadata"
         style={{
