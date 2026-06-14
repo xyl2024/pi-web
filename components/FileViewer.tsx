@@ -12,6 +12,7 @@ import { useToast } from "./Toast";
 import { useI18n } from "@/hooks/useI18n";
 import { Tooltip } from "./Tooltip";
 import { extractImageGallery, MarkdownImage, ImageLightbox } from "./ImageLightbox";
+import { MermaidBlock } from "./MermaidBlock";
 import { encodeFilePathForApi, getFileName, getRelativeFilePath, normalizeFilePathSlashes } from "@/lib/file-paths";
 import { Document, Page, pdfjs } from "react-pdf";
 
@@ -1725,6 +1726,16 @@ function TextFileViewer({ filePath, cwd }: Props) {
                     }}
                   />
                 ),
+                code: ({ className, children, ...props }) => {
+                  const lang = className?.replace("language-", "") ?? "";
+                  const raw = String(children ?? "");
+                  const isBlock = className?.includes("language-") || raw.includes("\n");
+                  if (isBlock && lang === "mermaid") {
+                    return <MermaidBlock code={raw.replace(/\n$/, "")} />;
+                  }
+                  return <code className={className} {...props}>{children}</code>;
+                },
+                pre: ({ children }) => <>{children}</>,
               }}
             >
               {data.content}

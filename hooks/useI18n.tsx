@@ -493,6 +493,9 @@ const ZH_TRANSLATIONS = {
   "Mark all as read": "全部标记为已读",
   "Failed to update runs": "更新运行历史失败",
   "Failed to update run": "更新运行失败",
+  // Mermaid renderer
+  "Failed to render Mermaid diagram": "Mermaid 图渲染失败",
+  "Download SVG": "下载 SVG",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

@@ -10,6 +10,7 @@ import { Tooltip } from "./Tooltip";
 import { useTheme } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
 import { ShowFileRenderer } from "./ShowFileRenderer";
+import { MermaidBlock } from "./MermaidBlock";
 import { SHOW_FILE_TOOL_NAME } from "@/lib/show-file-tool-types";
 import type {
   AgentMessage,
@@ -565,7 +566,7 @@ function AssistantMessageView({
 
 function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCallDurations, keywords, isSearchMatch, cwd }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; streamingDuration?: number; toolCallDurations?: Map<string, number>; keywords?: string[]; isSearchMatch?: boolean; cwd?: string }) {
   if (block.type === "text") {
-    return <TextBlock block={block as TextContent} keywords={keywords} isSearchMatch={isSearchMatch} />;
+    return <TextBlock block={block as TextContent} keywords={keywords} isSearchMatch={isSearchMatch} isStreaming={isStreaming} />;
   }
   if (block.type === "thinking") {
     return <ThinkingBlock block={block as ThinkingContent} duration={streamingDuration} keywords={keywords} isSearchMatch={isSearchMatch} />;
@@ -588,7 +589,7 @@ function highlightTextAsHtml(text: string, keywords?: string[], isSearchMatch?: 
   return text.replace(regex, (match) => `<mark class="search-highlight">${match}</mark>`);
 }
 
-function TextBlock({ block, keywords, isSearchMatch }: { block: TextContent; keywords?: string[]; isSearchMatch?: boolean }) {
+function TextBlock({ block, keywords, isSearchMatch, isStreaming }: { block: TextContent; keywords?: string[]; isSearchMatch?: boolean; isStreaming?: boolean }) {
   const text = highlightTextAsHtml(block.text, keywords, isSearchMatch);
   return (
     <div className="markdown-body">
@@ -600,6 +601,9 @@ function TextBlock({ block, keywords, isSearchMatch }: { block: TextContent; key
             const raw = String(children);
             const isBlock = className?.includes("language-") || raw.includes("\n");
             if (isBlock) {
+              if (lang === "mermaid") {
+                return <MermaidBlock code={raw.replace(/\n$/, "")} isStreaming={isStreaming} />;
+              }
               return <CodeBlock code={raw.replace(/\n$/, "")} lang={lang} />;
             }
             return (

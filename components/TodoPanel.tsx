@@ -3,11 +3,13 @@
 import { useMemo, useState, useRef, useEffect, Fragment, cloneElement, createElement, isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
 import { useI18n, type Locale } from "@/hooks/useI18n";
 import { useTodos, type Todo } from "@/hooks/useTodos";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
+import { MermaidBlock } from "./MermaidBlock";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { DatePicker } from "./DatePicker";
 import { extractImageGallery, MarkdownImage, ImageLightbox } from "./ImageLightbox";
@@ -1331,7 +1333,17 @@ function TodoItem({
       em: passthrough("em"),
       strong: passthrough("strong"),
       a: passthrough("a"),
-      code: passthrough("code"),
+      code: ((props: { className?: string; children?: React.ReactNode }) => {
+        const className = props.className;
+        const children = props.children;
+        const lang = className?.replace("language-", "") ?? "";
+        const raw = String(children ?? "");
+        if (lang === "mermaid") {
+          return <MermaidBlock code={raw.replace(/\n$/, "")} />;
+        }
+        return passthrough("code")(props);
+      }) as Components["code"],
+      pre: (({ children }: { children?: React.ReactNode }) => <>{children}</>) as Components["pre"],
     };
   }, [searchTerm, gallery]);
 
