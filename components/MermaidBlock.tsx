@@ -194,6 +194,7 @@ export function MermaidBlock({ code, isStreaming }: Props) {
               padding: 24,
               boxSizing: "border-box",
               overflow: "auto",
+              background: "#fff",
             }}
           />
         </FullscreenOverlay>
