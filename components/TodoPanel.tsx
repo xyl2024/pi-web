@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useRef, useEffect, Fragment, cloneElement, createElement, isValidElement, type ReactNode } from "react";
+import { useCallback, useMemo, useState, useRef, useEffect, Fragment, cloneElement, createElement, isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
@@ -27,6 +27,50 @@ type Filters = {
 type DeadlineTone = "overdue" | "today" | "future";
 
 const DEFAULT_FILTERS: Filters = { status: "all", deadline: "all", dateRange: { from: null, to: null }, tags: [] };
+
+// Persists the user's filter preference across tab close/reopen and page reload.
+// Follows the i18n hydration pattern (hooks/useI18n.tsx) — lazy default + useEffect read.
+const TODO_FILTERS_STORAGE_KEY = "pi-todo-filters";
+
+const STATUS_VALUES: ReadonlySet<StatusFilter> = new Set(["all", "active", "done"]);
+const DEADLINE_VALUES: ReadonlySet<DeadlineFilter> = new Set([
+  "all",
+  "overdue",
+  "today",
+  "thisWeek",
+  "thisMonth",
+  "noDeadline",
+]);
+
+/**
+ * Read and validate a persisted Filters object from localStorage. Falls back to
+ * DEFAULT_FILTERS for any field that doesn't match the expected shape so a
+ * corrupt or stale entry can never crash the panel.
+ */
+function parsePersistedFilters(raw: string | null): Filters {
+  if (!raw) return DEFAULT_FILTERS;
+  try {
+    const obj: unknown = JSON.parse(raw);
+    if (!obj || typeof obj !== "object") return DEFAULT_FILTERS;
+    const o = obj as Record<string, unknown>;
+    const status = STATUS_VALUES.has(o.status as StatusFilter)
+      ? (o.status as StatusFilter)
+      : DEFAULT_FILTERS.status;
+    const deadline = DEADLINE_VALUES.has(o.deadline as DeadlineFilter)
+      ? (o.deadline as DeadlineFilter)
+      : DEFAULT_FILTERS.deadline;
+    const drRaw = o.dateRange as { from?: unknown; to?: unknown } | null;
+    const dr = drRaw && typeof drRaw === "object" ? drRaw : null;
+    const from = dr && (typeof dr.from === "number" || dr.from === null) ? (dr.from as number | null) : null;
+    const to = dr && (typeof dr.to === "number" || dr.to === null) ? (dr.to as number | null) : null;
+    const tags = Array.isArray(o.tags) && o.tags.every((t) => typeof t === "string")
+      ? (o.tags as string[])
+      : [];
+    return { status, deadline, dateRange: { from, to }, tags };
+  } catch {
+    return DEFAULT_FILTERS;
+  }
+}
 
 // Mirrors lib/todo-store.ts MAX_TAG_LENGTH. Kept in sync by hand; the server is
 // the source of truth and rejects anything longer.
@@ -165,12 +209,35 @@ export function TodoPanel() {
   const { t } = useI18n();
   const { todos, loading, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo } = useTodos();
   const confirm = useConfirm();
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [viewFilters, setViewFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
   const [draftMode, setDraftMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filterActive = filters.status !== "all" || filters.deadline !== "all" || filters.dateRange.from != null || filters.dateRange.to != null || filters.tags.length > 0;
+  // Hydrate persisted filter preference after mount (SSR-safe: defaults above
+  // match what the server renders, then we sync from localStorage).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(TODO_FILTERS_STORAGE_KEY);
+      setViewFilters(parsePersistedFilters(raw));
+    } catch {
+      // localStorage unavailable — keep defaults.
+    }
+  }, []);
+
+  // Single entry point for user-initiated filter changes: updates the view
+  // and writes to localStorage. The transient add-flow handlers call
+  // setViewFilters directly so they don't overwrite the saved preference.
+  const applyFiltersChange = useCallback((next: Filters) => {
+    setViewFilters(next);
+    try {
+      localStorage.setItem(TODO_FILTERS_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // localStorage unavailable — in-memory state is still updated.
+    }
+  }, []);
+
+  const filterActive = viewFilters.status !== "all" || viewFilters.deadline !== "all" || viewFilters.dateRange.from != null || viewFilters.dateRange.to != null || viewFilters.tags.length > 0;
 
   const [now] = useState(() => Date.now());
   const startOfToday = startOfDay(now);
@@ -188,15 +255,15 @@ export function TodoPanel() {
   const tagSuggestions = useMemo(() => aggregateTags(todos), [todos]);
 
   const visible = useMemo(() => {
-    const sortKey: keyof Todo = filters.status === "done" ? "completedAt" : "createdAt";
-    const wantedTags = filters.tags.length > 0
-      ? new Set(filters.tags.map((t) => t.toLowerCase()))
+    const sortKey: keyof Todo = viewFilters.status === "done" ? "completedAt" : "createdAt";
+    const wantedTags = viewFilters.tags.length > 0
+      ? new Set(viewFilters.tags.map((t) => t.toLowerCase()))
       : null;
     return [...todos]
       .filter((x) => {
-        if (filters.status === "active" && x.done) return false;
-        if (filters.status === "done" && !x.done) return false;
-        switch (filters.deadline) {
+        if (viewFilters.status === "active" && x.done) return false;
+        if (viewFilters.status === "done" && !x.done) return false;
+        switch (viewFilters.deadline) {
           case "all":
             break;
           case "overdue":
@@ -224,10 +291,10 @@ export function TodoPanel() {
           (x.description ?? "").toLowerCase().includes(term);
       })
       .filter((x) => {
-        if (filters.dateRange.from == null && filters.dateRange.to == null) return true;
+        if (viewFilters.dateRange.from == null && viewFilters.dateRange.to == null) return true;
         if (x.deadline == null) return false;
-        if (filters.dateRange.from != null && x.deadline < filters.dateRange.from) return false;
-        if (filters.dateRange.to != null && x.deadline > filters.dateRange.to) return false;
+        if (viewFilters.dateRange.from != null && x.deadline < viewFilters.dateRange.from) return false;
+        if (viewFilters.dateRange.to != null && x.deadline > viewFilters.dateRange.to) return false;
         return true;
       })
       .filter((x) => {
@@ -235,18 +302,20 @@ export function TodoPanel() {
         return x.tags.some((t) => wantedTags.has(t.toLowerCase()));
       })
       .sort((a, b) => {
-        if (filters.status === "all" && a.done !== b.done) {
+        if (viewFilters.status === "all" && a.done !== b.done) {
           return a.done ? 1 : -1; // active first, done last
         }
         const av = (a[sortKey] as number | undefined) ?? 0;
         const bv = (b[sortKey] as number | undefined) ?? 0;
         return bv - av;
       });
-  }, [todos, filters, searchTerm, startOfToday, startOfTomorrow, endOfThisWeek, startOfThisMonth, endOfThisMonth]);
+  }, [todos, viewFilters, searchTerm, startOfToday, startOfTomorrow, endOfThisWeek, startOfThisMonth, endOfThisMonth]);
 
   const handleAddClick = () => {
     if (draftMode) return;
-    setFilters(DEFAULT_FILTERS);
+    // Transient view reset so the new todo is visible — the saved preference
+    // is preserved and will be restored on next mount.
+    setViewFilters(DEFAULT_FILTERS);
     setDraftMode(true);
   };
 
@@ -258,7 +327,7 @@ export function TodoPanel() {
     }
     const todo = await addTodo(trimmed, { deadline: value.deadline, tags: value.tags });
     setDraftMode(false);
-    if (todo) setFilters((f) => ({ ...f, status: "active" }));
+    if (todo) setViewFilters((f) => ({ ...f, status: "active" }));
   };
 
   const handleDelete = async (todo: Todo) => {
@@ -274,8 +343,8 @@ export function TodoPanel() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg)" }}>
       <FilterBar
-        filters={filters}
-        onFiltersChange={setFilters}
+        filters={viewFilters}
+        onFiltersChange={applyFiltersChange}
         filterOpen={filterOpen}
         onFilterOpenChange={setFilterOpen}
         filterActive={filterActive}
