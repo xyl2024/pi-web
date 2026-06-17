@@ -1339,7 +1339,8 @@ function TodoItem({
         const lang = className?.replace("language-", "") ?? "";
         const raw = String(children ?? "");
         if (lang === "mermaid") {
-          return <MermaidBlock code={raw.replace(/\n$/, "")} />;
+          // Stable key keeps the MermaidBlock instance alive across re-renders.
+          return <MermaidBlock key={raw} code={raw.replace(/\n$/, "")} />;
         }
         return passthrough("code")(props);
       }) as Components["code"],

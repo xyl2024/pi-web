@@ -591,42 +591,48 @@ function highlightTextAsHtml(text: string, keywords?: string[], isSearchMatch?: 
 
 function TextBlock({ block, keywords, isSearchMatch, isStreaming }: { block: TextContent; keywords?: string[]; isSearchMatch?: boolean; isStreaming?: boolean }) {
   const text = highlightTextAsHtml(block.text, keywords, isSearchMatch);
+  // Memoize the components map so ReactMarkdown doesn't see a new identity
+  // on every parent re-render. Without this, the new `code` closure produces
+  // a new <MermaidBlock> element on every render, which can cause the
+  // mermaid subtree to remount and re-parse — visible as flicker.
+  // The stable `key={raw}` on MermaidBlock is a second line of defense.
+  const components = useMemo(
+    () => ({
+      code({ className, children, ...props }: { className?: string; children?: React.ReactNode } & React.HTMLAttributes<HTMLElement>) {
+        const lang = className?.replace("language-", "") ?? "";
+        const raw = String(children ?? "");
+        const isBlock = className?.includes("language-") || raw.includes("\n");
+        if (isBlock) {
+          if (lang === "mermaid") {
+            return <MermaidBlock key={raw} code={raw.replace(/\n$/, "")} isStreaming={isStreaming} />;
+          }
+          return <CodeBlock code={raw.replace(/\n$/, "")} lang={lang} />;
+        }
+        return (
+          <code
+            style={{
+              background: "var(--bg-selected)",
+              padding: "1px 4px",
+              borderRadius: 3,
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.9em",
+            }}
+            {...props}
+          >
+            {children}
+          </code>
+        );
+      },
+      pre({ children }: { children?: React.ReactNode }) {
+        // Unwrap <pre> wrapper — CodeBlock handles its own container
+        return <>{children}</>;
+      },
+    }),
+    [isStreaming],
+  );
   return (
     <div className="markdown-body">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          code({ className, children, ...props }) {
-            const lang = className?.replace("language-", "") ?? "";
-            const raw = String(children);
-            const isBlock = className?.includes("language-") || raw.includes("\n");
-            if (isBlock) {
-              if (lang === "mermaid") {
-                return <MermaidBlock code={raw.replace(/\n$/, "")} isStreaming={isStreaming} />;
-              }
-              return <CodeBlock code={raw.replace(/\n$/, "")} lang={lang} />;
-            }
-            return (
-              <code
-                style={{
-                  background: "var(--bg-selected)",
-                  padding: "1px 4px",
-                  borderRadius: 3,
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.9em",
-                }}
-                {...props}
-              >
-                {children}
-              </code>
-            );
-          },
-          pre({ children }) {
-            // Unwrap <pre> wrapper — CodeBlock handles its own container
-            return <>{children}</>;
-          },
-        }}
-      >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {text}
       </ReactMarkdown>
     </div>

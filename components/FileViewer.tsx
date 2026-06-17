@@ -1715,28 +1715,32 @@ function TextFileViewer({ filePath, cwd }: Props) {
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              components={{
-                img: (props) => (
-                  <MarkdownImage
-                    {...props}
-                    resolveSrc={resolveSrc}
-                    onImageClick={(src) => {
-                      const idx = gallery.findIndex((g) => g.src === src);
-                      if (idx >= 0) setLightboxIndex(idx);
-                    }}
-                  />
-                ),
-                code: ({ className, children, ...props }) => {
-                  const lang = className?.replace("language-", "") ?? "";
-                  const raw = String(children ?? "");
-                  const isBlock = className?.includes("language-") || raw.includes("\n");
-                  if (isBlock && lang === "mermaid") {
-                    return <MermaidBlock code={raw.replace(/\n$/, "")} />;
-                  }
-                  return <code className={className} {...props}>{children}</code>;
-                },
-                pre: ({ children }) => <>{children}</>,
-              }}
+              components={useMemo(
+                () => ({
+                  img: (props: { src?: string | Blob; alt?: string }) => (
+                    <MarkdownImage
+                      {...props}
+                      resolveSrc={resolveSrc}
+                      onImageClick={(src) => {
+                        const idx = gallery.findIndex((g) => g.src === src);
+                        if (idx >= 0) setLightboxIndex(idx);
+                      }}
+                    />
+                  ),
+                  code: ({ className, children, ...props }: { className?: string; children?: React.ReactNode } & React.HTMLAttributes<HTMLElement>) => {
+                    const lang = className?.replace("language-", "") ?? "";
+                    const raw = String(children ?? "");
+                    const isBlock = className?.includes("language-") || raw.includes("\n");
+                    if (isBlock && lang === "mermaid") {
+                      // Stable key keeps the MermaidBlock instance alive across re-renders.
+                      return <MermaidBlock key={raw} code={raw.replace(/\n$/, "")} />;
+                    }
+                    return <code className={className} {...props}>{children}</code>;
+                  },
+                  pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+                }),
+                [resolveSrc, gallery],
+              )}
             >
               {data.content}
             </ReactMarkdown>

@@ -112,13 +112,25 @@ export function MermaidBlock({ code, isStreaming }: Props) {
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }, [svg]);
 
-  // Body priority once an SVG exists: keep showing it. The diagram is
-  // expensive to parse and the container has a `min-height` so the
-  // surrounding page doesn't reflow if the SVG is briefly absent.
-  // Errors are surfaced in the red banner below; streaming falls back
-  // to the source `<pre>` until the parse completes.
-  const showSource = !svg && (error || isStreaming);
-  const body = showSource ? (
+  // Body: show the source `<pre>` until the SVG is ready, then keep showing
+  // the SVG. Showing the source during the initial mount, while streaming,
+  // and after a parse error means the user never sees a "Loading…" flash —
+  // the only visible transition is source → SVG, which `minHeight: 80` keeps
+  // layout-stable. Errors are surfaced in the red banner below.
+  const body = svg ? (
+    <div
+      dangerouslySetInnerHTML={{ __html: svg }}
+      style={{
+        padding: "10px 12px",
+        display: "flex",
+        justifyContent: "center",
+        background: "var(--bg)",
+        overflow: "auto",
+        maxHeight: "60vh",
+        minHeight: 80,
+      }}
+    />
+  ) : (
     <pre
       style={{
         margin: 0,
@@ -136,31 +148,6 @@ export function MermaidBlock({ code, isStreaming }: Props) {
     >
       {code}
     </pre>
-  ) : svg ? (
-    <div
-      dangerouslySetInnerHTML={{ __html: svg }}
-      style={{
-        padding: "10px 12px",
-        display: "flex",
-        justifyContent: "center",
-        background: "var(--bg)",
-        overflow: "auto",
-        maxHeight: "60vh",
-        minHeight: 80,
-      }}
-    />
-  ) : (
-    <div
-      style={{
-        padding: "10px 12px",
-        color: "var(--text-dim)",
-        fontSize: 12,
-        background: "var(--bg)",
-        minHeight: 80,
-      }}
-    >
-      {t("Loading…")}
-    </div>
   );
 
   return (
@@ -174,7 +161,7 @@ export function MermaidBlock({ code, isStreaming }: Props) {
       }}
     >
       <Header
-        canExpand={!showSource}
+        canExpand={!!svg}
         onExpand={() => setExpanded(true)}
         onDownload={onDownload}
         onCopy={onCopy}
