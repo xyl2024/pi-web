@@ -47,6 +47,11 @@ export function MermaidBlock({ code, isStreaming }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [asciiCopied, setAsciiCopied] = useState(false);
+  // "rendered" shows the SVG (or the source pre as fallback while loading /
+  // on parse error). "source" forces the source pre regardless — useful for
+  // copy-paste, comparing syntax against the rendered result, or working
+  // around a renderer bug.
+  const [viewMode, setViewMode] = useState<"rendered" | "source">("rendered");
 
   // One-time load of the lib + elkjs. The loaded module identity is stable
   // for the lifetime of the page, so the memo below can depend on it.
@@ -162,7 +167,13 @@ export function MermaidBlock({ code, isStreaming }: Props) {
   // SVG's intrinsic width. Without the inner wrapper, `display: flex` on the
   // outer would let the SVG shrink (`flex-shrink: 1`) instead of triggering
   // a horizontal scrollbar when the diagram is wider than the viewport.
-  const body = svg ? (
+  // Source mode (or no SVG yet) falls back to the raw `<pre>` so the user
+  // can always see the underlying syntax.
+  //
+  // `showRendered` is reused inside the JSX below — TypeScript narrows it
+  // to `string` in the truthy branch, so we don't need a separate cast.
+  const showRendered = viewMode === "rendered" && svg;
+  const body = showRendered ? (
     <div
       style={{
         padding: "10px 12px",
@@ -173,7 +184,7 @@ export function MermaidBlock({ code, isStreaming }: Props) {
       }}
     >
       <div
-        dangerouslySetInnerHTML={{ __html: svg }}
+        dangerouslySetInnerHTML={{ __html: showRendered }}
         style={{
           display: "flex",
           justifyContent: "center",
@@ -212,7 +223,7 @@ export function MermaidBlock({ code, isStreaming }: Props) {
       }}
     >
       <Header
-        canExpand={!!svg}
+        canExpand={!!svg || viewMode === "source"}
         onExpand={() => setExpanded(true)}
         onDownload={onDownload}
         onCopy={onCopy}
@@ -220,6 +231,8 @@ export function MermaidBlock({ code, isStreaming }: Props) {
         onCopyAscii={onCopyAscii}
         asciiCopied={asciiCopied}
         canCopyAscii={!!lib}
+        viewMode={viewMode}
+        onToggleView={() => setViewMode((m) => (m === "rendered" ? "source" : "rendered"))}
       />
       {body}
       {error && !isStreaming && (
@@ -235,31 +248,52 @@ export function MermaidBlock({ code, isStreaming }: Props) {
           {t("Failed to render Mermaid diagram")} — {error}
         </div>
       )}
-      {expanded && svg && (
+      {expanded && (
         <FullscreenOverlay onClose={() => setExpanded(false)}>
-          <div
-            style={{
-              width: "100%",
-              height: "100%",
-              overflow: "auto",
-              padding: 24,
-              boxSizing: "border-box",
-              background: "var(--bg)",
-            }}
-          >
+          {showRendered ? (
             <div
-              dangerouslySetInnerHTML={{ __html: svg }}
               style={{
-                minWidth: "min-content",
-                minHeight: "min-content",
                 width: "100%",
                 height: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
+                overflow: "auto",
+                padding: 24,
+                boxSizing: "border-box",
+                background: "var(--bg)",
               }}
-            />
-          </div>
+            >
+              <div
+                dangerouslySetInnerHTML={{ __html: showRendered }}
+                style={{
+                  minWidth: "min-content",
+                  minHeight: "min-content",
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              />
+            </div>
+          ) : (
+            <pre
+              style={{
+                margin: 0,
+                padding: 24,
+                fontSize: 13,
+                lineHeight: 1.6,
+                color: "var(--text)",
+                fontFamily: "var(--font-mono)",
+                whiteSpace: "pre",
+                background: "var(--bg)",
+                width: "100%",
+                height: "100%",
+                overflow: "auto",
+                boxSizing: "border-box",
+              }}
+            >
+              {code}
+            </pre>
+          )}
         </FullscreenOverlay>
       )}
     </div>
@@ -275,6 +309,8 @@ function Header({
   onCopyAscii,
   asciiCopied,
   canCopyAscii,
+  viewMode,
+  onToggleView,
 }: {
   canExpand: boolean;
   onExpand: () => void;
@@ -284,6 +320,8 @@ function Header({
   onCopyAscii: () => void;
   asciiCopied: boolean;
   canCopyAscii: boolean;
+  viewMode: "rendered" | "source";
+  onToggleView: () => void;
 }) {
   const { t } = useI18n();
   return (
@@ -309,6 +347,13 @@ function Header({
           title={t("Click to expand")}
         >
           ⛶
+        </HeaderButton>
+        <HeaderButton
+          onClick={onToggleView}
+          ariaLabel={viewMode === "source" ? t("View diagram") : t("View source")}
+          title={viewMode === "source" ? t("View diagram") : t("View source")}
+        >
+          {"</>"}
         </HeaderButton>
         <HeaderButton
           onClick={onDownload}

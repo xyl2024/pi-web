@@ -498,6 +498,8 @@ const ZH_TRANSLATIONS = {
   "Download SVG": "下载 SVG",
   ASCII: "ASCII",
   "Copy as ASCII": "复制为 ASCII",
+  "View source": "查看源码",
+  "View diagram": "查看图表",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
