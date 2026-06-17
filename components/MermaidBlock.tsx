@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type * as BeautifulMermaid from "beautiful-mermaid";
 import { useI18n } from "@/hooks/useI18n";
+import { useTheme } from "@/hooks/useTheme";
 
 // Dynamic import keeps elkjs (~MB) out of the initial bundle — only fetched
 // the first time a mermaid block actually renders. The module promise is
@@ -39,6 +40,7 @@ interface Props {
  */
 export function MermaidBlock({ code, isStreaming }: Props) {
   const { t } = useI18n();
+  const { preset } = useTheme();
   const [lib, setLib] = useState<typeof BeautifulMermaid | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -55,23 +57,38 @@ export function MermaidBlock({ code, isStreaming }: Props) {
     };
   }, []);
 
-  // Pass pi-web's CSS variables straight through. The SVG is self-contained
-  // with `--bg`, `--fg`, etc. set on its root, so theme switches re-skin the
-  // diagram via the CSS cascade — no re-render needed.
-  const options = useMemo<BeautifulMermaid.RenderOptions>(
-    () => ({
-      bg: "var(--bg)",
-      fg: "var(--text)",
-      accent: "var(--accent)",
-      border: "var(--border)",
-      surface: "var(--bg-panel)",
-      muted: "var(--text-muted)",
-      line: "var(--border)",
+  // Read the current theme's CSS variables off :root and pass the resolved
+  // color values to the renderer. We do NOT pass `var(--bg)` style references
+  // here: the renderer inlines them on the SVG root as `style="--bg:var(--bg)"`
+  // and not every browser resolves that self-reference correctly — the result
+  // is the literal string "var(--bg)" being used as a color, which falls back
+  // to black on the affected elements (e.g. edge-label rects).
+  // Depending on `preset` re-reads the variables on theme change, so the
+  // diagram re-skins immediately. It's not strictly live like a pure-CSS
+  // solution would be, but renderMermaidSVG is synchronous and fast.
+  const options = useMemo<BeautifulMermaid.RenderOptions>(() => {
+    const fallback = (name: string, def: string) => {
+      if (typeof document === "undefined") return def;
+      const v = getComputedStyle(document.documentElement)
+        .getPropertyValue(name)
+        .trim();
+      return v || def;
+    };
+    // `preset` is read for its side effect of re-running this memo on theme
+    // change so the variables are re-resolved against the new theme.
+    void preset;
+    return {
+      bg: fallback("--bg", "#ffffff"),
+      fg: fallback("--text", "#1a1a1a"),
+      accent: fallback("--accent", "#2563eb"),
+      border: fallback("--border", "#e0e0e0"),
+      surface: fallback("--bg-panel", "#f5f5f5"),
+      muted: fallback("--text-muted", "#6b7280"),
+      line: fallback("--border", "#e0e0e0"),
       transparent: true,
       font: "Inter",
-    }),
-    [],
-  );
+    };
+  }, [preset]);
 
   const { svg, error } = useMemo<{ svg: string | null; error: string | null }>(() => {
     if (isStreaming || !lib) return { svg: null, error: null };
