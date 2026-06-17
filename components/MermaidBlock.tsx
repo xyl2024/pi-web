@@ -25,9 +25,11 @@ const FONT_IMPORT_RE = /@import url\([^)]+\);?\s*/g;
 interface Props {
   code: string;
   /**
-   * When true (parent is mid-stream), skip Mermaid parsing and just render
-   * the raw source. Prevents per-token jank and intermediate parse errors
-   * on partial syntax.
+   * When true (parent is mid-stream), suppresses the error banner so partial
+   * syntax during streaming doesn't flash "Failed to render" on every token.
+   * The render attempt still runs on every code change, so a complete
+   * ```mermaid ... ``` block switches to SVG as soon as the last line is
+   * written — even if the rest of the message is still streaming.
    */
   isStreaming?: boolean;
 }
@@ -91,7 +93,7 @@ export function MermaidBlock({ code, isStreaming }: Props) {
   }, [preset]);
 
   const { svg, error } = useMemo<{ svg: string | null; error: string | null }>(() => {
-    if (isStreaming || !lib) return { svg: null, error: null };
+    if (!lib) return { svg: null, error: null };
     try {
       const raw = lib.renderMermaidSVG(code, options);
       const cleaned = raw.replace(FONT_IMPORT_RE, "");
@@ -99,7 +101,7 @@ export function MermaidBlock({ code, isStreaming }: Props) {
     } catch (e) {
       return { svg: null, error: e instanceof Error ? e.message : String(e) };
     }
-  }, [code, isStreaming, lib, options]);
+  }, [code, lib, options]);
 
   const onCopy = useCallback(() => {
     void copyToClipboard(code).then(() => {
@@ -182,7 +184,7 @@ export function MermaidBlock({ code, isStreaming }: Props) {
         copied={copied}
       />
       {body}
-      {error && (
+      {error && !isStreaming && (
         <div
           style={{
             color: "#f87171",
