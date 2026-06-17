@@ -46,6 +46,7 @@ export function MermaidBlock({ code, isStreaming }: Props) {
   const [lib, setLib] = useState<typeof BeautifulMermaid | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [asciiCopied, setAsciiCopied] = useState(false);
 
   // One-time load of the lib + elkjs. The loaded module identity is stable
   // for the lifetime of the page, so the memo below can depend on it.
@@ -109,6 +110,27 @@ export function MermaidBlock({ code, isStreaming }: Props) {
       setTimeout(() => setCopied(false), 1500);
     });
   }, [code]);
+
+  // Render the diagram as ASCII/Unicode text and write it to the clipboard.
+  // We pick pure ASCII (useAscii: true) + no color codes so the result pastes
+  // cleanly into anything — markdown, code comments, terminal, IM. The SVG
+  // already proved the source is parseable, so this rarely throws; on the
+  // off chance it does, fail silently rather than interrupting the user.
+  const onCopyAscii = useCallback(() => {
+    if (!lib) return;
+    try {
+      const ascii = lib.renderMermaidASCII(code, {
+        useAscii: true,
+        colorMode: "none",
+      });
+      void copyToClipboard(ascii).then(() => {
+        setAsciiCopied(true);
+        setTimeout(() => setAsciiCopied(false), 1500);
+      });
+    } catch {
+      // ignore — see comment above
+    }
+  }, [code, lib]);
 
   const onDownload = useCallback(() => {
     if (!svg) return;
@@ -195,6 +217,9 @@ export function MermaidBlock({ code, isStreaming }: Props) {
         onDownload={onDownload}
         onCopy={onCopy}
         copied={copied}
+        onCopyAscii={onCopyAscii}
+        asciiCopied={asciiCopied}
+        canCopyAscii={!!lib}
       />
       {body}
       {error && !isStreaming && (
@@ -247,12 +272,18 @@ function Header({
   onDownload,
   onCopy,
   copied,
+  onCopyAscii,
+  asciiCopied,
+  canCopyAscii,
 }: {
   canExpand: boolean;
   onExpand: () => void;
   onDownload: () => void;
   onCopy: () => void;
   copied: boolean;
+  onCopyAscii: () => void;
+  asciiCopied: boolean;
+  canCopyAscii: boolean;
 }) {
   const { t } = useI18n();
   return (
@@ -286,6 +317,14 @@ function Header({
           title={t("Download SVG")}
         >
           ↓
+        </HeaderButton>
+        <HeaderButton
+          onClick={onCopyAscii}
+          disabled={!canCopyAscii}
+          ariaLabel={t("Copy as ASCII")}
+          title={t("Copy as ASCII")}
+        >
+          {asciiCopied ? t("copied") : t("ASCII")}
         </HeaderButton>
         <HeaderButton
           onClick={onCopy}
