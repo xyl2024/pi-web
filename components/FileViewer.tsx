@@ -1320,6 +1320,37 @@ function TextFileViewer({ filePath, cwd }: Props) {
     [data?.content, data?.language, resolveSrc],
   );
 
+  // Markdown renderers for ReactMarkdown. Hoisted to the top level so the
+  // useMemo runs on every render in a stable position — calling it inside the
+  // JSX prop would skip it on renders where the markdown branch isn't reached,
+  // which violates the Rules of Hooks and triggers React's hook-order warning.
+  const markdownComponents = useMemo(
+    () => ({
+      img: (props: { src?: string | Blob; alt?: string }) => (
+        <MarkdownImage
+          {...props}
+          resolveSrc={resolveSrc}
+          onImageClick={(src) => {
+            const idx = gallery.findIndex((g) => g.src === src);
+            if (idx >= 0) setLightboxIndex(idx);
+          }}
+        />
+      ),
+      code: ({ className, children, ...props }: { className?: string; children?: React.ReactNode } & React.HTMLAttributes<HTMLElement>) => {
+        const lang = className?.replace("language-", "") ?? "";
+        const raw = String(children ?? "");
+        const isBlock = className?.includes("language-") || raw.includes("\n");
+        if (isBlock && lang === "mermaid") {
+          // Stable key keeps the MermaidBlock instance alive across re-renders.
+          return <MermaidBlock key={raw} code={raw.replace(/\n$/, "")} />;
+        }
+        return <code className={className} {...props}>{children}</code>;
+      },
+      pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    }),
+    [resolveSrc, gallery],
+  );
+
   const fetchContent = useCallback((filePath: string, isRefresh = false) => {
     const encoded = encodeFilePathForApi(filePath);
     return fetch(`/api/files/${encoded}?type=read`)
@@ -1715,32 +1746,7 @@ function TextFileViewer({ filePath, cwd }: Props) {
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              components={useMemo(
-                () => ({
-                  img: (props: { src?: string | Blob; alt?: string }) => (
-                    <MarkdownImage
-                      {...props}
-                      resolveSrc={resolveSrc}
-                      onImageClick={(src) => {
-                        const idx = gallery.findIndex((g) => g.src === src);
-                        if (idx >= 0) setLightboxIndex(idx);
-                      }}
-                    />
-                  ),
-                  code: ({ className, children, ...props }: { className?: string; children?: React.ReactNode } & React.HTMLAttributes<HTMLElement>) => {
-                    const lang = className?.replace("language-", "") ?? "";
-                    const raw = String(children ?? "");
-                    const isBlock = className?.includes("language-") || raw.includes("\n");
-                    if (isBlock && lang === "mermaid") {
-                      // Stable key keeps the MermaidBlock instance alive across re-renders.
-                      return <MermaidBlock key={raw} code={raw.replace(/\n$/, "")} />;
-                    }
-                    return <code className={className} {...props}>{children}</code>;
-                  },
-                  pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-                }),
-                [resolveSrc, gallery],
-              )}
+              components={markdownComponents}
             >
               {data.content}
             </ReactMarkdown>
