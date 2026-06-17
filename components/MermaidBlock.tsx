@@ -1,33 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useTheme } from "@/hooks/useTheme";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type * as BeautifulMermaid from "beautiful-mermaid";
 import { useI18n } from "@/hooks/useI18n";
 
-// Module-level init guard: re-init only when the theme name changes.
-// Mermaid has no live theme switch, so the next render call after a theme
-// flip will simply pull the new config into effect.
-let mermaidInitedFor: string | null = null;
-async function ensureMermaid(theme: "default" | "dark"): Promise<typeof import("mermaid").default> {
-  if (mermaidInitedFor !== theme) {
-    const { default: mermaid } = await import("mermaid");
-    mermaid.initialize({
-      startOnLoad: false,
-      theme,
-      securityLevel: "strict",
-      fontFamily: "var(--font-mono)",
-    });
-    mermaidInitedFor = theme;
-  }
-  return (await import("mermaid")).default;
+// Dynamic import keeps elkjs (~MB) out of the initial bundle — only fetched
+// the first time a mermaid block actually renders. The module promise is
+// memoized so subsequent blocks reuse the same load.
+let libPromise: Promise<typeof BeautifulMermaid> | null = null;
+function loadLib(): Promise<typeof BeautifulMermaid> {
+  if (!libPromise) libPromise = import("beautiful-mermaid");
+  return libPromise;
 }
+
+// Strip the Google Fonts @import that beautiful-mermaid embeds for the chosen
+// `font` option. pi-web's own font stack handles typography elsewhere; the
+// @import would otherwise trigger a network round-trip on first render and
+// makes the rendered SVG non-self-contained when network is restricted.
+// The font-family CSS rule is left intact, so the browser falls back through
+// the system stack we already load.
+const FONT_IMPORT_RE = /@import url\([^)]+\);?\s*/g;
 
 interface Props {
   code: string;
   /**
    * When true (parent is mid-stream), skip Mermaid parsing and just render
-   * the raw source. Prevents per-token jank and dozens of intermediate
-   * parse-error states on partial syntax.
+   * the raw source. Prevents per-token jank and intermediate parse errors
+   * on partial syntax.
    */
   isStreaming?: boolean;
 }
@@ -39,53 +38,51 @@ interface Props {
  * fallback with an actual diagram.
  */
 export function MermaidBlock({ code, isStreaming }: Props) {
-  const { isDark } = useTheme();
   const { t } = useI18n();
-  const [svg, setSvg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [lib, setLib] = useState<typeof BeautifulMermaid | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Track the last code string that successfully produced an SVG. This
-  // makes the parse truly idempotent: if the effect re-runs for any
-  // reason (e.g. parent re-renders that pass the same code reference,
-  // or a dep that's technically stable but causes the effect to fire
-  // once more) we skip the parse and avoid clearing the displayed SVG.
-  const parsedCodeRef = useRef<string | null>(null);
-
-  // useEffect: render once per code change, but skip while streaming.
-  // Cleanup sets `cancelled` so a late `mermaid.render` response can't
-  // stomp on a newer render.
+  // One-time load of the lib + elkjs. The loaded module identity is stable
+  // for the lifetime of the page, so the memo below can depend on it.
   useEffect(() => {
-    if (isStreaming) {
-      setSvg(null);
-      setError(null);
-      parsedCodeRef.current = null;
-      return;
-    }
-    if (parsedCodeRef.current === code) {
-      return;
-    }
     let cancelled = false;
-    setError(null);
-    setSvg(null);
-    const theme: "default" | "dark" = isDark ? "dark" : "default";
-    ensureMermaid(theme)
-      .then(async (mermaid) => {
-        const id = `mermaid-${Math.random().toString(36).slice(2, 10)}`;
-        const { svg: rendered } = await mermaid.render(id, code);
-        if (cancelled) return;
-        parsedCodeRef.current = code;
-        setSvg(rendered);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
-      });
+    loadLib().then((m) => {
+      if (!cancelled) setLib(m);
+    });
     return () => {
       cancelled = true;
     };
-  }, [code, isDark, isStreaming]);
+  }, []);
+
+  // Pass pi-web's CSS variables straight through. The SVG is self-contained
+  // with `--bg`, `--fg`, etc. set on its root, so theme switches re-skin the
+  // diagram via the CSS cascade — no re-render needed.
+  const options = useMemo<BeautifulMermaid.RenderOptions>(
+    () => ({
+      bg: "var(--bg)",
+      fg: "var(--text)",
+      accent: "var(--accent)",
+      border: "var(--border)",
+      surface: "var(--bg-panel)",
+      muted: "var(--text-muted)",
+      line: "var(--border)",
+      transparent: true,
+      font: "Inter",
+    }),
+    [],
+  );
+
+  const { svg, error } = useMemo<{ svg: string | null; error: string | null }>(() => {
+    if (isStreaming || !lib) return { svg: null, error: null };
+    try {
+      const raw = lib.renderMermaidSVG(code, options);
+      const cleaned = raw.replace(FONT_IMPORT_RE, "");
+      return { svg: cleaned, error: null };
+    } catch (e) {
+      return { svg: null, error: e instanceof Error ? e.message : String(e) };
+    }
+  }, [code, isStreaming, lib, options]);
 
   const onCopy = useCallback(() => {
     void copyToClipboard(code).then(() => {
@@ -96,7 +93,7 @@ export function MermaidBlock({ code, isStreaming }: Props) {
 
   const onDownload = useCallback(() => {
     if (!svg) return;
-    // Mermaid's render() emits an `<svg>` element without the XML prolog;
+    // The renderer emits an `<svg>` element without the XML prolog;
     // a prolog makes the file open cleanly in standalone viewers.
     const blob = new Blob(
       ['<?xml version="1.0" encoding="UTF-8"?>\n', svg],
