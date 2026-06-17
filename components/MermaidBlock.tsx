@@ -133,19 +133,32 @@ export function MermaidBlock({ code, isStreaming }: Props) {
   // and after a parse error means the user never sees a "Loading…" flash —
   // the only visible transition is source → SVG, which `minHeight: 80` keeps
   // layout-stable. Errors are surfaced in the red banner below.
+  //
+  // The body is a two-layer layout: the outer div is the scroll viewport
+  // (owns `overflow: auto` so both axes can scroll); the inner div is a flex
+  // wrapper with `min-width: min-content` so it never collapses below the
+  // SVG's intrinsic width. Without the inner wrapper, `display: flex` on the
+  // outer would let the SVG shrink (`flex-shrink: 1`) instead of triggering
+  // a horizontal scrollbar when the diagram is wider than the viewport.
   const body = svg ? (
     <div
-      dangerouslySetInnerHTML={{ __html: svg }}
       style={{
         padding: "10px 12px",
-        display: "flex",
-        justifyContent: "center",
         background: "var(--bg)",
         overflow: "auto",
         maxHeight: "60vh",
         minHeight: 80,
       }}
-    />
+    >
+      <div
+        dangerouslySetInnerHTML={{ __html: svg }}
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          minWidth: "min-content",
+        }}
+      />
+    </div>
   ) : (
     <pre
       style={{
@@ -200,19 +213,28 @@ export function MermaidBlock({ code, isStreaming }: Props) {
       {expanded && svg && (
         <FullscreenOverlay onClose={() => setExpanded(false)}>
           <div
-            dangerouslySetInnerHTML={{ __html: svg }}
             style={{
               width: "100%",
               height: "100%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              overflow: "auto",
               padding: 24,
               boxSizing: "border-box",
-              overflow: "auto",
               background: "var(--bg)",
             }}
-          />
+          >
+            <div
+              dangerouslySetInnerHTML={{ __html: svg }}
+              style={{
+                minWidth: "min-content",
+                minHeight: "min-content",
+                width: "100%",
+                height: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            />
+          </div>
         </FullscreenOverlay>
       )}
     </div>
