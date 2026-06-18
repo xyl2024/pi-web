@@ -308,6 +308,73 @@ export function deleteTodo(_filePath: string, id: string): void {
   if (result.changes === 0) throw new TodoNotFoundError(id);
 }
 
+/**
+ * Rename a tag globally. Every `todo_tags` row where `lower(tag) = lower(from)`
+ * is rewritten to `to` inside a single transaction. Case-only renames are
+ * honored so the user's spelling is preserved.
+ *
+ * Throws `TodoValidationError` if either side is invalid or if a target-tag
+ * collision would violate `idx_todo_tags_unique` (i.e., a todo that currently
+ * has the `from` tag also already has the `to` tag under a different spelling).
+ * A no-op rename (no rows match) is legal and returns `affected: 0`.
+ */
+export function renameTag(_filePath: string, from: string, to: string): { tag: string; affected: number } {
+  if (typeof from !== "string" || from.trim().length === 0) {
+    throw new TodoValidationError("from must be a non-empty string", "from");
+  }
+  if (typeof to !== "string") {
+    throw new TodoValidationError("to must be a string", "to");
+  }
+  const fromKey = from.trim();
+  // Reuse normalizeTags so the destination gets the same trim/empty/length
+  // treatment as a tag entered through the per-todo editor.
+  const normalised = normalizeTags([to]);
+  if (normalised.length === 0) {
+    throw new TodoValidationError("tag cannot be empty", "to");
+  }
+  const toValue = normalised[0];
+
+  const db = getDb();
+  const apply = db.transaction(() => {
+    // Collision check: for any todo that currently has `from`, is the target
+    // tag already on it under a different spelling? The
+    // `UNIQUE INDEX idx_todo_tags_unique ON (todo_id, lower(tag))` would
+    // otherwise block the UPDATE.
+    const conflict = db
+      .prepare(
+        `SELECT COUNT(*) AS c
+           FROM todo_tags
+          WHERE todo_id IN (SELECT todo_id FROM todo_tags WHERE lower(tag) = lower(?))
+            AND lower(tag) = lower(?)`,
+      )
+      .get(fromKey, toValue) as { c: number };
+    if (conflict.c > 0) {
+      throw new TodoValidationError("a todo already has the target tag", "to");
+    }
+    const result = db
+      .prepare(`UPDATE todo_tags SET tag = ? WHERE lower(tag) = lower(?)`)
+      .run(toValue, fromKey);
+    return { tag: toValue, affected: result.changes };
+  });
+  return apply();
+}
+
+/**
+ * Remove a tag from every todo that carries it. Case-insensitive match. A
+ * no-op (no rows match) is legal and returns `affected: 0`.
+ */
+export function deleteTag(_filePath: string, tag: string): { tag: string; affected: number } {
+  if (typeof tag !== "string" || tag.trim().length === 0) {
+    throw new TodoValidationError("tag must be a non-empty string", "tag");
+  }
+  const tagKey = tag.trim();
+  const db = getDb();
+  const result = db
+    .prepare(`DELETE FROM todo_tags WHERE lower(tag) = lower(?)`)
+    .run(tagKey);
+  return { tag: tagKey, affected: result.changes };
+}
+
 /** Look up a single todo by id. Used by the export route. */
 export function getTodoById(id: string): Todo | undefined {
   if (typeof id !== "string" || id.length === 0) return undefined;

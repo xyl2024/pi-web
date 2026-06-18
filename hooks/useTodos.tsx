@@ -27,6 +27,8 @@ interface TodoContextValue {
   deleteTodo: (id: string) => Promise<void>;
   toggleDone: (id: string) => Promise<void>;
   exportTodo: (id: string) => Promise<void>;
+  renameTag: (from: string, to: string) => Promise<{ tag: string; affected: number } | null>;
+  deleteTag: (tag: string) => Promise<{ tag: string; affected: number } | null>;
 }
 
 const TodoContext = createContext<TodoContextValue | null>(null);
@@ -207,9 +209,53 @@ export function TodoProvider({ children }: { children: ReactNode }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, []);
 
+  // Tag-level operations. Both go through the server and then refresh the
+  // local list — no optimistic snapshots, the DB is the source of truth and
+  // the affected todos' tag arrays are easier to re-derive than to splice
+  // by hand.
+  const renameTag = useCallback(async (from: string, to: string) => {
+    try {
+      const res = await fetch("/api/tags", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to }),
+      });
+      if (!res.ok) {
+        const { error } = (await res.json().catch(() => ({ error: "" }))) as { error?: string };
+        throw new Error(error || `status ${res.status}`);
+      }
+      const data = (await res.json()) as { tag: string; affected: number };
+      await refresh();
+      return data;
+    } catch (e) {
+      toast.show({ kind: "error", message: t("Failed to rename tag") + ": " + String(e) });
+      return null;
+    }
+  }, [toast, t, refresh]);
+
+  const deleteTag = useCallback(async (tag: string) => {
+    try {
+      const res = await fetch("/api/tags", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag }),
+      });
+      if (!res.ok) {
+        const { error } = (await res.json().catch(() => ({ error: "" }))) as { error?: string };
+        throw new Error(error || `status ${res.status}`);
+      }
+      const data = (await res.json()) as { tag: string; affected: number };
+      await refresh();
+      return data;
+    } catch (e) {
+      toast.show({ kind: "error", message: t("Failed to delete tag") + ": " + String(e) });
+      return null;
+    }
+  }, [toast, t, refresh]);
+
   const value = useMemo<TodoContextValue>(() => ({
-    todos, loading, error, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo,
-  }), [todos, loading, error, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo]);
+    todos, loading, error, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo, renameTag, deleteTag,
+  }), [todos, loading, error, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo, renameTag, deleteTag]);
 
   return <TodoContext.Provider value={value}>{children}</TodoContext.Provider>;
 }
