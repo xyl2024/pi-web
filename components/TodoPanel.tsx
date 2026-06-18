@@ -211,7 +211,6 @@ export function TodoPanel() {
   const confirm = useConfirm();
   const [viewFilters, setViewFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [draftMode, setDraftMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
   // Hydrate persisted filter preference after mount (SSR-safe: defaults above
@@ -311,23 +310,16 @@ export function TodoPanel() {
       });
   }, [todos, viewFilters, searchTerm, startOfToday, startOfTomorrow, endOfThisWeek, startOfThisMonth, endOfThisMonth]);
 
-  const handleAddClick = () => {
-    if (draftMode) return;
-    // Transient view reset so the new todo is visible — the saved preference
-    // is preserved and will be restored on next mount.
-    setViewFilters(DEFAULT_FILTERS);
-    setDraftMode(true);
-  };
-
-  const handleDraftSubmit = async (value: { title: string; deadline?: number; tags?: string[] }) => {
-    const trimmed = value.title.trim();
-    if (trimmed.length === 0) {
-      setDraftMode(false);
-      return;
+  const handleCreate = async (title: string): Promise<boolean> => {
+    const trimmed = title.trim();
+    if (trimmed.length === 0) return false;
+    const todo = await addTodo(trimmed);
+    if (todo) {
+      // Make the new todo visible — matches the legacy DraftRow flow.
+      setViewFilters((f) => ({ ...f, status: "active" }));
+      return true;
     }
-    const todo = await addTodo(trimmed, { deadline: value.deadline, tags: value.tags });
-    setDraftMode(false);
-    if (todo) setViewFilters((f) => ({ ...f, status: "active" }));
+    return false;
   };
 
   const handleDelete = async (todo: Todo) => {
@@ -348,7 +340,7 @@ export function TodoPanel() {
         filterOpen={filterOpen}
         onFilterOpenChange={setFilterOpen}
         filterActive={filterActive}
-        onAdd={handleAddClick}
+        onCreate={handleCreate}
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
         tagSuggestions={tagSuggestions}
@@ -361,13 +353,10 @@ export function TodoPanel() {
             {t("Loading...")}
           </div>
         )}
-        {!loading && visible.length === 0 && !draftMode && (
+        {!loading && visible.length === 0 && (
           <div style={{ padding: "16px 12px", fontSize: 12, color: "var(--text-dim)", textAlign: "center" }}>
             {searchTerm.trim() ? t("No matches") : t("No todos")}
           </div>
-        )}
-        {draftMode && (
-          <DraftRow onSubmit={handleDraftSubmit} onCancel={() => setDraftMode(false)} tagSuggestions={tagSuggestions} />
         )}
         {visible.map((todo) => (
           <TodoItem
@@ -392,7 +381,7 @@ function FilterBar({
   filterOpen,
   onFilterOpenChange,
   filterActive,
-  onAdd,
+  onCreate,
   searchTerm,
   onSearchChange,
   tagSuggestions,
@@ -404,7 +393,7 @@ function FilterBar({
   filterOpen: boolean;
   onFilterOpenChange: (open: boolean) => void;
   filterActive: boolean;
-  onAdd: () => void;
+  onCreate: (title: string) => Promise<boolean>;
   searchTerm: string;
   onSearchChange: (v: string) => void;
   tagSuggestions: string[];
@@ -412,72 +401,12 @@ function FilterBar({
   refreshing: boolean;
 }) {
   const { t } = useI18n();
-  const searchRef = useRef<HTMLInputElement | null>(null);
   const [agentToolsOpen, setAgentToolsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchActive = searchTerm.trim().length > 0;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 8px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
-      <div
-        style={{
-          flex: 1,
-          minWidth: 0,
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-          padding: "0 6px",
-          background: "var(--bg)",
-          border: "1px solid var(--border)",
-          borderRadius: 4,
-        }}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--text-dim)" strokeWidth="1.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
-          <circle cx="4.5" cy="4.5" r="2.5" />
-          <line x1="6.5" y1="6.5" x2="9" y2="9" />
-        </svg>
-        <input
-          ref={searchRef}
-          value={searchTerm}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder={t("Search todos…")}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            padding: "3px 0",
-            fontSize: 11,
-            background: "transparent",
-            border: "none",
-            outline: "none",
-            color: "var(--text)",
-            fontFamily: "inherit",
-          }}
-        />
-        {searchTerm.length > 0 && (
-          <button
-            onClick={() => {
-              onSearchChange("");
-              searchRef.current?.focus();
-            }}
-            aria-label={t("Clear search")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 14,
-              height: 14,
-              padding: 0,
-              flexShrink: 0,
-              background: "transparent",
-              border: "none",
-              color: "var(--text-dim)",
-              cursor: "pointer",
-            }}
-          >
-            <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-              <line x1="1" y1="1" x2="7" y2="7" />
-              <line x1="7" y1="1" x2="1" y2="7" />
-            </svg>
-          </button>
-        )}
-      </div>
+      <CreateTodoInput onCreate={onCreate} />
       <button
         onClick={onRefresh}
         disabled={refreshing}
@@ -574,27 +503,217 @@ function FilterBar({
           />
         )}
       </div>
-      <button
-        onClick={onAdd}
-        aria-label={t("Add")}
-        title={t("Add")}
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <button
+          onClick={() => setSearchOpen(!searchOpen)}
+          aria-haspopup="dialog"
+          aria-expanded={searchOpen}
+          aria-label={t("Search")}
+          title={t("Search")}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 22, height: 22, padding: 0,
+            flexShrink: 0,
+            background: searchActive || searchOpen ? "var(--bg-selected)" : "transparent",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            cursor: "pointer",
+            color: searchActive || searchOpen ? "var(--text)" : "var(--text-muted)",
+            transition: "background 0.1s, color 0.1s",
+            fontFamily: "inherit",
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <circle cx="4.5" cy="4.5" r="2.5" />
+            <line x1="6.5" y1="6.5" x2="9" y2="9" />
+          </svg>
+        </button>
+        {searchOpen && (
+          <SearchPopover
+            value={searchTerm}
+            onChange={onSearchChange}
+            onClose={() => setSearchOpen(false)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CreateTodoInput({ onCreate }: { onCreate: (title: string) => Promise<boolean> }) {
+  const { t } = useI18n();
+  const [value, setValue] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || submitting) return;
+    setSubmitting(true);
+    try {
+      const ok = await onCreate(trimmed);
+      // Only clear on success — failed creates leave the value for retry.
+      if (ok) setValue("");
+    } finally {
+      setSubmitting(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  return (
+    <div
+      style={{
+        flex: 1,
+        minWidth: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "0 6px",
+        background: "var(--bg)",
+        border: "1px solid var(--border)",
+        borderRadius: 4,
+      }}
+    >
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={t("New")}
+        aria-label={t("New")}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          } else if (e.key === "Escape") {
+            if (value.length > 0) {
+              e.preventDefault();
+              setValue("");
+            }
+          }
+        }}
         style={{
-          display: "flex", alignItems: "center", justifyContent: "center",
-          width: 22, height: 22, padding: 0,
-          flexShrink: 0,
-          background: "var(--accent)",
+          flex: 1,
+          minWidth: 0,
+          padding: "3px 0",
+          fontSize: 11,
+          background: "transparent",
           border: "none",
-          borderRadius: 4,
-          color: "var(--bg)",
-          cursor: "pointer",
+          outline: "none",
+          color: "var(--text)",
           fontFamily: "inherit",
         }}
-      >
-        <svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <line x1="5" y1="1" x2="5" y2="9" />
-          <line x1="1" y1="5" x2="9" y2="5" />
-        </svg>
-      </button>
+      />
+    </div>
+  );
+}
+
+function SearchPopover({
+  value,
+  onChange,
+  onClose,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const ref = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  useEffect(() => {
+    const onMouseDown = (e: MouseEvent) => {
+      if (!ref.current) return;
+      if (e.target instanceof Node && ref.current.contains(e.target)) return;
+      onClose();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={t("Search")}
+      style={{
+        position: "absolute",
+        top: "calc(100% + 4px)",
+        right: 0,
+        zIndex: 10,
+        minWidth: 220,
+        padding: 6,
+        background: "var(--bg-panel)",
+        border: "1px solid var(--border)",
+        borderRadius: 6,
+        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.25)",
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+      }}
+    >
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--text-dim)" strokeWidth="1.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
+        <circle cx="4.5" cy="4.5" r="2.5" />
+        <line x1="6.5" y1="6.5" x2="9" y2="9" />
+      </svg>
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={t("Search todos…")}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          padding: "2px 0",
+          fontSize: 11,
+          background: "transparent",
+          border: "none",
+          outline: "none",
+          color: "var(--text)",
+          fontFamily: "inherit",
+        }}
+      />
+      {value.length > 0 && (
+        <button
+          onClick={() => {
+            onChange("");
+            inputRef.current?.focus();
+          }}
+          aria-label={t("Clear search")}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 14,
+            height: 14,
+            padding: 0,
+            flexShrink: 0,
+            background: "transparent",
+            border: "none",
+            color: "var(--text-dim)",
+            cursor: "pointer",
+          }}
+        >
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <line x1="1" y1="1" x2="7" y2="7" />
+            <line x1="7" y1="1" x2="1" y2="7" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -1245,84 +1364,6 @@ function TagChips({
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function DraftRow({ onSubmit, onCancel, tagSuggestions }: { onSubmit: (value: { title: string; deadline?: number; tags?: string[] }) => void; onCancel: () => void; tagSuggestions: string[] }) {
-  const { t } = useI18n();
-  const [title, setTitle] = useState("");
-  const [deadline, setDeadline] = useState<number | undefined>(undefined);
-  const [tags, setTags] = useState<string[]>([]);
-  const titleRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    titleRef.current?.focus();
-  }, []);
-
-  const submit = () => {
-    onSubmit({ title, deadline, tags });
-  };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "8px 6px", borderBottom: "1px solid var(--border)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ width: 14, height: 14, flexShrink: 0, border: "1.5px solid var(--text-dim)", borderRadius: 3 }} />
-        <input
-          ref={titleRef}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder={t("New")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              submit();
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              onCancel();
-            }
-          }}
-          onBlur={() => {
-            if (title.trim().length === 0) onCancel();
-            else submit();
-          }}
-          style={{
-            flex: 1, minWidth: 0,
-            padding: "2px 4px",
-            fontSize: 13,
-            background: "transparent",
-            border: "none",
-            outline: "none",
-            color: "var(--text)",
-            fontFamily: "inherit",
-          }}
-        />
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 22 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--text-dim)", flexShrink: 0 }}>
-          <CalendarIcon />
-          {t("Deadline")}
-        </span>
-        <DatePicker
-          value={deadline}
-          onChange={(ts) => {
-            // DatePicker emits start-of-day; bump to end-of-day so the
-            // deadline flips at midnight local time the day after.
-            if (ts == null) setDeadline(undefined);
-            else setDeadline(new Date(new Date(ts).setHours(23, 59, 59, 999)).getTime());
-          }}
-          ariaLabel={t("Pick a date")}
-        />
-      </div>
-      <div style={{ paddingLeft: 22 }}>
-        <TagChips
-          editable
-          tags={tags}
-          onChange={setTags}
-          suggestions={tagSuggestions}
-          placeholder={t("Add tag…")}
-        />
-      </div>
     </div>
   );
 }
