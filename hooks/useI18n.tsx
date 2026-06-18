@@ -367,7 +367,7 @@ const ZH_TRANSLATIONS = {
   "Tool: todo_update": "更新待办",
   "Tool: todo_delete": "删除待办",
   "Applies to new sessions": "将在新会话中生效",
-  "# to add tags": "输入 # 添加标签",
+  "create a task, type # to add tags": "新增任务，可输入 # 添加标签",
   "Create tag": "创建标签",
   "Create tag #{tag}": "创建标签 #{tag}",
   "Tags": "标签",
