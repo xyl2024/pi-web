@@ -63,7 +63,9 @@ export function TodoProvider({ children }: { children: ReactNode }) {
     const trimmed = title.trim();
     if (trimmed.length === 0) return null;
     const description = opts?.description;
-    const deadline = opts?.deadline;
+    // Default new todos to today (end-of-day) — matches the convention the
+    // deadline picker uses so the "Due today" tone lights up immediately.
+    const deadline = opts?.deadline ?? new Date(new Date().setHours(23, 59, 59, 999)).getTime();
     const tags = opts?.tags ?? [];
     // Optimistic placeholder
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;

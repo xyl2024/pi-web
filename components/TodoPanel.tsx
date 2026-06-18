@@ -381,8 +381,10 @@ export function TodoPanel() {
     if (trimmed.length === 0) return false;
     const todo = await addTodo(trimmed, { tags: input.tags });
     if (todo) {
-      // Make the new todo visible — matches the legacy DraftRow flow.
-      setViewFilters((f) => ({ ...f, status: "active" }));
+      // Make the new todo visible — matches the legacy DraftRow flow. Also
+      // clear the deadline preset since new todos default to today and would
+      // otherwise be hidden by filters like "No deadline" or "Overdue".
+      setViewFilters((f) => ({ ...f, status: "active", deadline: "all" }));
       return true;
     }
     return false;
