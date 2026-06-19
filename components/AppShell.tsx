@@ -11,7 +11,6 @@ import { TodoPanel } from "./TodoPanel";
 import { PlaywrightDashboardPanel } from "./PlaywrightDashboardPanel";
 
 const TODO_TAB_ID = "todo:global";
-const DASHBOARD_TAB_ID = "dashboard:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -110,10 +109,10 @@ export function AppShell() {
   }, [sessionKey, selectedSession?.id, fetchTools]);
 
   // Single active panel — only one dropdown open at a time
-  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "context" | "tools" | null>(null);
+  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "context" | "tools" | "dashboard" | null>(null);
   const [topPanelPos, setTopPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  const toggleTopPanel = useCallback((panel: "branches" | "system" | "context" | "tools") => {
+  const toggleTopPanel = useCallback((panel: "branches" | "system" | "context" | "tools" | "dashboard") => {
     setActiveTopPanel((cur) => cur === panel ? null : panel);
   }, []);
 
@@ -454,10 +453,8 @@ export function AppShell() {
   }, []);
 
   // Top-right toggle: open todos on first click, close them on the next.
-  // Todo and Dashboard are mutually exclusive "view" tabs — opening one
-  // closes the other. File tabs are preserved but the active file tab is
-  // replaced in the tab strip.
-  // If closing leaves no tabs, the right panel collapses too.
+  // File tabs are preserved but the active file tab is replaced in the tab
+  // strip. If closing leaves no tabs, the right panel collapses too.
   const handleToggleTodoTab = useCallback(() => {
     if (fileTabs.some((t) => t.kind === "todo")) {
       setFileTabs((prev) => prev.filter((t) => t.kind !== "todo"));
@@ -471,35 +468,11 @@ export function AppShell() {
       setFileTabs((prev) => {
         if (prev.some((t) => t.kind === "todo")) return prev;
         return [
-          ...prev.filter((t) => t.kind !== "dashboard" && t.id !== activeFileTabId),
+          ...prev.filter((t) => t.id !== activeFileTabId),
           { kind: "todo", id: TODO_TAB_ID, label: t("Todos") },
         ];
       });
       setActiveFileTabId(TODO_TAB_ID);
-      setRightPanelState("normal");
-    }
-  }, [fileTabs, activeFileTabId, t]);
-
-  // Top-right toggle: open the Playwright dashboard on first click, close on the next.
-  // Mutually exclusive with the Todo tab.
-  const handleToggleDashboardTab = useCallback(() => {
-    if (fileTabs.some((t) => t.kind === "dashboard")) {
-      setFileTabs((prev) => prev.filter((t) => t.kind !== "dashboard"));
-      setActiveFileTabId((cur) => {
-        if (cur !== DASHBOARD_TAB_ID) return cur;
-        const remaining = fileTabs.filter((t) => t.kind !== "dashboard");
-        if (remaining.length === 0) setRightPanelState("closed");
-        return remaining.length > 0 ? remaining[remaining.length - 1].id : null;
-      });
-    } else {
-      setFileTabs((prev) => {
-        if (prev.some((t) => t.kind === "dashboard")) return prev;
-        return [
-          ...prev.filter((t) => t.kind !== "todo" && t.id !== activeFileTabId),
-          { kind: "dashboard", id: DASHBOARD_TAB_ID, label: t("Dashboard") },
-        ];
-      });
-      setActiveFileTabId(DASHBOARD_TAB_ID);
       setRightPanelState("normal");
     }
   }, [fileTabs, activeFileTabId, t]);
@@ -877,6 +850,32 @@ export function AppShell() {
                 )}
               </button>
               </Tooltip>
+              <Tooltip content={activeTopPanel === "dashboard" ? t("Hide dashboard") : t("Open dashboard")}>
+              <button
+                onClick={() => toggleTopPanel("dashboard")}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  height: "100%", padding: "0 12px",
+                  background: activeTopPanel === "dashboard" ? "var(--bg-selected)" : "none",
+                  border: "none",
+                  borderTop: activeTopPanel === "dashboard" ? "2px solid var(--accent)" : "2px solid transparent",
+                  borderRight: "1px solid var(--border)",
+                  cursor: "pointer",
+                  color: activeTopPanel === "dashboard" ? "var(--text)" : "var(--text-muted)",
+                  fontSize: 11, whiteSpace: "nowrap", transition: "color 0.1s, background 0.1s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = activeTopPanel === "dashboard" ? "var(--text)" : "var(--text-muted)"; }}
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <circle cx="8" cy="8" r="6" />
+                  <line x1="2" y1="8" x2="14" y2="8" />
+                  <path d="M8 2a8 8 0 0 1 0 12" />
+                  <path d="M8 2a8 8 0 0 0 0 12" />
+                </svg>
+                <span>{t("Dashboard")}</span>
+              </button>
+              </Tooltip>
               {selectedSession?.id && (
                 <Tooltip content={t("View raw provider API requests captured for this session")}>
                 <button
@@ -1121,6 +1120,16 @@ export function AppShell() {
                   })()}
                 </div>
               )}
+              {activeTopPanel === "dashboard" && (
+                <div style={{
+                  background: "var(--bg-panel)",
+                  borderBottom: "1px solid var(--border)",
+                  height: "min(600px, 75vh)",
+                  overflow: "hidden",
+                }}>
+                  <PlaywrightDashboardPanel />
+                </div>
+              )}
             </div>
           )}
 
@@ -1204,8 +1213,6 @@ export function AppShell() {
         <div style={{ flex: 1, overflow: "hidden" }}>
           {activeFileTab?.kind === "todo" ? (
             <TodoPanel />
-          ) : activeFileTab?.kind === "dashboard" ? (
-            <PlaywrightDashboardPanel />
           ) : activeFileTab?.kind === "file" ? (
             <FileViewer filePath={activeFileTab.filePath} cwd={activeCwd ?? undefined} />
           ) : (
@@ -1264,28 +1271,6 @@ export function AppShell() {
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="2" width="12" height="12" rx="2" />
         <polyline points="5 8 7 10 11 6" />
-      </svg>
-    </button>
-    </Tooltip>
-    <Tooltip content={activeFileTab?.kind === "dashboard" ? t("Hide dashboard") : t("Open dashboard")}>
-    <button
-      onClick={handleToggleDashboardTab}
-      style={{
-        position: "fixed", top: 0, right: 72, zIndex: 300,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        width: 36, height: 36, padding: 0,
-        background: "var(--bg-panel)", border: "none", borderLeft: "1px solid var(--border)", borderBottom: "1px solid var(--border)",
-        color: activeFileTab?.kind === "dashboard" ? "var(--text)" : "var(--text-muted)",
-        cursor: "pointer", transition: "color 0.12s",
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "dashboard" ? "var(--text)" : "var(--text-muted)"; }}
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="8" cy="8" r="6" />
-        <line x1="2" y1="8" x2="14" y2="8" />
-        <path d="M8 2a8 8 0 0 1 0 12" />
-        <path d="M8 2a8 8 0 0 0 0 12" />
       </svg>
     </button>
     </Tooltip>

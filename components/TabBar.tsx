@@ -7,8 +7,7 @@ import { Tooltip } from "./Tooltip";
 
 export type Tab =
   | { kind: "file"; id: string; label: string; filePath: string }
-  | { kind: "todo"; id: string; label: string }
-  | { kind: "dashboard"; id: string; label: string };
+  | { kind: "todo"; id: string; label: string };
 
 interface Props {
   tabs: Tab[];
@@ -39,8 +38,6 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
         const icon =
           tab.kind === "todo" ? (
             <TodoTabIcon />
-          ) : tab.kind === "dashboard" ? (
-            <DashboardTabIcon />
           ) : (
             getFileIcon(tab.label, 13)
           );
@@ -126,18 +123,6 @@ function TodoTabIcon() {
     <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="2" width="12" height="12" rx="2" />
       <polyline points="5 8 7 10 11 6" />
-    </svg>
-  );
-}
-
-function DashboardTabIcon() {
-  // Compass / browser-globe — Playwright-themed
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="8" r="6" />
-      <line x1="2" y1="8" x2="14" y2="8" />
-      <path d="M8 2a8 8 0 0 1 0 12" />
-      <path d="M8 2a8 8 0 0 0 0 12" />
     </svg>
   );
 }
