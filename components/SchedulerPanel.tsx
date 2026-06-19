@@ -84,7 +84,7 @@ function statusSymbol(status: TaskRunStatus | null): string {
 export function SchedulerPanel({ onOpenSession }: Props) {
   const { t } = useI18n();
   const toast = useToast();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
