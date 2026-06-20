@@ -16,10 +16,26 @@ export interface SystemPromptReplacements {
   rules: ReplacementRule[];
 }
 
+export interface DangerousPatternRule {
+  name: string;
+  pattern: string;
+}
+
+export interface DangerousPatternsConfig {
+  rules: DangerousPatternRule[];
+  timeout_ms: number;
+}
+
 export interface PiWebConfig {
   system_prompt_replacements: SystemPromptReplacements;
   github_username: string;
+  dangerous_patterns: DangerousPatternsConfig;
 }
+
+const DEFAULT_DANGEROUS_PATTERNS: DangerousPatternsConfig = {
+  rules: [],
+  timeout_ms: 300_000,
+};
 
 const DEFAULT_CONFIG: PiWebConfig = {
   system_prompt_replacements: {
@@ -27,7 +43,27 @@ const DEFAULT_CONFIG: PiWebConfig = {
     rules: [],
   },
   github_username: "",
+  dangerous_patterns: DEFAULT_DANGEROUS_PATTERNS,
 };
+
+function parseDangerousPatterns(raw: unknown): DangerousPatternsConfig {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_DANGEROUS_PATTERNS };
+  const obj = raw as Record<string, unknown>;
+  const rulesRaw = Array.isArray(obj.rules) ? obj.rules : [];
+  const rules: DangerousPatternRule[] = [];
+  for (const r of rulesRaw) {
+    if (!r || typeof r !== "object") continue;
+    const rule = r as Record<string, unknown>;
+    if (typeof rule.name === "string" && typeof rule.pattern === "string") {
+      rules.push({ name: rule.name, pattern: rule.pattern });
+    }
+  }
+  const timeoutRaw = obj.timeout_ms;
+  const timeout_ms = typeof timeoutRaw === "number" && Number.isFinite(timeoutRaw) && timeoutRaw > 0
+    ? timeoutRaw
+    : DEFAULT_DANGEROUS_PATTERNS.timeout_ms;
+  return { rules, timeout_ms };
+}
 
 const CONFIG_DIR = join(homedir(), ".pi-web");
 const CONFIG_PATH = join(CONFIG_DIR, "config.yaml");
@@ -98,6 +134,7 @@ export function readConfig(): PiWebConfig {
         rules,
       },
       github_username: typeof cfg.github_username === "string" ? cfg.github_username : "",
+      dangerous_patterns: parseDangerousPatterns(cfg.dangerous_patterns),
     };
   } catch (err) {
     log.warn("failed to read config, resetting to defaults", { error: String(err) });

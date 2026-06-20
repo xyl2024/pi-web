@@ -5,6 +5,7 @@ import { ToastProvider } from "@/components/Toast";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { ContextMenuProvider } from "@/components/ContextMenu";
 import { TodoProvider } from "@/hooks/useTodos";
+import { PermissionProvider } from "@/hooks/usePendingPermissions";
 
 export default function Home() {
   return (
@@ -12,11 +13,13 @@ export default function Home() {
       <I18nProvider>
         <ToastProvider>
           <ConfirmProvider>
-            <ContextMenuProvider>
-              <TodoProvider>
-                <AppShell />
-              </TodoProvider>
-            </ContextMenuProvider>
+            <PermissionProvider>
+              <ContextMenuProvider>
+                <TodoProvider>
+                  <AppShell />
+                </TodoProvider>
+              </ContextMenuProvider>
+            </PermissionProvider>
           </ConfirmProvider>
         </ToastProvider>
       </I18nProvider>

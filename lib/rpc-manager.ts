@@ -1,4 +1,4 @@
-import { createAgentSession, DefaultResourceLoader, SessionManager } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, DefaultResourceLoader, SessionManager, isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import { cacheSessionPath } from "./session-reader";
 import type { AgentSessionLike, ToolInfo } from "./pi-types";
 import { createLogger, elapsedMs } from "./logger";
@@ -9,9 +9,27 @@ import { readEnabledTodoTools } from "./todo-tools-config";
 import { buildShowFileTool } from "./show-file-tool";
 import { buildAgentTodoTool } from "./agent-todo-tool";
 import { copyAgentTodoFile } from "./agent-todo-store";
+import { matchDangerousPattern, getDangerousPatternTimeoutMs } from "./dangerous-patterns";
 
 const log = createLogger("rpc-manager");
 type ToolSelection = string[] | "all";
+
+export type PermissionDecision = "allow_once" | "allow_similar" | "deny";
+
+interface PendingPermission {
+  resolve: (decision: PermissionDecision) => void;
+  reject: (reason: string) => void;
+  ruleName: string;
+  command: string;
+  timeoutHandle: ReturnType<typeof setTimeout>;
+}
+
+export interface PermissionRequestEvent {
+  type: "permission_request";
+  toolCallId: string;
+  ruleName: string;
+  command: string;
+}
 
 // ============================================================================
 // Types
@@ -35,6 +53,8 @@ export class AgentSessionWrapper {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private onDestroyCallback: (() => void) | null = null;
   private _alive = true;
+  private pendingPermissions: Map<string, PendingPermission> = new Map();
+  private allowedThisSession: Set<string> = new Set();
 
   constructor(public readonly inner: AgentSessionLike) {}
 
@@ -77,6 +97,70 @@ export class AgentSessionWrapper {
 
   onDestroy(cb: () => void): void {
     this.onDestroyCallback = cb;
+  }
+
+  /**
+   * Block a tool call until the user makes a decision. Emits a synthetic
+   * permission_request event to subscribers and returns a promise that
+   * resolves with the user's decision (or 'deny' on timeout / destroy).
+   */
+  requestPermission(toolCallId: string, ruleName: string, command: string): Promise<PermissionDecision> {
+    if (this.pendingPermissions.has(toolCallId)) {
+      // Idempotent: a re-entry shouldn't happen, but if it does, return the existing promise.
+      return new Promise<PermissionDecision>((resolve, reject) => {
+        const existing = this.pendingPermissions.get(toolCallId)!;
+        existing.resolve = (d) => { resolve(d); existing.resolve = () => {}; };
+        existing.reject = (r) => { reject(r); existing.reject = () => {}; };
+      });
+    }
+    const timeoutMs = getDangerousPatternTimeoutMs();
+    const promise = new Promise<PermissionDecision>((resolve, reject) => {
+      const timeoutHandle = setTimeout(() => {
+        const pending = this.pendingPermissions.get(toolCallId);
+        if (!pending) return;
+        this.pendingPermissions.delete(toolCallId);
+        log.warn("permission request timed out, auto-denying", { toolCallId, ruleName });
+        resolve("deny");
+      }, timeoutMs);
+      const entry: PendingPermission = {
+        resolve,
+        reject,
+        ruleName,
+        command,
+        timeoutHandle,
+      };
+      this.pendingPermissions.set(toolCallId, entry);
+    });
+    const event: PermissionRequestEvent = {
+      type: "permission_request",
+      toolCallId,
+      ruleName,
+      command,
+    };
+    for (const l of this.listeners) {
+      try {
+        l(event as unknown as AgentEvent);
+      } catch {
+        // listener errors must not break permission flow
+      }
+    }
+    log.info("permission requested", { toolCallId, ruleName });
+    return promise;
+  }
+
+  resolvePermission(toolCallId: string, decision: PermissionDecision): boolean {
+    const pending = this.pendingPermissions.get(toolCallId);
+    if (!pending) return false;
+    this.pendingPermissions.delete(toolCallId);
+    clearTimeout(pending.timeoutHandle);
+    if (decision === "allow_similar") this.allowedThisSession.add(pending.ruleName);
+    pending.resolve(decision);
+    log.info("permission resolved", { toolCallId, decision });
+    return true;
+  }
+
+  isRuleAllowedThisSession(ruleName: string): boolean {
+    return this.allowedThisSession.has(ruleName);
   }
 
   async send(command: Record<string, unknown>): Promise<unknown> {
@@ -245,6 +329,13 @@ export class AgentSessionWrapper {
         return null;
       }
 
+      case "permission_decision": {
+        const toolCallId = command.toolCallId as string;
+        const decision = command.decision as PermissionDecision;
+        const resolved = this.resolvePermission(toolCallId, decision);
+        return { resolved };
+      }
+
       case "abort_compaction": {
         this.inner.abortCompaction();
         return null;
@@ -261,6 +352,12 @@ export class AgentSessionWrapper {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.unsubscribe?.();
     this.onDestroyCallback?.();
+    for (const [, pending] of this.pendingPermissions) {
+      clearTimeout(pending.timeoutHandle);
+      pending.reject("destroyed");
+    }
+    this.pendingPermissions.clear();
+    this.allowedThisSession.clear();
     log.info("agent wrapper destroyed", {
       sessionId: this.sessionId,
       sessionFile: this.sessionFile || undefined,
@@ -343,6 +440,12 @@ export async function startRpcSession(
     // gets its own loader/closure, so `capturedSessionId` only ever holds
     // the id for this wrapper.
     let capturedSessionId: string | null = null;
+    // Forward reference — the tool_call handler runs inside the agent's
+    // extension context but needs to call back into the wrapper to surface
+    // permission requests and resolve them. Set immediately after the
+    // wrapper is constructed below. Using a box object so TypeScript does
+    // not narrow the type to `never` inside the closure.
+    const wrapperRef: { current: AgentSessionWrapper | null } = { current: null };
     const resourceLoader = new DefaultResourceLoader({
       cwd,
       agentDir,
@@ -353,6 +456,22 @@ export async function startRpcSession(
           });
           pi.on("after_provider_response", (event) => {
             if (capturedSessionId) recordResponse(capturedSessionId, event.status, event.headers);
+          });
+          pi.on("tool_call", async (event) => {
+            if (!isToolCallEventType("bash", event)) return;
+            const command = event.input.command;
+            const match = matchDangerousPattern(command);
+            if (!match) return;
+            const w = wrapperRef.current;
+            if (!w) return;
+            if (w.isRuleAllowedThisSession(match.ruleName)) return;
+            const decision = await w.requestPermission(event.toolCallId, match.ruleName, command);
+            if (decision === "deny") {
+              return { block: true, reason: "Denied by user" };
+            }
+            // 'allow_once' and 'allow_similar' both let the tool run.
+            // 'allow_similar' was already recorded on the wrapper.
+            return undefined;
           });
         },
       ],
@@ -408,6 +527,7 @@ export async function startRpcSession(
     }
 
     const wrapper = new AgentSessionWrapper(inner);
+    wrapperRef.current = wrapper;
     wrapper.start();
 
     const realSessionId = inner.sessionId as string;

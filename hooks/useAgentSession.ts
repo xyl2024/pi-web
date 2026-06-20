@@ -7,6 +7,7 @@ import { sendAgentCommand } from "@/lib/agent-client";
 import type { ToolCallStatsDispatch } from "./ToolCallStatsContext";
 import { useToast } from "@/components/Toast";
 import { useI18n } from "./useI18n";
+import { usePendingPermissionsRef } from "./usePendingPermissions";
 import { setSessionUiState, setLeafChangeHandler } from "./sessionUiStore";
 
 export interface SessionData {
@@ -103,6 +104,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   } = opts;
   const { t } = useI18n();
   const toast = useToast();
+  const permissionsRef = usePendingPermissionsRef();
   const statsEmitRef = useRef(statsEmit);
   statsEmitRef.current = statsEmit;
 
@@ -367,6 +369,17 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       case "auto_retry_end":
         setRetryInfo(null);
         break;
+      case "permission_request": {
+        const sid = sessionIdRef.current;
+        if (!sid) break;
+        permissionsRef.current?.addRequest({
+          toolCallId: event.toolCallId as string,
+          ruleName: event.ruleName as string,
+          command: event.command as string,
+          sessionId: sid,
+        });
+        break;
+      }
       case "auto_compaction_start":
       case "compaction_start":
         setIsCompacting(true);
@@ -382,7 +395,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         }
         break;
     }
-  }, [loadSession, onAgentEnd]);
+  }, [loadSession, onAgentEnd, permissionsRef]);
   handleAgentEventRef.current = handleAgentEvent;
 
   const handleSend = useCallback(async (message: string, images?: AttachedImage[]) => {
