@@ -53,6 +53,7 @@ interface Props {
   slashResources?: SlashResource[];
   slashResourceKey?: string;
   onSlashAction?: (action: string) => void;
+  contextUsage?: { percent: number | null; contextWindow: number; tokens: number | null } | null;
 }
 
 export interface ChatInputHandle {
@@ -167,6 +168,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   soundEnabled, onSoundToggle,
   slashResources = [], slashResourceKey,
   onSlashAction,
+  contextUsage,
 }: Props, ref) {
   const { t } = useI18n();
   const [value, setValue] = useState("");
@@ -522,6 +524,19 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     high: t("High reasoning"),
     xhigh: t("Highest reasoning"),
   };
+
+  // Context usage bar — mirrors the threshold colors used in the top-right status bar.
+  const contextBar = useMemo(() => {
+    if (!contextUsage?.contextWindow || contextUsage.percent === null) return null;
+    const pct = Math.max(0, Math.min(100, contextUsage.percent));
+    const color = pct > 90 ? "#ef4444" : pct > 70 ? "rgba(234,179,8,0.95)" : "var(--accent)";
+    const ctxWindowFmt = contextUsage.contextWindow >= 1_000_000
+      ? `${(contextUsage.contextWindow / 1_000_000).toFixed(1)}M`
+      : contextUsage.contextWindow >= 1000
+        ? `${(contextUsage.contextWindow / 1000).toFixed(0)}k`
+        : String(contextUsage.contextWindow);
+    return { pct, color, ctxWindowFmt };
+  }, [contextUsage]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -1044,6 +1059,44 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 </div>
             )}
           </div>
+
+          {/* CENTER: context usage bar — sits next to the model selector */}
+          {contextBar && (
+            <Tooltip content={`${t("Context")}: ${contextBar.pct.toFixed(1)}% of ${contextUsage!.contextWindow.toLocaleString()} tokens`}>
+              <div
+                aria-label={`${t("Context")}: ${contextBar.pct.toFixed(0)}%`}
+                style={{
+                  flex: "0 0 auto",
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "0 10px",
+                  height: 32,
+                  color: contextBar.color,
+                  fontSize: 12,
+                  fontVariantNumeric: "tabular-nums",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <div style={{
+                  position: "relative",
+                  width: 80, height: 8,
+                  background: "var(--bg-panel)",
+                  border: "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
+                  borderRadius: 3,
+                  overflow: "hidden",
+                  flexShrink: 0,
+                }}>
+                  <div style={{
+                    position: "absolute", top: 0, left: 0, bottom: 0,
+                    width: `${contextBar.pct}%`,
+                    background: contextBar.color,
+                    transition: "width 0.2s ease",
+                  }} />
+                </div>
+                <span style={{ fontWeight: 600 }}>{contextBar.pct.toFixed(0)}%</span>
+                <span style={{ color: "var(--text-dim)", fontSize: 11 }}>/ {contextBar.ctxWindowFmt}</span>
+              </div>
+            </Tooltip>
+          )}
 
           {/* spacer */}
           <div style={{ flex: 1 }} />

@@ -134,7 +134,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const {
     loading, error, messages, entryIds, streamState,
     agentRunning, modelNames, modelList, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
-    retryInfo, forkingEntryId,
+    retryInfo, forkingEntryId, contextUsage,
     isCompacting, compactError, displayModel: displayModelValue,
     agentPhase,
     isNew,
@@ -384,6 +384,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       retryInfo={retryInfo}
       soundEnabled={soundEnabled}
       onSoundToggle={onSoundToggle}
+      contextUsage={contextUsage}
       slashResources={slashResources}
       slashResourceKey={slashResourceKey}
       onSlashAction={(action) => { if (action === "new") onNewSessionRequest?.(); }}
