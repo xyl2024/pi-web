@@ -327,6 +327,16 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         }
         dispatch({ type: "reset" });
         setAgentPhase({ kind: "waiting_model" });
+        // Refresh context usage after each assistant message so the progress
+        // bar tracks every model API call, not just turn end.
+        if (completed?.role === "assistant" && sessionIdRef.current) {
+          fetch(`/api/agent/${encodeURIComponent(sessionIdRef.current)}`)
+            .then((r) => r.json())
+            .then((d: { state?: { contextUsage?: { percent: number | null; contextWindow: number; tokens: number | null } | null } }) => {
+              if (d.state?.contextUsage !== undefined) setContextUsage(d.state.contextUsage ?? null);
+            })
+            .catch(() => {});
+        }
         break;
       }
       case "tool_execution_start": {
