@@ -1336,15 +1336,30 @@ function TextFileViewer({ filePath, cwd }: Props) {
           }}
         />
       ),
-      code: ({ className, children, ...props }: { className?: string; children?: React.ReactNode } & React.HTMLAttributes<HTMLElement>) => {
+      code: ({ className, children }: { className?: string; children?: React.ReactNode }) => {
         const lang = className?.replace("language-", "") ?? "";
         const raw = String(children ?? "");
         const isBlock = className?.includes("language-") || raw.includes("\n");
-        if (isBlock && lang === "mermaid") {
-          // Stable key keeps the MermaidBlock instance alive across re-renders.
-          return <MermaidBlock key={raw} code={raw.replace(/\n$/, "")} />;
+        if (isBlock) {
+          if (lang === "mermaid") {
+            // Stable key keeps the MermaidBlock instance alive across re-renders.
+            return <MermaidBlock key={raw} code={raw.replace(/\n$/, "")} />;
+          }
+          return <CodeBlock code={raw.replace(/\n$/, "")} lang={lang} />;
         }
-        return <code className={className} {...props}>{children}</code>;
+        return (
+          <code
+            style={{
+              background: "var(--bg-selected)",
+              padding: "1px 4px",
+              borderRadius: 3,
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.9em",
+            }}
+          >
+            {children}
+          </code>
+        );
       },
       pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
     }),
@@ -1788,4 +1803,95 @@ function TextFileViewer({ filePath, cwd }: Props) {
       )}
     </div>
   );
+}
+
+function CodeBlock({ code, lang }: { code: string; lang: string }) {
+  const { isDark } = useTheme();
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+
+  const copy = () => {
+    copyText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        marginTop: 4,
+        marginBottom: 4,
+        borderRadius: 6,
+        overflow: "hidden",
+        border: "1px solid var(--border)",
+      }}
+    >
+      <div
+        style={{
+          padding: "3px 10px",
+          background: "var(--bg-panel)",
+          borderBottom: "1px solid var(--border)",
+          fontSize: 11,
+          color: "var(--text-dim)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <span>{lang}</span>
+        <button
+          onClick={copy}
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            fontSize: 11,
+          }}
+        >
+          {copied ? t("copied") : t("copy")}
+        </button>
+      </div>
+      <SyntaxHighlighter
+        language={lang || "text"}
+        style={isDark ? vscDarkPlus : vs}
+        showLineNumbers
+        lineNumberStyle={{ color: "var(--text-dim)", fontStyle: "normal" }}
+        customStyle={{
+          margin: 0,
+          padding: "10px 12px",
+          fontSize: 12.5,
+          lineHeight: 1.6,
+          borderRadius: 0,
+          background: "var(--bg)",
+        }}
+        codeTagProps={{ style: { fontFamily: "var(--font-mono)" } }}
+      >
+        {code}
+      </SyntaxHighlighter>
+    </div>
+  );
+}
+
+// Best-effort clipboard write with a textarea fallback for non-secure
+// contexts. Mirrors MessageView's copyText helper.
+function copyText(text: string): Promise<void> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    return Promise.resolve();
+  } catch {
+    return Promise.reject(new Error("clipboard unavailable"));
+  }
 }
