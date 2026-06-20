@@ -8,6 +8,7 @@ import { Tooltip } from "./Tooltip";
 import { SessionHeatmap } from "./SessionHeatmap";
 import { GithubHeatmap, GithubHeatmapPlaceholder } from "./GithubHeatmap";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
+import { AgentTodoPanel } from "./AgentTodoPanel";
 import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
 import { useAudio } from "@/hooks/useAudio";
 import { useDragDrop } from "@/hooks/useDragDrop";
@@ -490,8 +491,12 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       ) : (
       <>
       <div className="relative flex flex-1 overflow-hidden">
-        <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-4 [scrollbar-width:none]">
-          <div className="mx-auto max-w-[820px] px-4">
+        {/* Agent Todo: absolute-positioned floating panel in the chat area's
+            left whitespace. Lives as a sibling of the scroll container (not
+            a flex item) so it does not squeeze the centered message column. */}
+        <AgentTodoPanel sessionId={session?.id ?? null} />
+        <div ref={scrollContainerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto py-4 [scrollbar-width:none]">
+          <div className="mx-auto max-w-[820px]">
 
             {(() => {
               const toolResultsMap = new Map<string, import("@/lib/types").ToolResultMessage>();

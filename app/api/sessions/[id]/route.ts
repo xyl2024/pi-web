@@ -10,6 +10,7 @@ import {
 } from "@/lib/session-reader";
 import { getRpcSession } from "@/lib/rpc-manager";
 import { deleteFor as deletePayloadCapture } from "@/lib/payload-capture";
+import { deleteAgentTodoFile } from "@/lib/agent-todo-store";
 import { createLogger, elapsedMs } from "@/lib/logger";
 
 const log = createLogger("api/sessions/[id]");
@@ -177,6 +178,7 @@ export async function DELETE(
     unlinkSync(filePath);
     invalidateSessionPathCache(id);
     deletePayloadCapture(id);
+    deleteAgentTodoFile(id);
     log.info("delete session completed", {
       id,
       filePath,

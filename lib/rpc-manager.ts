@@ -7,6 +7,8 @@ import { recordRequest, recordResponse } from "./payload-capture";
 import { buildTodoTools } from "./todo-tools";
 import { readEnabledTodoTools } from "./todo-tools-config";
 import { buildShowFileTool } from "./show-file-tool";
+import { buildAgentTodoTool } from "./agent-todo-tool";
+import { copyAgentTodoFile } from "./agent-todo-store";
 
 const log = createLogger("rpc-manager");
 type ToolSelection = string[] | "all";
@@ -153,6 +155,9 @@ export class AgentSessionWrapper {
 
         const newSessionId = SessionManager.open(newSessionFile, sessionDir).getSessionId();
         cacheSessionPath(newSessionId, newSessionFile);
+        // Inherit the parent's agent-todo plan so the fork starts with the
+        // same context the agent had before the branch point.
+        copyAgentTodoFile(this.sessionId, newSessionId);
         log.info("fork completed", {
           sessionId: this.sessionId,
           newSessionId,
@@ -359,7 +364,7 @@ export async function startRpcSession(
       agentDir,
       sessionManager,
       resourceLoader,
-      customTools: [...buildTodoTools(readEnabledTodoTools()), ...buildShowFileTool()],
+      customTools: [...buildTodoTools(readEnabledTodoTools()), ...buildShowFileTool(), ...buildAgentTodoTool()],
     });
     capturedSessionId = inner.sessionId as string;
 
