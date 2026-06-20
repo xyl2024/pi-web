@@ -728,16 +728,6 @@ export function SchedulerPanel({ onOpenSession }: Props) {
                       </Tooltip>
                     )}
                   </div>
-                  {run.error && (
-                    <div style={{ marginTop: 4, color: "#f87171", fontSize: 11, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                      {run.error}
-                    </div>
-                  )}
-                  {run.replyText && (
-                    <div style={{ marginTop: 4, color: "var(--text)", fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                      {run.replyText}
-                    </div>
-                  )}
                 </div>
                 );
               })}
