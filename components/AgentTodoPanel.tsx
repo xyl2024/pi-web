@@ -16,7 +16,7 @@
  *   the 1100px responsive threshold (no room for the panel next to messages).
  */
 
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import type { AgentTask } from "@/lib/agent-todo-tool-types";
 import { useAgentTodo } from "@/hooks/useAgentTodo";
 import { useI18n } from "@/hooks/useI18n";
@@ -160,6 +160,7 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({ sessionId }: { sess
   const { tasks, empty, counts } = useAgentTodo(sessionId);
   const { t } = useI18n();
   const toast = useToast();
+  const [collapsed, setCollapsed] = useState(false);
 
   const handleCopy = useCallback(
     (id: number) => {
@@ -174,6 +175,10 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({ sessionId }: { sess
     },
     [t, toast],
   );
+
+  const handleToggle = useCallback(() => {
+    setCollapsed((v) => !v);
+  }, []);
 
   const groups = useMemo(() => {
     const inProgress = tasks.filter((t) => t.status === "in_progress");
@@ -200,13 +205,21 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({ sessionId }: { sess
           // so it does not occupy flex space and does not squeeze the
           // centered message column. Top-aligned with a small gap from the
           // chat area's upper edge (not flush with the topbar).
+          //
+          // Background is ~12% transparent + backdrop blur: when the panel
+          // overlaps the message column on narrower viewports, the text
+          // behind shows through softly instead of being fully occluded.
+          // The panel's own text/colors stay fully opaque — only the
+          // backdrop fades.
           position: "absolute",
           left: 16,
           top: 16,
           width: 256,
           maxHeight: "60vh",
           padding: "10px 6px",
-          background: "var(--bg-panel)",
+          background: "color-mix(in srgb, var(--bg-panel) 50%, transparent)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
           border: "1px solid var(--border)",
           borderRadius: 8,
           boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
@@ -221,23 +234,67 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({ sessionId }: { sess
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: "0 8px 8px",
-            borderBottom: "1px solid var(--border)",
-            marginBottom: 8,
+            padding: collapsed ? "0 8px" : "0 8px 8px",
+            borderBottom: collapsed ? "none" : "1px solid var(--border)",
+            marginBottom: collapsed ? 0 : 8,
           }}
         >
           <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>
             {t("Agent Plan")}
           </span>
-          <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-            {counts.completed}/{counts.total}
-            {counts.inProgress > 0 ? ` ◐${counts.inProgress}` : ""}
-            {counts.pending > 0 ? ` ○${counts.pending}` : ""}
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+              {counts.completed}/{counts.total}
+              {counts.inProgress > 0 ? ` ◐${counts.inProgress}` : ""}
+              {counts.pending > 0 ? ` ○${counts.pending}` : ""}
+            </span>
+            <button
+              type="button"
+              onClick={handleToggle}
+              aria-label={collapsed ? t("Expand") : t("Collapse")}
+              aria-expanded={!collapsed}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 18,
+                height: 18,
+                padding: 0,
+                background: "transparent",
+                border: "none",
+                borderRadius: 3,
+                cursor: "pointer",
+                color: "var(--text-muted)",
+                transition: "color 120ms, background 120ms",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--text)";
+                e.currentTarget.style.background = "var(--bg-hover)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--text-muted)";
+                e.currentTarget.style.background = "transparent";
+              }}
+            >
+              {collapsed ? (
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                  <path d="M3 7.5L6 4.5L9 7.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                  <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
           </span>
         </div>
-        <Group label={t("In progress")} tasks={groups.inProgress} onCopy={handleCopy} />
-        <Group label={t("Pending")} tasks={groups.pending} onCopy={handleCopy} />
-        <Group label={t("Completed")} tasks={groups.completed} onCopy={handleCopy} />
+        {!collapsed && (
+          <>
+            <Group label={t("In progress")} tasks={groups.inProgress} onCopy={handleCopy} />
+            <Group label={t("Pending")} tasks={groups.pending} onCopy={handleCopy} />
+            <Group label={t("Completed")} tasks={groups.completed} onCopy={handleCopy} />
+          </>
+        )}
       </aside>
       <style>{`
         @keyframes agent-todo-fade-in {
