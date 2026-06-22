@@ -567,6 +567,7 @@ const ZH_TRANSLATIONS = {
   "Failed to update run": "更新运行失败",
   // Mermaid renderer
   "Failed to render Mermaid diagram": "Mermaid 图渲染失败",
+  "Failed to render SVG": "SVG 渲染失败",
   "Download SVG": "下载 SVG",
   ASCII: "ASCII",
   "Copy as ASCII": "复制为 ASCII",

@@ -6,6 +6,7 @@ import parse, { domToReact, type DOMNode, type Element, type HTMLReactParserOpti
 import { useI18n } from "@/hooks/useI18n";
 import { MarkdownImage } from "./ImageLightbox";
 import { MermaidBlock } from "./MermaidBlock";
+import { SvgBlock } from "./SvgBlock";
 import { highlightDeep } from "./HighlightText";
 
 interface Props {
@@ -101,6 +102,15 @@ export function TodoDescriptionView({
             return (
               <MermaidBlock
                 key={`mermaid-${text}`}
+                code={String(text ?? "").replace(/\n$/, "")}
+              />
+            );
+          }
+          if (langMatch && langMatch[1] === "svg") {
+            const text = stringifyChildren(codeChild.children as DOMNode[]);
+            return (
+              <SvgBlock
+                key={`svg-${text}`}
                 code={String(text ?? "").replace(/\n$/, "")}
               />
             );

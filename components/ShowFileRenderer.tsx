@@ -9,6 +9,7 @@ import { useI18n } from "@/hooks/useI18n";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { MermaidBlock } from "@/components/MermaidBlock";
+import { SvgBlock } from "@/components/SvgBlock";
 import { encodeFilePathForApi, joinFilePath } from "@/lib/file-paths";
 
 // Heavy client-only component; lazy-load with SSR off so show_file
@@ -367,6 +368,11 @@ function MarkdownContent({ url }: { url: string }) {
         // Stable key keeps the MermaidBlock instance alive across
         // re-renders even if the surrounding tree restructures.
         return <MermaidBlock key={raw} code={raw.replace(/\n$/, "")} />;
+      }
+      if (isBlock && lang === "svg") {
+        // Stable key keeps the SvgBlock instance alive across
+        // re-renders even if the surrounding tree restructures.
+        return <SvgBlock key={raw} code={raw.replace(/\n$/, "")} />;
       }
       return <code className={className}>{children}</code>;
     }) as Components["code"];

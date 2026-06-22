@@ -11,6 +11,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
 import { ShowFileRenderer } from "./ShowFileRenderer";
 import { MermaidBlock } from "./MermaidBlock";
+import { SvgBlock } from "./SvgBlock";
 import { SHOW_FILE_TOOL_NAME } from "@/lib/show-file-tool-types";
 import type {
   AgentMessage,
@@ -605,6 +606,9 @@ function TextBlock({ block, keywords, isSearchMatch, isStreaming }: { block: Tex
         if (isBlock) {
           if (lang === "mermaid") {
             return <MermaidBlock key={raw} code={raw.replace(/\n$/, "")} isStreaming={isStreaming} />;
+          }
+          if (lang === "svg") {
+            return <SvgBlock key={raw} code={raw.replace(/\n$/, "")} isStreaming={isStreaming} />;
           }
           return <CodeBlock code={raw.replace(/\n$/, "")} lang={lang} />;
         }

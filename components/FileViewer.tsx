@@ -13,6 +13,7 @@ import { useI18n } from "@/hooks/useI18n";
 import { Tooltip } from "./Tooltip";
 import { extractImageGallery, MarkdownImage, ImageLightbox } from "./ImageLightbox";
 import { MermaidBlock } from "./MermaidBlock";
+import { SvgBlock } from "./SvgBlock";
 import { encodeFilePathForApi, getFileName, getRelativeFilePath, normalizeFilePathSlashes } from "@/lib/file-paths";
 import { Document, Page, pdfjs } from "react-pdf";
 
@@ -1344,6 +1345,10 @@ function TextFileViewer({ filePath, cwd }: Props) {
           if (lang === "mermaid") {
             // Stable key keeps the MermaidBlock instance alive across re-renders.
             return <MermaidBlock key={raw} code={raw.replace(/\n$/, "")} />;
+          }
+          if (lang === "svg") {
+            // Stable key keeps the SvgBlock instance alive across re-renders.
+            return <SvgBlock key={raw} code={raw.replace(/\n$/, "")} />;
           }
           return <CodeBlock code={raw.replace(/\n$/, "")} lang={lang} />;
         }
