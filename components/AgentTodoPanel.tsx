@@ -26,22 +26,58 @@ const PANEL_BREAKPOINT = 1100;
 
 interface TaskRowProps {
   task: AgentTask;
-  onCopy: (id: number) => void;
+  /**
+   * Map of taskId → toolCallId for tasks whose "mark completed" call is
+   * visible in the current chat. Clicking a completed row jumps to the
+   * matching tool call when present; otherwise shows a toast.
+   */
+  taskToolCallIds: Record<number, string>;
+  /** Scroll-to handler — invoked with a toolCallId. */
+  onJumpToTask: (toolCallId: string) => void;
+  /** Toast for the "no scroll target" fallback messages. */
+  onNotify: (message: string) => void;
+  /** i18n key prefix — "Jump to completion" appended for completed rows. */
+  tTitleSuffix: string;
+  /** i18n message shown when the row has no scroll target. */
+  tNotInBranch: string;
+  /** i18n message shown when the task is not yet completed. */
+  tNotCompleted: string;
 }
 
-const TaskRow = memo(function TaskRow({ task, onCopy }: TaskRowProps) {
+const TaskRow = memo(function TaskRow({
+  task,
+  taskToolCallIds,
+  onJumpToTask,
+  onNotify,
+  tTitleSuffix,
+  tNotInBranch,
+  tNotCompleted,
+}: TaskRowProps) {
   const isInProgress = task.status === "in_progress";
   const isCompleted = task.status === "completed";
+  const toolCallId = isCompleted ? taskToolCallIds[task.id] : undefined;
+  const jumpable = !!toolCallId;
 
   const handleClick = useCallback(() => {
-    onCopy(task.id);
-  }, [onCopy, task.id]);
+    if (jumpable && toolCallId) {
+      onJumpToTask(toolCallId);
+      return;
+    }
+    if (isCompleted) {
+      // Completed, but the matching tool call isn't visible in the current
+      // chat (e.g. user navigated to a different branch). Surface the reason
+      // instead of silently doing nothing.
+      onNotify(tNotInBranch);
+      return;
+    }
+    onNotify(tNotCompleted);
+  }, [jumpable, toolCallId, isCompleted, onJumpToTask, onNotify, tNotInBranch, tNotCompleted]);
 
   return (
     <button
       type="button"
       onClick={handleClick}
-      title={`#${task.id}`}
+      title={jumpable ? `${tTitleSuffix} · #${task.id}` : `#${task.id}`}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -128,10 +164,24 @@ const TaskRow = memo(function TaskRow({ task, onCopy }: TaskRowProps) {
 interface GroupProps {
   label: string;
   tasks: AgentTask[];
-  onCopy: (id: number) => void;
+  taskToolCallIds: Record<number, string>;
+  onJumpToTask: (toolCallId: string) => void;
+  onNotify: (message: string) => void;
+  tTitleSuffix: string;
+  tNotInBranch: string;
+  tNotCompleted: string;
 }
 
-const Group = memo(function Group({ label, tasks, onCopy }: GroupProps) {
+const Group = memo(function Group({
+  label,
+  tasks,
+  taskToolCallIds,
+  onJumpToTask,
+  onNotify,
+  tTitleSuffix,
+  tNotInBranch,
+  tNotCompleted,
+}: GroupProps) {
   if (tasks.length === 0) return null;
   return (
     <div style={{ marginBottom: 10 }}>
@@ -149,32 +199,55 @@ const Group = memo(function Group({ label, tasks, onCopy }: GroupProps) {
       </div>
       <div>
         {tasks.map((t) => (
-          <TaskRow key={t.id} task={t} onCopy={onCopy} />
+          <TaskRow
+            key={t.id}
+            task={t}
+            taskToolCallIds={taskToolCallIds}
+            onJumpToTask={onJumpToTask}
+            onNotify={onNotify}
+            tTitleSuffix={tTitleSuffix}
+            tNotInBranch={tNotInBranch}
+            tNotCompleted={tNotCompleted}
+          />
         ))}
       </div>
     </div>
   );
 });
 
-export const AgentTodoPanel = memo(function AgentTodoPanel({ sessionId }: { sessionId: string | null }) {
+export const AgentTodoPanel = memo(function AgentTodoPanel({
+  sessionId,
+  taskToolCallIds,
+  onJumpToTask,
+}: {
+  sessionId: string | null;
+  /** taskId → toolCallId for completed tasks; missing entries are not jumpable. */
+  taskToolCallIds?: Record<number, string>;
+  /** Scroll handler invoked when a completed task is clicked. */
+  onJumpToTask?: (toolCallId: string) => void;
+}) {
   const { tasks, empty, counts } = useAgentTodo(sessionId);
   const { t } = useI18n();
   const toast = useToast();
   const [collapsed, setCollapsed] = useState(false);
 
-  const handleCopy = useCallback(
-    (id: number) => {
-      const text = `#${id}`;
-      const write = navigator.clipboard?.writeText(text);
-      if (write && typeof write.then === "function") {
-        write.then(
-          () => toast.show({ kind: "success", message: `${t("Copied")} ${text}` }),
-          () => toast.show({ kind: "error", message: t("Copied") + " failed" }),
-        );
-      }
-    },
-    [t, toast],
+  // Bound versions of the new props — keeps Group / TaskRow simple and lets
+  // us pass undefined-safe defaults without sprinkling ?-chains at every call.
+  const emptyTaskToolCallIds: Record<number, string> = {};
+  const boundTaskToolCallIds = taskToolCallIds ?? emptyTaskToolCallIds;
+  const boundOnJumpToTask = useCallback(
+    (toolCallId: string) => onJumpToTask?.(toolCallId),
+    [onJumpToTask],
   );
+  const handleNotify = useCallback(
+    (message: string) => {
+      toast.show({ kind: "info", message });
+    },
+    [toast],
+  );
+  const tTitleSuffix = t("Jump to completion");
+  const tNotInBranch = t("Completion not in current branch");
+  const tNotCompleted = t("Not completed yet");
 
   const handleToggle = useCallback(() => {
     setCollapsed((v) => !v);
@@ -290,9 +363,36 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({ sessionId }: { sess
         </div>
         {!collapsed && (
           <>
-            <Group label={t("In progress")} tasks={groups.inProgress} onCopy={handleCopy} />
-            <Group label={t("Pending")} tasks={groups.pending} onCopy={handleCopy} />
-            <Group label={t("Completed")} tasks={groups.completed} onCopy={handleCopy} />
+            <Group
+              label={t("In progress")}
+              tasks={groups.inProgress}
+              taskToolCallIds={boundTaskToolCallIds}
+              onJumpToTask={boundOnJumpToTask}
+              onNotify={handleNotify}
+              tTitleSuffix={tTitleSuffix}
+              tNotInBranch={tNotInBranch}
+              tNotCompleted={tNotCompleted}
+            />
+            <Group
+              label={t("Pending")}
+              tasks={groups.pending}
+              taskToolCallIds={boundTaskToolCallIds}
+              onJumpToTask={boundOnJumpToTask}
+              onNotify={handleNotify}
+              tTitleSuffix={tTitleSuffix}
+              tNotInBranch={tNotInBranch}
+              tNotCompleted={tNotCompleted}
+            />
+            <Group
+              label={t("Completed")}
+              tasks={groups.completed}
+              taskToolCallIds={boundTaskToolCallIds}
+              onJumpToTask={boundOnJumpToTask}
+              onNotify={handleNotify}
+              tTitleSuffix={tTitleSuffix}
+              tNotInBranch={tNotInBranch}
+              tNotCompleted={tNotCompleted}
+            />
           </>
         )}
       </aside>

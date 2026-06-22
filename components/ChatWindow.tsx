@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { AgentMessage, SessionInfo } from "@/lib/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AgentMessage, AssistantMessage, SessionInfo, ToolCallContent } from "@/lib/types";
+import { AGENT_TODO_TOOL_NAME } from "@/lib/agent-todo-tool-types";
 import { MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { Tooltip } from "./Tooltip";
@@ -322,6 +323,66 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const visibleMessages = messages.filter((m) => m.role === "user" || m.role === "assistant");
   const messageRefs = useMessageRefs(visibleMessages.length);
 
+  // Map agent_todo task id → toolCallId of the most recent "mark completed"
+  // call. Used by AgentTodoPanel to scroll-to on click. Rebuilt from messages
+  // (which the agent-todo audit log is a strict subset of), so no extra
+  // server-side bookkeeping is needed — see approach discussion in chat.
+  const taskIdToCompletedToolCallId = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const msg of messages) {
+      if (msg.role !== "assistant") continue;
+      const blocks = (msg as AssistantMessage).content ?? [];
+      for (const block of blocks) {
+        if (block.type !== "toolCall") continue;
+        const tc = block as ToolCallContent;
+        if (tc.toolName !== AGENT_TODO_TOOL_NAME) continue;
+        const input = tc.input as Record<string, unknown> | undefined;
+        if (!input || input.action !== "update" || input.status !== "completed") continue;
+        const id = input.id;
+        if (typeof id !== "number") continue;
+        // Last wins — handles a re-completed task without losing the latest.
+        map[id] = tc.toolCallId;
+      }
+    }
+    return map;
+  }, [messages]);
+
+  // Map every visible tool call's toolCallId to its visible message index.
+  // Used by handleScrollToToolCall; rebuilt when messages change so newly
+  // streamed tool calls become jumpable without delay.
+  const toolCallToVisibleIdx = useMemo(() => {
+    const map = new Map<string, number>();
+    let vi = 0;
+    for (const msg of messages) {
+      if (msg.role !== "user" && msg.role !== "assistant") continue;
+      if (msg.role === "assistant") {
+        for (const block of (msg as AssistantMessage).content ?? []) {
+          if (block.type === "toolCall") {
+            map.set((block as ToolCallContent).toolCallId, vi);
+          }
+        }
+      }
+      vi++;
+    }
+    return map;
+  }, [messages]);
+
+  // Scroll a tool call into view by its toolCallId. Shared between the stats
+  // drawer (click on a tool name) and the agent-todo panel (click on a
+  // completed task that maps back to a toolCallId).
+  const handleScrollToToolCall = useCallback((toolCallId: string) => {
+    const idx = toolCallToVisibleIdx.get(toolCallId);
+    if (idx === undefined) return;
+    const el = messageRefs.current[idx];
+    const container = scrollContainerRef.current;
+    if (el && container) {
+      userScrolledUpRef.current = false;
+      setShowToBottom(false);
+      const elTop = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+      container.scrollTo({ top: elTop - 20, behavior: "smooth" });
+    }
+  }, [toolCallToVisibleIdx, messageRefs, scrollContainerRef]);
+
   const isEmptyNew = isNew && messages.length === 0 && !streamState.isStreaming && !agentRunning;
 
   const availableThinkingLevels = displayModelValue
@@ -495,7 +556,11 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
         {/* Agent Todo: absolute-positioned floating panel in the chat area's
             left whitespace. Lives as a sibling of the scroll container (not
             a flex item) so it does not squeeze the centered message column. */}
-        <AgentTodoPanel sessionId={session?.id ?? null} />
+        <AgentTodoPanel
+          sessionId={session?.id ?? null}
+          taskToolCallIds={taskIdToCompletedToolCallId}
+          onJumpToTask={handleScrollToToolCall}
+        />
         <div ref={scrollContainerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto py-4 [scrollbar-width:none]">
           <div className="mx-auto max-w-[820px]">
 
@@ -607,43 +672,13 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
         )}
 
         {/* Tool call stats drawer — jump to chat message on click */}
-        {(() => {
-          // Build a map from toolCallId → visible message index
-          const toolCallToVisibleIdx = new Map<string, number>();
-          let vi = 0;
-          for (const msg of messages) {
-            if (msg.role !== "user" && msg.role !== "assistant") continue;
-            if (msg.role === "assistant") {
-              for (const block of msg.content) {
-                if (block.type === "toolCall") {
-                  toolCallToVisibleIdx.set((block as import("@/lib/types").ToolCallContent).toolCallId, vi);
-                }
-              }
-            }
-            vi++;
-          }
-          const handleScrollToToolCall = (toolCallId: string) => {
-            const idx = toolCallToVisibleIdx.get(toolCallId);
-            if (idx === undefined) return;
-            const el = messageRefs.current[idx];
-            const container = scrollContainerRef.current;
-            if (el && container) {
-              userScrolledUpRef.current = false;
-              setShowToBottom(false);
-              const elTop = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
-              container.scrollTo({ top: elTop - 20, behavior: "smooth" });
-            }
-          };
-          return (
-            <ToolCallStatsDrawer
-              snapshot={snapshot}
-              open={isDrawerOpen}
-              onToggle={toggleDrawer}
-              runningSummary={runningSummary}
-              onScrollToToolCall={handleScrollToToolCall}
-            />
-          );
-        })()}
+        <ToolCallStatsDrawer
+          snapshot={snapshot}
+          open={isDrawerOpen}
+          onToggle={toggleDrawer}
+          runningSummary={runningSummary}
+          onScrollToToolCall={handleScrollToToolCall}
+        />
       </div>
 
       <div className="relative">
