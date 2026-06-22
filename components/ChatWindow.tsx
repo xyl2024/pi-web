@@ -561,7 +561,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
           taskToolCallIds={taskIdToCompletedToolCallId}
           onJumpToTask={handleScrollToToolCall}
         />
-        <div ref={scrollContainerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto py-4 [scrollbar-width:none]">
+        <div ref={scrollContainerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto px-4 py-4 [scrollbar-width:none]">
           <div className="mx-auto max-w-[820px]">
 
             {(() => {
