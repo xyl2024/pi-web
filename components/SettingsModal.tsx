@@ -91,6 +91,16 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     setConfig((prev) => (prev ? { ...prev, github_username: value } : prev));
   }, []);
 
+  const handleClawdOnDeskToggle = useCallback(() => {
+    setConfig((prev) => (prev ? {
+      ...prev,
+      extensions: {
+        ...prev.extensions,
+        clawd_on_desk: { enabled: !prev.extensions.clawd_on_desk.enabled },
+      },
+    } : prev));
+  }, []);
+
   // Dirty check — compare current config against the snapshot from initial load
   const isDirty = !!config && !!originalConfig && JSON.stringify(config) !== JSON.stringify(originalConfig);
 
@@ -132,6 +142,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
   const rules = config?.system_prompt_replacements.rules ?? [];
   const enabled = config?.system_prompt_replacements.enabled ?? false;
+  const clawdOnDeskEnabled = config?.extensions.clawd_on_desk.enabled ?? false;
 
   if (loading) {
     return (
@@ -304,12 +315,39 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* ── Section 3: WeChat Connection ── */}
-          <div style={{ marginBottom: 0 }}>
+          <div style={{ marginBottom: 24 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", margin: "0 0 4px 0" }}>{t("WeChat Connection")}</h3>
             <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 14px 0", lineHeight: 1.5 }}>
               {t("Manage WeChat connection.")}
             </p>
             <WeChatSettingsSection />
+          </div>
+
+          {/* ── Section 4: Built-in Extensions ── */}
+          <div style={{ marginBottom: 0 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", margin: "0 0 4px 0" }}>{t("Clawd on Desk")}</h3>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 14px 0", lineHeight: 1.5 }}>
+              {t("Stream session events to a local Clawd desktop server (127.0.0.1:23333-23337). Useful for driving a desktop agent UI. Changes take effect on new sessions.")}
+            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 13, color: "var(--text)" }}>{t("Enable Clawd on Desk")}</span>
+              <button
+                onClick={handleClawdOnDeskToggle}
+                style={{
+                  width: 40, height: 22, borderRadius: 11,
+                  background: clawdOnDeskEnabled ? "var(--accent)" : "var(--bg-hover)",
+                  border: "none", cursor: "pointer", position: "relative",
+                  transition: "background 0.2s",
+                }}
+              >
+                <span style={{
+                  position: "absolute", top: 2, left: clawdOnDeskEnabled ? 20 : 2,
+                  width: 18, height: 18, borderRadius: 9,
+                  background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                  transition: "left 0.2s",
+                }} />
+              </button>
+            </div>
           </div>
         </div>
       </div>

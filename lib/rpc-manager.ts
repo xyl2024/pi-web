@@ -3,6 +3,8 @@ import { cacheSessionPath } from "./session-reader";
 import type { AgentSessionLike, ToolInfo } from "./pi-types";
 import { createLogger, elapsedMs } from "./logger";
 import { readConfig, applyReplacements } from "./config";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { recordRequest, recordResponse } from "./payload-capture";
 import { buildTodoTools } from "./todo-tools";
 import { readEnabledTodoTools } from "./todo-tools-config";
@@ -446,9 +448,28 @@ export async function startRpcSession(
     // wrapper is constructed below. Using a box object so TypeScript does
     // not narrow the type to `never` inside the closure.
     const wrapperRef: { current: AgentSessionWrapper | null } = { current: null };
+    // Build path list for vendored built-in extensions. Read once per session start.
+    const additionalExtensionPaths: string[] = [];
+    try {
+      const cfg = readConfig();
+      if (cfg.extensions.clawd_on_desk.enabled) {
+        // DefaultResourceLoader passes additionalExtensionPaths directly to
+        // jiti.import without doing directory→index.ts resolution, so we must
+        // hand it the file path, not the directory.
+        const clawdEntry = path.join(process.cwd(), "extensions", "clawd-on-desk", "index.ts");
+        if (existsSync(clawdEntry)) {
+          additionalExtensionPaths.push(clawdEntry);
+        } else {
+          log.warn("clawd-on-desk enabled but vendored entry missing", { path: clawdEntry });
+        }
+      }
+    } catch {
+      // readConfig already logs and falls back to defaults; this catch is defensive only.
+    }
     const resourceLoader = new DefaultResourceLoader({
       cwd,
       agentDir,
+      additionalExtensionPaths,
       extensionFactories: [
         (pi) => {
           pi.on("before_provider_request", (event) => {

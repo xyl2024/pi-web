@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { dirname, join } from "path";
+import { join } from "path";
 import { homedir } from "os";
 import { load, dump } from "js-yaml";
 import { createLogger } from "./logger";
@@ -26,10 +26,19 @@ export interface DangerousPatternsConfig {
   timeout_ms: number;
 }
 
+export interface BuiltinExtensionConfig {
+  enabled: boolean;
+}
+
+export interface ExtensionsConfig {
+  clawd_on_desk: BuiltinExtensionConfig;
+}
+
 export interface PiWebConfig {
   system_prompt_replacements: SystemPromptReplacements;
   github_username: string;
   dangerous_patterns: DangerousPatternsConfig;
+  extensions: ExtensionsConfig;
 }
 
 const DEFAULT_DANGEROUS_PATTERNS: DangerousPatternsConfig = {
@@ -44,6 +53,9 @@ const DEFAULT_CONFIG: PiWebConfig = {
   },
   github_username: "",
   dangerous_patterns: DEFAULT_DANGEROUS_PATTERNS,
+  extensions: {
+    clawd_on_desk: { enabled: false },
+  },
 };
 
 function parseDangerousPatterns(raw: unknown): DangerousPatternsConfig {
@@ -128,6 +140,14 @@ export function readConfig(): PiWebConfig {
       }
     }
 
+    const extObj = (cfg.extensions && typeof cfg.extensions === "object")
+      ? cfg.extensions as Record<string, unknown>
+      : {};
+    const codObj = (extObj.clawd_on_desk && typeof extObj.clawd_on_desk === "object")
+      ? extObj.clawd_on_desk as Record<string, unknown>
+      : {};
+    const clawdOnDeskEnabled = typeof codObj.enabled === "boolean" ? codObj.enabled : false;
+
     return {
       system_prompt_replacements: {
         enabled: sprObj.enabled as boolean,
@@ -135,6 +155,9 @@ export function readConfig(): PiWebConfig {
       },
       github_username: typeof cfg.github_username === "string" ? cfg.github_username : "",
       dangerous_patterns: parseDangerousPatterns(cfg.dangerous_patterns),
+      extensions: {
+        clawd_on_desk: { enabled: clawdOnDeskEnabled },
+      },
     };
   } catch (err) {
     log.warn("failed to read config, resetting to defaults", { error: String(err) });

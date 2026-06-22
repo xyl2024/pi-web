@@ -268,6 +268,10 @@ const ZH_TRANSLATIONS = {
   "Failed to load settings": "加载设置失败",
   "search": "搜索字符串",
   "replace": "替换为",
+  // Settings / built-in extensions
+  "Clawd on Desk": "桌面 Clawd",
+  "Stream session events to a local Clawd desktop server (127.0.0.1:23333-23337). Useful for driving a desktop agent UI. Changes take effect on new sessions.": "将会话事件推送到本地 Clawd 桌面服务（127.0.0.1:23333-23337），用于驱动桌面端 Agent UI。对新建会话生效。",
+  "Enable Clawd on Desk": "启用桌面 Clawd",
   // File explorer (first batch: new/rename/delete/copy/search/context menu)
   "New file": "新建文件",
   "New folder": "新建文件夹",
