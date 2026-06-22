@@ -61,25 +61,6 @@ function formatDateTime(ts: number | null): string {
   return d.toLocaleString();
 }
 
-function statusColor(status: TaskRunStatus | null): string {
-  switch (status) {
-    case "success": return "#4ade80";
-    case "running": return "var(--accent)";
-    case "error": return "#f87171";
-    case "timeout": return "#fbbf24";
-    default: return "var(--text-dim)";
-  }
-}
-
-function statusSymbol(status: TaskRunStatus | null): string {
-  switch (status) {
-    case "success": return "✓";
-    case "running": return "●";
-    case "error": return "✗";
-    case "timeout": return "⏱";
-    default: return "·";
-  }
-}
 
 export function SchedulerPanel({ onOpenSession }: Props) {
   const { t } = useI18n();
@@ -421,20 +402,6 @@ export function SchedulerPanel({ onOpenSession }: Props) {
                   opacity: task.enabled ? 1 : 0.55,
                 }}
               >
-                <span
-                  aria-hidden
-                  style={{
-                    display: "inline-block",
-                    width: 12,
-                    color: statusColor(task.lastRunStatus),
-                    flexShrink: 0,
-                    fontSize: 11,
-                    textAlign: "center",
-                  }}
-                  title={task.lastRunStatus ?? ""}
-                >
-                  {statusSymbol(task.lastRunStatus)}
-                </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     style={{
@@ -679,7 +646,6 @@ export function SchedulerPanel({ onOpenSession }: Props) {
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ color: statusColor(run.status), flexShrink: 0, fontSize: 12 }}>{statusSymbol(run.status)}</span>
                     <span style={{ color: "var(--text-muted)", flex: 1, fontFamily: "var(--font-mono)", fontSize: 11 }}>
                       {formatDateTime(run.startedAt)}
                     </span>
