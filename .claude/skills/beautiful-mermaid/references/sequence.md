@@ -27,6 +27,8 @@ sequenceDiagram
 | `-->>` | Dashed line, filled arrowhead (return) |
 | `-)` | Solid line, open arrowhead (async fire-and-forget) |
 | `--)` | Dashed line, open arrowhead |
+| `-x` | Solid line, cross arrowhead (invalidation) |
+| `--x` | Dashed line, cross arrowhead |
 
 ```mermaid
 sequenceDiagram
@@ -34,6 +36,7 @@ sequenceDiagram
   B-->>A: Dashed arrow (return)
   A-)B: Open arrow (async)
   B--)A: Open dashed arrow
+  A--xB: Cross (cancel)
 ```
 
 ## Activation (`+` / `-`)
