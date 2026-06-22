@@ -486,54 +486,27 @@ export function AppShell() {
     setRightPanelState("normal");
   }, []);
 
-  // Top-right toggle: open todos on first click, close them on the next.
-  // File tabs are preserved but the active file tab is replaced in the tab
-  // strip. If closing leaves no tabs, the right panel collapses too.
-  const handleToggleTodoTab = useCallback(() => {
-    if (fileTabs.some((t) => t.kind === "todo")) {
-      setFileTabs((prev) => prev.filter((t) => t.kind !== "todo"));
-      setActiveFileTabId((cur) => {
-        if (cur !== TODO_TAB_ID) return cur;
-        const remaining = fileTabs.filter((t) => t.kind !== "todo");
-        if (remaining.length === 0) setRightPanelState("closed");
-        return remaining.length > 0 ? remaining[remaining.length - 1].id : null;
-      });
-    } else {
-      setFileTabs((prev) => {
-        if (prev.some((t) => t.kind === "todo")) return prev;
-        return [
-          ...prev.filter((t) => t.id !== activeFileTabId),
-          { kind: "todo", id: TODO_TAB_ID, label: t("Todos") },
-        ];
-      });
-      setActiveFileTabId(TODO_TAB_ID);
-      setRightPanelState("normal");
-    }
-  }, [fileTabs, activeFileTabId, t]);
+  // Open the todos tab. If it's already in the tab strip, just activate it;
+  // if not, insert it at the leftmost position and activate it. Mirrors
+  // handleOpenFile so existing file tabs are never displaced.
+  const handleOpenTodoTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((t) => t.kind === "todo")) return prev;
+      return [{ kind: "todo", id: TODO_TAB_ID, label: t("Todos") }, ...prev];
+    });
+    setActiveFileTabId(TODO_TAB_ID);
+    setRightPanelState("normal");
+  }, [t]);
 
-  // Toggle the favorites tab — same pattern as todos. If the favorites tab is
-  // already open, close it; otherwise append it to the tab strip and activate it.
-  const handleToggleFavoritesTab = useCallback(() => {
-    if (fileTabs.some((t) => t.kind === "favorites")) {
-      setFileTabs((prev) => prev.filter((t) => t.kind !== "favorites"));
-      setActiveFileTabId((cur) => {
-        if (cur !== FAVORITES_TAB_ID) return cur;
-        const remaining = fileTabs.filter((t) => t.kind !== "favorites");
-        if (remaining.length === 0) setRightPanelState("closed");
-        return remaining.length > 0 ? remaining[remaining.length - 1].id : null;
-      });
-    } else {
-      setFileTabs((prev) => {
-        if (prev.some((t) => t.kind === "favorites")) return prev;
-        return [
-          ...prev.filter((t) => t.id !== activeFileTabId),
-          { kind: "favorites", id: FAVORITES_TAB_ID, label: t("Favorites") },
-        ];
-      });
-      setActiveFileTabId(FAVORITES_TAB_ID);
-      setRightPanelState("normal");
-    }
-  }, [fileTabs, activeFileTabId, t]);
+  // Open the favorites tab — same pattern as todos / file tabs.
+  const handleOpenFavoritesTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((t) => t.kind === "favorites")) return prev;
+      return [{ kind: "favorites", id: FAVORITES_TAB_ID, label: t("Favorites") }, ...prev];
+    });
+    setActiveFileTabId(FAVORITES_TAB_ID);
+    setRightPanelState("normal");
+  }, [t]);
 
   const handleCloseFileTab = useCallback((tabId: string) => {
     setFileTabs((prev) => {
@@ -1232,10 +1205,10 @@ export function AppShell() {
           </svg>
         </button>
         </Tooltip>
-        {/* Show/hide todos — always visible */}
-        <Tooltip content={activeFileTab?.kind === "todo" ? t("Hide todos") : t("Open todos")}>
+        {/* Open todos — always visible */}
+        <Tooltip content={t("Open todos")}>
         <button
-          onClick={handleToggleTodoTab}
+          onClick={handleOpenTodoTab}
           style={{
             display: "flex", alignItems: "center", justifyContent: "center",
             width: 36, height: 36, padding: 0,
@@ -1252,10 +1225,10 @@ export function AppShell() {
           </svg>
         </button>
         </Tooltip>
-        {/* Show/hide favorites — always visible */}
-        <Tooltip content={activeFileTab?.kind === "favorites" ? t("Hide favorites") : t("Open favorites")}>
+        {/* Open favorites — always visible */}
+        <Tooltip content={t("Open favorites")}>
         <button
-          onClick={handleToggleFavoritesTab}
+          onClick={handleOpenFavoritesTab}
           style={{
             display: "flex", alignItems: "center", justifyContent: "center",
             width: 36, height: 36, padding: 0,
