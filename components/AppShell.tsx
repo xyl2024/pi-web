@@ -24,6 +24,7 @@ import { CommandPalette } from "./CommandPalette";
 import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
+import { useContextMenu, type ContextMenuItem } from "./ContextMenu";
 import type { SessionInfo, SessionSearchResult } from "@/lib/types";
 import type { ChatInputHandle } from "./ChatInput";
 import { sendAgentCommand } from "@/lib/agent-client";
@@ -57,6 +58,7 @@ export function AppShell() {
   const { preset, setPreset } = useTheme();
   const { locale, toggleLocale, t } = useI18n();
   const toast = useToast();
+  const cm = useContextMenu();
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   // When user clicks +, we only store the cwd — no fake session id
@@ -520,6 +522,67 @@ export function AppShell() {
       return remaining.length > 0 ? remaining[remaining.length - 1].id : null;
     });
   }, [fileTabs]);
+
+  // Close every tab strictly to the left of `tabId` (the right-clicked one).
+  // If the active tab is being closed, fall back to `tabId` (still open).
+  const handleCloseLeftTabs = useCallback((tabId: string) => {
+    setFileTabs((prev) => {
+      const idx = prev.findIndex((t) => t.id === tabId);
+      if (idx <= 0) return prev;
+      return prev.slice(idx);
+    });
+    setActiveFileTabId((cur) => {
+      if (cur === null) return cur;
+      const activeIdx = fileTabs.findIndex((t) => t.id === cur);
+      const refIdx = fileTabs.findIndex((t) => t.id === tabId);
+      if (activeIdx >= 0 && activeIdx < refIdx) return tabId;
+      return cur;
+    });
+  }, [fileTabs]);
+
+  // Close every tab strictly to the right of `tabId`. If the active tab is
+  // being closed, fall back to `tabId`.
+  const handleCloseRightTabs = useCallback((tabId: string) => {
+    setFileTabs((prev) => {
+      const idx = prev.findIndex((t) => t.id === tabId);
+      if (idx === -1 || idx === prev.length - 1) return prev;
+      return prev.slice(0, idx + 1);
+    });
+    setActiveFileTabId((cur) => {
+      if (cur === null) return cur;
+      const activeIdx = fileTabs.findIndex((t) => t.id === cur);
+      const refIdx = fileTabs.findIndex((t) => t.id === tabId);
+      if (activeIdx > refIdx && refIdx >= 0) return tabId;
+      return cur;
+    });
+  }, [fileTabs]);
+
+  // Close every tab other than `tabId`. The right-clicked tab is preserved
+  // (and becomes the active one if it wasn't already), so the panel never
+  // collapses from this action.
+  const handleCloseOtherTabs = useCallback((tabId: string) => {
+    setFileTabs((prev) => {
+      if (!prev.some((t) => t.id === tabId)) return prev;
+      return prev.filter((t) => t.id === tabId);
+    });
+    setActiveFileTabId(tabId);
+  }, []);
+
+  // Build the per-tab right-click menu. Single tab → no batch actions shown.
+  const handleTabContextMenu = useCallback((tabId: string, x: number, y: number) => {
+    const idx = fileTabs.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    const hasLeft = idx > 0;
+    const hasRight = idx < fileTabs.length - 1;
+    const hasOthers = fileTabs.length > 1;
+    const items: ContextMenuItem[] = [
+      { key: "close", label: t("Close tab"), onSelect: () => handleCloseFileTab(tabId) },
+      { key: "close-left", label: t("Close tabs to the left"), onSelect: () => handleCloseLeftTabs(tabId), disabled: !hasLeft },
+      { key: "close-right", label: t("Close tabs to the right"), onSelect: () => handleCloseRightTabs(tabId), disabled: !hasRight },
+      { key: "close-others", label: t("Close other tabs"), onSelect: () => handleCloseOtherTabs(tabId), disabled: !hasOthers },
+    ];
+    cm.open({ x, y, items });
+  }, [fileTabs, t, cm, handleCloseFileTab, handleCloseLeftTabs, handleCloseRightTabs, handleCloseOtherTabs]);
 
   const handleFileDeleted = useCallback((filePath: string) => {
     handleCloseFileTab(`file:${filePath}`);
@@ -1153,6 +1216,7 @@ export function AppShell() {
               activeTabId={activeFileTabId ?? ""}
               onSelectTab={setActiveFileTabId}
               onCloseTab={handleCloseFileTab}
+              onContextMenu={handleTabContextMenu}
             />
           </div>
         </div>

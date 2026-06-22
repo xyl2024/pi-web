@@ -15,9 +15,10 @@ interface Props {
   activeTabId: string;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
+  onContextMenu?: (tabId: string, x: number, y: number) => void;
 }
 
-export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
+export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMenu }: Props) {
   const { t } = useI18n();
   const [hoveredClose, setHoveredClose] = useState<string | null>(null);
 
@@ -48,6 +49,10 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
           <div
             key={tab.id}
             onClick={() => onSelectTab(tab.id)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              onContextMenu?.(tab.id, e.clientX, e.clientY);
+            }}
             style={{
               display: "flex",
               alignItems: "center",
