@@ -13,6 +13,11 @@
 import { getDb } from "@/lib/db";
 import DOMPurify from "isomorphic-dompurify";
 
+export interface Tag {
+  name: string;
+  color?: string;
+}
+
 export interface Todo {
   id: string;
   title: string;
@@ -21,11 +26,14 @@ export interface Todo {
   createdAt: number;
   completedAt?: number;
   deadline?: number;
-  tags: string[];
+  tags: Tag[];
 }
 
 export const MAX_TITLE_LENGTH = 200;
 export const MAX_TAG_LENGTH = 50;
+// Hex colors only; canonicalized to lowercase before storage. Matches the
+// format that <input type="color"> emits natively, so the picker round-trips.
+export const TAG_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 export const MAX_DESCRIPTION_LENGTH = 100_000; // 100 KB — generous cap on raw HTML payload
 
 // Tags allowed inside a todo description. Mirrors what the Tiptap editor
@@ -64,7 +72,7 @@ export interface TodoCreateInput {
   title: string;
   description?: string;
   deadline?: number;
-  tags?: string[];
+  tags?: (Tag | string)[];
 }
 
 export interface TodoUpdateInput {
@@ -72,7 +80,7 @@ export interface TodoUpdateInput {
   description?: string;
   done?: boolean;
   deadline?: number | null;
-  tags?: string[] | null;
+  tags?: (Tag | string)[] | null;
 }
 
 export interface TodoListOptions {
@@ -158,21 +166,43 @@ export function normalizeDescription(value: unknown): string | undefined {
 
 /**
  * Normalize a tag list: trim each entry, drop empties, dedupe case-insensitively
- * (preserving the first occurrence's original casing). Used at every write site
- * so the stored array is always canonical.
+ * (preserving the first occurrence's original casing and color). Used at every
+ * write site so the stored array is always canonical.
+ *
+ * Accepts either a `string` (e.g. "工作") or an object `{ name, color? }` per
+ * element so agent tool callers that still send `string[]` keep working.
  */
-export function normalizeTags(value: unknown): string[] {
+export function normalizeTags(value: unknown): Tag[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) {
-    throw new TodoValidationError("tags must be an array of strings", "tags");
+    throw new TodoValidationError("tags must be an array", "tags");
   }
-  const out: string[] = [];
+  const out: Tag[] = [];
   const seen = new Set<string>();
   for (const raw of value) {
-    if (typeof raw !== "string") {
-      throw new TodoValidationError("tags must be an array of strings", "tags");
+    let name: string;
+    let color: string | undefined;
+    if (typeof raw === "string") {
+      name = raw;
+    } else if (raw && typeof raw === "object") {
+      const o = raw as Record<string, unknown>;
+      if (typeof o.name !== "string") {
+        throw new TodoValidationError("tag.name must be a string", "tags");
+      }
+      name = o.name;
+      if (o.color !== undefined && o.color !== null) {
+        if (typeof o.color !== "string" || !TAG_COLOR_PATTERN.test(o.color)) {
+          throw new TodoValidationError(
+            "tag.color must be a hex color like #rrggbb",
+            "tags",
+          );
+        }
+        color = o.color.toLowerCase();
+      }
+    } else {
+      throw new TodoValidationError("tag must be a string or { name, color? }", "tags");
     }
-    const trimmed = raw.trim();
+    const trimmed = name.trim();
     if (trimmed.length === 0) continue;
     if (trimmed.length > MAX_TAG_LENGTH) {
       throw new TodoValidationError("tag is too long", "tags");
@@ -180,7 +210,7 @@ export function normalizeTags(value: unknown): string[] {
     const key = trimmed.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(trimmed);
+    out.push({ name: trimmed, color });
   }
   return out;
 }
@@ -209,17 +239,30 @@ interface TodoRow {
   tags_json?: string;
 }
 
-function parseTagsJson(raw: string | undefined): string[] {
+function parseTagsJson(raw: string | undefined): Tag[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (Array.isArray(parsed)) {
-      return parsed.filter((t): t is string => typeof t === "string");
+    if (!Array.isArray(parsed)) return [];
+    const out: Tag[] = [];
+    for (const item of parsed) {
+      if (typeof item === "string") {
+        // Defensive: legacy rows that pre-date the color column would have
+        // been inserted as plain strings; treat them as color-less tags.
+        if (item.length === 0) continue;
+        out.push({ name: item });
+        continue;
+      }
+      if (!item || typeof item !== "object") continue;
+      const o = item as Record<string, unknown>;
+      if (typeof o.name !== "string" || o.name.length === 0) continue;
+      const color = typeof o.color === "string" && o.color.length > 0 ? o.color : undefined;
+      out.push({ name: o.name, color });
     }
+    return out;
   } catch {
-    /* fall through */
+    return [];
   }
-  return [];
 }
 
 function rowToTodo(row: TodoRow): Todo {
@@ -248,6 +291,13 @@ export function createTodo(_filePath: string, input: TodoCreateInput): Todo {
   const id = generateTodoId();
   const createdAt = Date.now();
   const db = getDb();
+  // Inherit the global color of any tag that's already in use elsewhere, so
+  // new rows stay in sync with sibling rows for the same tag name. A caller
+  // passing an explicit color wins; otherwise we fall back to the existing one.
+  const existingColors = lookupExistingTagColors(
+    db,
+    tags.map((t) => t.name),
+  );
 
   const insert = db.transaction(() => {
     db.prepare(
@@ -255,9 +305,12 @@ export function createTodo(_filePath: string, input: TodoCreateInput): Todo {
        VALUES (?, ?, ?, 0, ?, ?)`,
     ).run(id, title, description ?? null, createdAt, deadline ?? null);
     const tagStmt = db.prepare(
-      `INSERT INTO todo_tags (todo_id, tag) VALUES (?, ?)`,
+      `INSERT INTO todo_tags (todo_id, tag, color) VALUES (?, ?, ?)`,
     );
-    for (const t of tags) tagStmt.run(id, t);
+    for (const t of tags) {
+      const color = t.color ?? existingColors.get(t.name.toLowerCase()) ?? null;
+      tagStmt.run(id, t.name, color);
+    }
   });
   insert();
 
@@ -288,7 +341,8 @@ export function updateTodo(_filePath: string, id: string, patch: TodoUpdateInput
     const row = db
       .prepare(
         `SELECT t.*, COALESCE(
-           (SELECT json_group_array(tag) FROM todo_tags WHERE todo_id = t.id),
+           (SELECT json_group_array(json_object('name', tag, 'color', color))
+              FROM todo_tags WHERE todo_id = t.id),
            '[]'
          ) AS tags_json
            FROM todos t
@@ -353,10 +407,20 @@ export function updateTodo(_filePath: string, id: string, patch: TodoUpdateInput
       id,
     );
     db.prepare(`DELETE FROM todo_tags WHERE todo_id = ?`).run(id);
-    const tagStmt = db.prepare(
-      `INSERT INTO todo_tags (todo_id, tag) VALUES (?, ?)`,
+    // Inherit the global color for tags that already have one. The new rows
+    // for an existing tag take its current color; a tag with no history
+    // gets NULL.
+    const existingColors = lookupExistingTagColors(
+      db,
+      next.tags.map((t) => t.name),
     );
-    for (const t of next.tags) tagStmt.run(id, t);
+    const tagStmt = db.prepare(
+      `INSERT INTO todo_tags (todo_id, tag, color) VALUES (?, ?, ?)`,
+    );
+    for (const t of next.tags) {
+      const color = t.color ?? existingColors.get(t.name.toLowerCase()) ?? null;
+      tagStmt.run(id, t.name, color);
+    }
     return next;
   });
   return apply();
@@ -395,7 +459,7 @@ export function renameTag(_filePath: string, from: string, to: string): { tag: s
   if (normalised.length === 0) {
     throw new TodoValidationError("tag cannot be empty", "to");
   }
-  const toValue = normalised[0];
+  const toValue = normalised[0].name;
 
   const db = getDb();
   const apply = db.transaction(() => {
@@ -438,6 +502,68 @@ export function deleteTag(_filePath: string, tag: string): { tag: string; affect
   return { tag: tagKey, affected: result.changes };
 }
 
+/**
+ * Set or clear the color of a tag globally. Every `todo_tags` row whose
+ * `lower(tag)` matches is rewritten inside a single transaction, so all
+ * chips for the same tag name flip in lockstep. `null` clears the color.
+ *
+ * A no-op (no rows match) is legal and returns `affected: 0`. The management
+ * UI only surfaces tags with `count > 0`, so a stale tag with no current
+ * todos cannot be reached via the picker — but the endpoint is forgiving
+ * anyway so callers don't need to pre-check.
+ */
+export function setTagColor(
+  _filePath: string,
+  tag: string,
+  color: string | null,
+): { tag: string; color: string | null; affected: number } {
+  if (typeof tag !== "string" || tag.trim().length === 0) {
+    throw new TodoValidationError("tag must be a non-empty string", "tag");
+  }
+  let normalizedColor: string | null = null;
+  if (color !== null) {
+    if (typeof color !== "string" || !TAG_COLOR_PATTERN.test(color)) {
+      throw new TodoValidationError(
+        "color must be a hex color like #rrggbb or null",
+        "color",
+      );
+    }
+    normalizedColor = color.toLowerCase();
+  }
+  const tagKey = tag.trim();
+  const db = getDb();
+  const result = db
+    .prepare(`UPDATE todo_tags SET color = ? WHERE lower(tag) = lower(?)`)
+    .run(normalizedColor, tagKey);
+  return { tag: tagKey, color: normalizedColor, affected: result.changes };
+}
+
+/**
+ * Read the current color for each tag name in `tagNames`, returning a
+ * `Map<lower-case-name, hex>` of tags that already have at least one colored
+ * row. Used by `createTodo` / `updateTodo` so newly-inserted tag rows
+ * inherit the global color and stay in sync with their siblings.
+ */
+function lookupExistingTagColors(
+  db: ReturnType<typeof getDb>,
+  tagNames: string[],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  if (tagNames.length === 0) return map;
+  const placeholders = tagNames.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT lower(tag) AS lk, color
+         FROM todo_tags
+        WHERE lower(tag) IN (${placeholders})
+          AND color IS NOT NULL
+        GROUP BY lower(tag)`,
+    )
+    .all(...tagNames.map((n) => n.toLowerCase())) as Array<{ lk: string; color: string }>;
+  for (const row of rows) map.set(row.lk, row.color);
+  return map;
+}
+
 /** Look up a single todo by id. Used by the export route. */
 export function getTodoById(id: string): Todo | undefined {
   if (typeof id !== "string" || id.length === 0) return undefined;
@@ -445,7 +571,8 @@ export function getTodoById(id: string): Todo | undefined {
   const row = db
     .prepare(
       `SELECT t.*, COALESCE(
-         (SELECT json_group_array(tag) FROM todo_tags WHERE todo_id = t.id),
+         (SELECT json_group_array(json_object('name', tag, 'color', color))
+            FROM todo_tags WHERE todo_id = t.id),
          '[]'
        ) AS tags_json
          FROM todos t
@@ -480,7 +607,8 @@ export function listTodos(_filePath: string, opts: TodoListOptions = {}): Todo[]
   const rows = db
     .prepare(
       `SELECT t.*, COALESCE(
-         (SELECT json_group_array(tag) FROM todo_tags WHERE todo_id = t.id),
+         (SELECT json_group_array(json_object('name', tag, 'color', color))
+            FROM todo_tags WHERE todo_id = t.id),
          '[]'
        ) AS tags_json
          FROM todos t`,
@@ -513,7 +641,7 @@ export function listTodos(_filePath: string, opts: TodoListOptions = {}): Todo[]
     }
     if (opts.tags && opts.tags.length > 0) {
       const wanted = new Set(opts.tags.map((t) => t.toLowerCase()));
-      if (!x.tags.some((t) => wanted.has(t.toLowerCase()))) return false;
+      if (!x.tags.some((t) => wanted.has(t.name.toLowerCase()))) return false;
     }
     return true;
   });

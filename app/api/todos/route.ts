@@ -9,6 +9,7 @@ import {
   deleteTodo,
   TodoValidationError,
   TodoNotFoundError,
+  type Tag,
 } from "@/lib/todo-store";
 
 const log = createLogger("api/todos");
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
       title: body.title as string,
       description,
       deadline: body.deadline as number | undefined,
-      tags: Array.isArray(body.tags) ? (body.tags as string[]) : undefined,
+      tags: Array.isArray(body.tags) ? (body.tags as (Tag | string)[]) : undefined,
     });
     log.info("todo created", { id: todo.id, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ todo });
@@ -73,7 +74,7 @@ export async function PATCH(req: Request) {
       tags: body.tags === null
         ? null
         : Array.isArray(body.tags)
-          ? (body.tags as string[])
+          ? (body.tags as (Tag | string)[])
           : undefined,
     });
     log.info("todo updated", { id: todo.id, durationMs: elapsedMs(startedAt) });

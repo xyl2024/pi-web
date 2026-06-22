@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { useI18n, type Locale } from "@/hooks/useI18n";
-import { useTodos, type Todo } from "@/hooks/useTodos";
+import { useTodos, type Tag, type Todo } from "@/hooks/useTodos";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
@@ -76,21 +76,20 @@ const MAX_TAG_LENGTH = 50;
 
 /**
  * Aggregate every tag used across the visible todos, deduped case-insensitively
- * (preserving first-seen casing) and sorted case-insensitively. Used to power
- * the autocomplete suggestions inside TagChips and the filter popover.
+ * (preserving first-seen casing + color) and sorted case-insensitively. Used to
+ * power the autocomplete suggestions inside TagChips and the filter popover.
  */
-function aggregateTags(todos: Todo[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
+function aggregateTags(todos: Todo[]): Tag[] {
+  const seen = new Map<string, Tag>();
   for (const t of todos) {
     for (const tag of t.tags) {
-      const key = tag.toLowerCase();
+      const key = tag.name.toLowerCase();
       if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(tag);
+      seen.set(key, tag);
     }
   }
-  out.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  const out = [...seen.values()];
+  out.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   return out;
 }
 
@@ -207,7 +206,7 @@ function CalendarIcon({ size = 11 }: { size?: number }) {
 
 export function TodoPanel() {
   const { t } = useI18n();
-  const { todos, loading, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo, renameTag, deleteTag } = useTodos();
+  const { todos, loading, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo, renameTag, deleteTag, setTagColor } = useTodos();
   const confirm = useConfirm();
   const toast = useToast();
   const [viewFilters, setViewFilters] = useState<Filters>(DEFAULT_FILTERS);
@@ -262,7 +261,7 @@ export function TodoPanel() {
     for (const todo of todos) {
       const seen = new Set<string>();
       for (const tag of todo.tags) {
-        const key = tag.toLowerCase();
+        const key = tag.name.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
         map[key] = (map[key] ?? 0) + 1;
@@ -316,7 +315,7 @@ export function TodoPanel() {
       })
       .filter((x) => {
         if (!wantedTags) return true;
-        return x.tags.some((t) => wantedTags.has(t.toLowerCase()));
+        return x.tags.some((t) => wantedTags.has(t.name.toLowerCase()));
       })
       .sort((a, b) => {
         if (viewFilters.status === "all" && a.done !== b.done) {
@@ -331,7 +330,13 @@ export function TodoPanel() {
   const handleCreate = async (input: { title: string; tags?: string[] }): Promise<boolean> => {
     const trimmed = input.title.trim();
     if (trimmed.length === 0) return false;
-    const todo = await addTodo(trimmed, { tags: input.tags });
+    // Resolve tag names (string[]) to Tag[] using the current suggestions so
+    // a typed `#work` inherits the global color of an existing tag "work".
+    const tags: Tag[] | undefined = input.tags?.map((name) => {
+      const existing = tagSuggestions.find((s) => s.name.toLowerCase() === name.toLowerCase());
+      return { name, color: existing?.color };
+    });
+    const todo = await addTodo(trimmed, { tags });
     if (todo) {
       // Make the new todo visible — matches the legacy DraftRow flow. Also
       // clear the deadline preset since new todos default to today and would
@@ -356,6 +361,13 @@ export function TodoPanel() {
   // the local list there; here we just surface the success toast and (for
   // delete) scrub the tag out of the active filter so it doesn't silently
   // become a no-op filter.
+  const handleSetTagColor = async (tag: string, color: string | null) => {
+    await setTagColor(tag, color);
+    // Success/error toast is surfaced by the context method itself; no further
+    // UI scrub needed since the refresh() inside setTagColor pulls the new
+    // color into every chip.
+  };
+
   const handleRenameTag = async (from: string, to: string) => {
     const result = await renameTag(from, to);
     if (result) {
@@ -403,6 +415,7 @@ export function TodoPanel() {
         tagCounts={tagCounts}
         onRenameTag={handleRenameTag}
         onDeleteTag={handleDeleteTag}
+        onSetTagColor={handleSetTagColor}
         onRefresh={refresh}
         refreshing={loading}
       />
@@ -447,6 +460,7 @@ function FilterBar({
   tagCounts,
   onRenameTag,
   onDeleteTag,
+  onSetTagColor,
   onRefresh,
   refreshing,
 }: {
@@ -458,10 +472,11 @@ function FilterBar({
   onCreate: (input: { title: string; tags?: string[] }) => Promise<boolean>;
   searchTerm: string;
   onSearchChange: (v: string) => void;
-  tagSuggestions: string[];
+  tagSuggestions: Tag[];
   tagCounts: Record<string, number>;
   onRenameTag: (from: string, to: string) => Promise<void>;
   onDeleteTag: (tag: string) => Promise<void>;
+  onSetTagColor: (tag: string, color: string | null) => Promise<void>;
   onRefresh: () => void;
   refreshing: boolean;
 }) {
@@ -601,6 +616,7 @@ function FilterBar({
             tagCounts={tagCounts}
             onRename={onRenameTag}
             onDelete={onDeleteTag}
+            onSetColor={onSetTagColor}
           />
         )}
       </div>
@@ -646,7 +662,7 @@ function CreateTodoInput({
   tagSuggestions,
 }: {
   onCreate: (input: { title: string; tags?: string[] }) => Promise<boolean>;
-  tagSuggestions: string[];
+  tagSuggestions: Tag[];
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -668,13 +684,13 @@ function CreateTodoInput({
   // create row is only shown when the query is non-empty and doesn't already
   // match an existing tag case-insensitively.
   const dropdownItems = useMemo<
-    Array<{ kind: "existing"; tag: string } | { kind: "create"; tag: string }>
+    Array<{ kind: "existing"; tag: string; color?: string } | { kind: "create"; tag: string }>
   >(() => {
     if (!activeToken) return [];
     const q = activeToken.query.toLowerCase();
     const existing = tagSuggestions
-      .filter((tg) => tg.toLowerCase().startsWith(q))
-      .map((tag) => ({ kind: "existing" as const, tag }));
+      .filter((tg) => tg.name.toLowerCase().startsWith(q))
+      .map((tag) => ({ kind: "existing" as const, tag: tag.name, color: tag.color }));
     if (activeToken.query.length === 0) return existing;
     const hasExact = existing.some((it) => it.tag.toLowerCase() === q);
     if (hasExact) return existing;
@@ -849,7 +865,7 @@ function TagPickerPopover({
   onSelect,
   onMouseDownOutside,
 }: {
-  items: Array<{ kind: "existing" | "create"; tag: string }>;
+  items: Array<{ kind: "existing" | "create"; tag: string; color?: string }>;
   activeIndex: number;
   onHover: (index: number) => void;
   onSelect: (index: number) => void;
@@ -1050,7 +1066,7 @@ function FilterPopover({
   filters: Filters;
   onChange: (next: Filters) => void;
   onClose: () => void;
-  tagSuggestions: string[];
+  tagSuggestions: Tag[];
 }) {
   const { t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
@@ -1253,14 +1269,14 @@ function FilterPopover({
         ) : (
           <div role="group" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
             {tagSuggestions.map((tag) => {
-              const checked = filters.tags.some((t) => t.toLowerCase() === tag.toLowerCase());
+              const checked = filters.tags.some((t) => t.toLowerCase() === tag.name.toLowerCase());
               return (
                 <button
-                  key={tag}
+                  key={tag.name}
                   type="button"
                   role="checkbox"
                   aria-checked={checked}
-                  onClick={() => toggleTag(tag)}
+                  onClick={() => toggleTag(tag.name)}
                   style={{
                     display: "flex", alignItems: "center", gap: 6,
                     padding: "4px 8px",
@@ -1291,7 +1307,16 @@ function FilterPopover({
                       </svg>
                     )}
                   </span>
-                  {tag}
+                  {tag.color && (
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 6, height: 6, borderRadius: "50%",
+                        background: tag.color, flexShrink: 0,
+                      }}
+                    />
+                  )}
+                  {tag.name}
                 </button>
               );
             })}
@@ -1513,12 +1538,14 @@ function TagManagerPopover({
   tagCounts,
   onRename,
   onDelete,
+  onSetColor,
 }: {
   onClose: () => void;
-  tagSuggestions: string[];
+  tagSuggestions: Tag[];
   tagCounts: Record<string, number>;
   onRename: (from: string, to: string) => Promise<void>;
   onDelete: (tag: string) => Promise<void>;
+  onSetColor: (tag: string, color: string | null) => Promise<void>;
 }) {
   const { t } = useI18n();
   const confirm = useConfirm();
@@ -1526,6 +1553,7 @@ function TagManagerPopover({
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [colorPickerTag, setColorPickerTag] = useState<string | null>(null);
 
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
@@ -1535,6 +1563,13 @@ function TagManagerPopover({
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // Close the picker first if it's open; only close the manager once
+        // the picker is gone. Keeps Escape focused on the innermost layer.
+        if (colorPickerTag) {
+          e.preventDefault();
+          setColorPickerTag(null);
+          return;
+        }
         e.preventDefault();
         onClose();
       }
@@ -1545,7 +1580,7 @@ function TagManagerPopover({
       document.removeEventListener("mousedown", onMouseDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [onClose]);
+  }, [onClose, colorPickerTag]);
 
   const startRename = (tag: string) => {
     setEditing(tag);
@@ -1620,12 +1655,12 @@ function TagManagerPopover({
       )}
       <div role="group" style={{ display: "flex", flexDirection: "column", gap: 1, maxHeight: 240, overflowY: "auto" }}>
         {tagSuggestions.map((tag) => {
-          const count = tagCounts[tag.toLowerCase()] ?? 0;
-          const isEditing = editing === tag;
+          const count = tagCounts[tag.name.toLowerCase()] ?? 0;
+          const isEditing = editing === tag.name;
           if (isEditing) {
             return (
               <div
-                key={tag}
+                key={tag.name}
                 style={{
                   display: "flex", alignItems: "center", gap: 4,
                   padding: "2px 6px",
@@ -1691,17 +1726,51 @@ function TagManagerPopover({
           }
           return (
             <div
-              key={tag}
+              key={tag.name}
               style={{
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "3px 8px",
                 fontSize: 11,
                 borderRadius: 4,
                 fontFamily: "inherit",
+                position: "relative",
               }}
             >
+              <button
+                type="button"
+                onClick={() => setColorPickerTag((cur) => cur === tag.name ? null : tag.name)}
+                aria-label={t("Tag color")}
+                title={tag.color ?? t("Tag color")}
+                style={{
+                  width: 14, height: 14, padding: 0, flexShrink: 0,
+                  border: "1px solid var(--border)",
+                  borderRadius: 3,
+                  background: tag.color ?? "transparent",
+                  cursor: "pointer",
+                  position: "relative",
+                }}
+              >
+                {!tag.color && (
+                  // Empty state — a small plus to hint the swatch is clickable.
+                  <span
+                    aria-hidden
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "var(--text-dim)",
+                      fontSize: 10,
+                      lineHeight: 1,
+                    }}
+                  >
+                    +
+                  </span>
+                )}
+              </button>
               <span
-                title={tag}
+                title={tag.name}
                 style={{
                   flex: 1, minWidth: 0,
                   overflow: "hidden",
@@ -1710,13 +1779,13 @@ function TagManagerPopover({
                   color: "var(--text)",
                 }}
               >
-                {truncateTag(tag)}
+                {truncateTag(tag.name)}
               </span>
               <span style={{ color: "var(--text-dim)", fontSize: 10, flexShrink: 0 }}>
                 · {count}
               </span>
               <button
-                onClick={() => startRename(tag)}
+                onClick={() => startRename(tag.name)}
                 disabled={busy}
                 style={{
                   padding: "0 4px", fontSize: 10,
@@ -1732,7 +1801,7 @@ function TagManagerPopover({
                 {t("Rename tag")}
               </button>
               <button
-                onClick={() => handleDelete(tag)}
+                onClick={() => handleDelete(tag.name)}
                 disabled={busy}
                 style={{
                   padding: "0 4px", fontSize: 10,
@@ -1747,10 +1816,154 @@ function TagManagerPopover({
               >
                 {t("Delete tag")}
               </button>
+              {colorPickerTag === tag.name && (
+                <TagColorPicker
+                  value={tag.color ?? null}
+                  onChange={async (next) => {
+                    setBusy(true);
+                    try {
+                      await onSetColor(tag.name, next);
+                      setColorPickerTag(null);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                />
+              )}
             </div>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// 8 carefully-chosen preset colors. Red/Orange/Yellow/Green/Teal/Blue/Purple/Pink —
+// covers the common "Trello / Linear / GitHub" labels palette without overwhelming
+// the picker. The 9th slot hosts the native color picker for anything custom.
+const TAG_COLOR_PRESETS = [
+  "#ef4444", // red
+  "#f97316", // orange
+  "#eab308", // yellow
+  "#22c55e", // green
+  "#14b8a6", // teal
+  "#3b82f6", // blue
+  "#a855f7", // purple
+  "#ec4899", // pink
+] as const;
+
+/**
+ * Small popover anchored to a tag-management row's color swatch button. Lives
+ * inside the manager popover's DOM tree, so the manager's click-outside handler
+ * treats clicks here as "inside" and won't close the manager. The picker has
+ * its own Escape handling via the manager's keydown listener (which checks
+ * `colorPickerTag` first).
+ */
+function TagColorPicker({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (next: string | null) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div
+      role="dialog"
+      aria-label={t("Tag color")}
+      style={{
+        position: "absolute",
+        top: "calc(100% + 2px)",
+        right: 0,
+        zIndex: 11,
+        padding: 6,
+        background: "var(--bg-panel)",
+        border: "1px solid var(--border)",
+        borderRadius: 6,
+        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.25)",
+      }}
+      // Stop mousedown bubbling so the manager's outside-click doesn't fire.
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div style={{ fontSize: 10, color: "var(--text-dim)", padding: "0 2px 4px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        {t("Tag color")}
+      </div>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(4, 1fr)",
+        gap: 4,
+      }}>
+        {TAG_COLOR_PRESETS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            aria-label={c}
+            onClick={() => onChange(c)}
+            style={{
+              width: 18, height: 18, padding: 0,
+              border: value === c ? "2px solid var(--accent)" : "1px solid var(--border)",
+              borderRadius: 3,
+              background: c,
+              cursor: "pointer",
+            }}
+          />
+        ))}
+        <label
+          aria-label={t("Custom color")}
+          title={t("Custom color")}
+          style={{
+            width: 18, height: 18,
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            border: "1px dashed var(--border)",
+            borderRadius: 3,
+            cursor: "pointer",
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          <input
+            type="color"
+            value={value ?? "#000000"}
+            onChange={(e) => onChange(e.target.value)}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              border: "none",
+              padding: 0,
+              background: "transparent",
+              cursor: "pointer",
+              opacity: 0,
+            }}
+          />
+          <span
+            aria-hidden
+            style={{ color: "var(--text-dim)", fontSize: 10, lineHeight: 1, pointerEvents: "none" }}
+          >
+            ⋯
+          </span>
+        </label>
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        disabled={value === null}
+        style={{
+          marginTop: 6,
+          width: "100%",
+          padding: "3px 6px",
+          fontSize: 10,
+          background: "transparent",
+          border: "1px solid var(--border)",
+          borderRadius: 3,
+          color: value === null ? "var(--text-dim)" : "var(--text-muted)",
+          cursor: value === null ? "default" : "pointer",
+          fontFamily: "inherit",
+        }}
+      >
+        {t("No color")}
+      </button>
     </div>
   );
 }
@@ -1762,10 +1975,10 @@ function TagChips({
   onChange,
   placeholder,
 }: {
-  tags: string[];
+  tags: Tag[];
   editable: boolean;
-  suggestions?: string[];
-  onChange?: (next: string[]) => void;
+  suggestions?: Tag[];
+  onChange?: (next: Tag[]) => void;
   placeholder?: string;
 }) {
   const { t } = useI18n();
@@ -1785,11 +1998,14 @@ function TagChips({
       return false;
     }
     const key = trimmed.toLowerCase();
-    if (tags.some((tg) => tg.toLowerCase() === key)) {
+    if (tags.some((tg) => tg.name.toLowerCase() === key)) {
       toast.show({ kind: "error", message: t("Tag already added") });
       return false;
     }
-    onChange?.([...tags, trimmed]);
+    // Inherit the color from the suggestions catalog when the user picks or
+    // types a tag that already exists; brand-new tags start uncolored.
+    const existing = suggestions?.find((s) => s.name.toLowerCase() === key);
+    onChange?.([...tags, { name: trimmed, color: existing?.color }]);
     return true;
   };
 
@@ -1823,8 +2039,8 @@ function TagChips({
   const termKey = draft.trim().toLowerCase();
   const visibleSuggestions = focused && suggestions
     ? suggestions.filter((s) => {
-        const k = s.toLowerCase();
-        if (tags.some((tg) => tg.toLowerCase() === k)) return false;
+        const k = s.name.toLowerCase();
+        if (tags.some((tg) => tg.name.toLowerCase() === k)) return false;
         if (termKey && !k.includes(termKey)) return false;
         return true;
       }).slice(0, 8)
@@ -1835,9 +2051,9 @@ function TagChips({
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
         {tags.map((tg, i) => (
           <span
-            key={`${tg}-${i}`}
+            key={`${tg.name}-${i}`}
             style={{
-              display: "inline-flex", alignItems: "center", gap: 2,
+              display: "inline-flex", alignItems: "center", gap: 4,
               padding: "1px 4px 1px 8px",
               fontSize: 11,
               background: "var(--bg-hover)",
@@ -1847,7 +2063,16 @@ function TagChips({
               lineHeight: 1.5,
             }}
           >
-            {tg}
+            {tg.color && (
+              <span
+                aria-hidden
+                style={{
+                  width: 6, height: 6, borderRadius: "50%",
+                  background: tg.color, flexShrink: 0,
+                }}
+              />
+            )}
+            {tg.name}
             {editable && (
               <button
                 type="button"
@@ -1918,11 +2143,11 @@ function TagChips({
         >
           {visibleSuggestions.map((s) => (
             <button
-              key={s}
+              key={s.name}
               type="button"
               // mousedown (not click) so the input's blur doesn't fire first
               // and wipe the draft before our handler runs.
-              onMouseDown={(e) => { e.preventDefault(); if (tryAdd(s)) setDraft(""); }}
+              onMouseDown={(e) => { e.preventDefault(); if (tryAdd(s.name)) setDraft(""); }}
               style={{
                 padding: "3px 8px",
                 fontSize: 11,
@@ -1933,11 +2158,21 @@ function TagChips({
                 cursor: "pointer",
                 color: "var(--text-muted)",
                 fontFamily: "inherit",
+                display: "flex", alignItems: "center", gap: 6,
               }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
             >
-              {s}
+              {s.color && (
+                <span
+                  aria-hidden
+                  style={{
+                    width: 6, height: 6, borderRadius: "50%",
+                    background: s.color, flexShrink: 0,
+                  }}
+                />
+              )}
+              {s.name}
             </button>
           ))}
         </div>
@@ -1957,11 +2192,11 @@ function TodoItem({
 }: {
   todo: Todo;
   onToggleDone: () => void;
-  onUpdate: (patch: { title?: string; description?: string; done?: boolean; deadline?: number; tags?: string[] }) => void;
+  onUpdate: (patch: { title?: string; description?: string; done?: boolean; deadline?: number; tags?: Tag[] }) => void;
   onDelete: () => void;
   onExport: () => Promise<void>;
   searchTerm: string;
-  tagSuggestions: string[];
+  tagSuggestions: Tag[];
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -2049,9 +2284,14 @@ function TodoItem({
     setEditingDesc(false);
   };
 
-  const commitTags = (next: string[]) => {
+  const commitTags = (next: Tag[]) => {
+    // Compare by (name, color) per index. Identity (`===`) would always be
+    // false since `next` is built fresh inside TagChips.tryAdd.
     const same = next.length === todo.tags.length
-      && next.every((t, i) => t === todo.tags[i]);
+      && next.every((t, i) => {
+        const cur = todo.tags[i];
+        return !!cur && cur.name === t.name && cur.color === t.color;
+      });
     if (!same) onUpdate({ tags: next });
   };
 

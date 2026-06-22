@@ -88,10 +88,23 @@ export function getDb(): Database.Database {
   db.pragma("synchronous = NORMAL");
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA);
+  ensureTagColorColumn(db);
 
   globalThis.__piTodosDb = db;
   migrateFromJsonIfNeeded(db, dbPath);
   return db;
+}
+
+/**
+ * One-shot column addition for `todo_tags.color`. The PRAGMA check makes this
+ * safe to run on every `getDb()` call — it's a no-op once the column exists.
+ * Adding the column is non-destructive: existing rows simply read back with
+ * `color = NULL`, which the UI treats as "no color".
+ */
+function ensureTagColorColumn(db: Database.Database): void {
+  const cols = db.prepare("PRAGMA table_info(todo_tags)").all() as { name: string }[];
+  if (cols.some((c) => c.name === "color")) return;
+  db.exec("ALTER TABLE todo_tags ADD COLUMN color TEXT");
 }
 
 /**

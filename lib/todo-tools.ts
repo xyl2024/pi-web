@@ -61,7 +61,7 @@ function fmtDate(epochMs?: number): string {
 function fmtTodoLine(t: Todo): string {
   const check = t.done ? "[x]" : "[ ]";
   const deadline = t.deadline !== undefined ? `  (due ${fmtDate(t.deadline)})` : "";
-  const tags = t.tags.length > 0 ? `  (tags: ${t.tags.join(", ")})` : "";
+  const tags = t.tags.length > 0 ? `  (tags: ${t.tags.map((tg) => tg.name).join(", ")})` : "";
   return `${check} ${t.title}${deadline}${tags}  [id=${t.id}]`;
 }
 

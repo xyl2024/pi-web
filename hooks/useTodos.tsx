@@ -6,6 +6,11 @@ import DOMPurify from "isomorphic-dompurify";
 import { useToast } from "@/components/Toast";
 import { useI18n } from "./useI18n";
 
+export interface Tag {
+  name: string;
+  color?: string;
+}
+
 export interface Todo {
   id: string;
   title: string;
@@ -14,7 +19,7 @@ export interface Todo {
   createdAt: number;
   completedAt?: number;
   deadline?: number;
-  tags: string[];
+  tags: Tag[];
 }
 
 export type TodoPatch = Partial<Pick<Todo, "title" | "description" | "done" | "deadline" | "tags">>;
@@ -24,13 +29,14 @@ interface TodoContextValue {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  addTodo: (title: string, opts?: { description?: string; deadline?: number; tags?: string[] }) => Promise<Todo | null>;
+  addTodo: (title: string, opts?: { description?: string; deadline?: number; tags?: Tag[] }) => Promise<Todo | null>;
   updateTodo: (id: string, patch: TodoPatch) => Promise<void>;
   deleteTodo: (id: string) => Promise<void>;
   toggleDone: (id: string) => Promise<void>;
   exportTodo: (id: string) => Promise<void>;
   renameTag: (from: string, to: string) => Promise<{ tag: string; affected: number } | null>;
   deleteTag: (tag: string) => Promise<{ tag: string; affected: number } | null>;
+  setTagColor: (tag: string, color: string | null) => Promise<{ tag: string; color: string | null; affected: number } | null>;
 }
 
 const TodoContext = createContext<TodoContextValue | null>(null);
@@ -117,7 +123,7 @@ export function TodoProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
-  const addTodo = useCallback(async (title: string, opts?: { description?: string; deadline?: number; tags?: string[] }): Promise<Todo | null> => {
+  const addTodo = useCallback(async (title: string, opts?: { description?: string; deadline?: number; tags?: Tag[] }): Promise<Todo | null> => {
     const trimmed = title.trim();
     if (trimmed.length === 0) return null;
     const description = opts?.description;
@@ -313,9 +319,30 @@ export function TodoProvider({ children }: { children: ReactNode }) {
     }
   }, [toast, t, refresh]);
 
+  const setTagColor = useCallback(async (tag: string, color: string | null) => {
+    try {
+      const res = await fetch("/api/tags/color", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag, color }),
+      });
+      if (!res.ok) {
+        const { error } = (await res.json().catch(() => ({ error: "" }))) as { error?: string };
+        throw new Error(error || `status ${res.status}`);
+      }
+      const data = (await res.json()) as { tag: string; color: string | null; affected: number };
+      toast.show({ kind: "success", message: t("Tag color updated") });
+      await refresh();
+      return data;
+    } catch (e) {
+      toast.show({ kind: "error", message: t("Failed to set tag color") + ": " + String(e) });
+      return null;
+    }
+  }, [toast, t, refresh]);
+
   const value = useMemo<TodoContextValue>(() => ({
-    todos, loading, error, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo, renameTag, deleteTag,
-  }), [todos, loading, error, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo, renameTag, deleteTag]);
+    todos, loading, error, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo, renameTag, deleteTag, setTagColor,
+  }), [todos, loading, error, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo, renameTag, deleteTag, setTagColor]);
 
   return <TodoContext.Provider value={value}>{children}</TodoContext.Provider>;
 }
