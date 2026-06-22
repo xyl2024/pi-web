@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarHeatmap, type CalendarHeatmapDatum } from "@goujon/react-calendar-heatmap";
 import "@goujon/calendar-heatmap/calendar-heatmap.css";
 import { useI18n } from "@/hooks/useI18n";
@@ -102,6 +102,23 @@ export function GithubHeatmap({ username }: Props) {
     [t, locale],
   );
 
+  // The package appends an SVG <title> per render to drive its `aria-label`,
+  // which the browser renders as a native hover tooltip ("Calendar heatmap").
+  // CSS `display:none` doesn't reliably suppress that tooltip, so we strip the
+  // <title> elements out of the DOM via a MutationObserver attached once on mount.
+  const chartHostRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const host = chartHostRef.current;
+    if (!host) return;
+    const stripTitles = () => {
+      for (const t of host.querySelectorAll("svg > title")) t.remove();
+    };
+    stripTitles();
+    const observer = new MutationObserver(stripTitles);
+    observer.observe(host, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
   const total = data?.total ?? 0;
 
   return (
@@ -128,20 +145,22 @@ export function GithubHeatmap({ username }: Props) {
         {data?.stale && <span style={{ marginLeft: 6 }}>· {t("stale")}</span>}
       </div>
 
-      <CalendarHeatmap
-        data={heatmapData}
-        width={HEATMAP_WIDTH}
-        fitWidth
-        cellPadding={3}
-        minCellSize={9}
-        maxCellSize={13}
-        weekStart={locale === "zh" ? "monday" : "sunday"}
-        colorRange={colorRange}
-        tooltipEnabled
-        legendEnabled={false}
-        formatters={{ tooltip: tooltipFormatter }}
-        labels={{ day: { enabled: false }, month: { enabled: true, padding: 22 } }}
-      />
+      <div ref={chartHostRef}>
+        <CalendarHeatmap
+          data={heatmapData}
+          width={HEATMAP_WIDTH}
+          fitWidth
+          cellPadding={3}
+          minCellSize={9}
+          maxCellSize={13}
+          weekStart={locale === "zh" ? "monday" : "sunday"}
+          colorRange={colorRange}
+          tooltipEnabled
+          legendEnabled={false}
+          formatters={{ tooltip: tooltipFormatter }}
+          labels={{ day: { enabled: false }, month: { enabled: true, padding: 22 } }}
+        />
+      </div>
 
       {error && (
         <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-dim)" }}>
