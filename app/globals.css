@@ -408,8 +408,19 @@ span.linenumber {
     position: relative;
     z-index: 5;
   }
-  .resize-handle:hover,
-  .resize-handle.dragging {
+  .resize-handle::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    transform: translateX(-50%);
+    background: var(--border);
+    transition: background 0.12s;
+  }
+  .resize-handle:hover::before,
+  .resize-handle.dragging::before {
     background: var(--accent);
   }
 }
