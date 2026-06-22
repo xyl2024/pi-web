@@ -1194,7 +1194,6 @@ export function AppShell() {
               scrollToEntryId={pendingScrollEntryId}
               onScrollComplete={() => setPendingScrollEntryId(null)}
               onNewSessionRequest={handleSlashNew}
-              onSelectSession={handleSelectSession}
             />
           ) : showPlaceholder ? (
             activeCwd ? (

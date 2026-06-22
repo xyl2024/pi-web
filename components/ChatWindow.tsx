@@ -6,7 +6,6 @@ import { AGENT_TODO_TOOL_NAME } from "@/lib/agent-todo-tool-types";
 import { MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { Tooltip } from "./Tooltip";
-import { SessionHeatmap } from "./SessionHeatmap";
 import { GithubHeatmap, GithubHeatmapPlaceholder } from "./GithubHeatmap";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { AgentTodoPanel } from "./AgentTodoPanel";
@@ -33,7 +32,6 @@ interface Props {
   /** Called after the scroll-to-entry navigation completes */
   onScrollComplete?: () => void;
   onNewSessionRequest?: () => void;
-  onSelectSession?: (session: SessionInfo) => void;
 }
 
 function phaseLabel(phase: AgentPhase, t: ReturnType<typeof useI18n>["t"]): string {
@@ -125,7 +123,7 @@ function Typewriter({ phrases }: { phrases: string[] }) {
   );
 }
 
-function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest, onSelectSession }: Props) {
+function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest }: Props) {
   const { locale, t } = useI18n();
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
 
@@ -527,9 +525,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       {isEmptyNew ? (
         <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-8">
           <div className="w-full max-w-[820px]">
-            {newSessionCwd && (
-              <SessionHeatmap cwd={newSessionCwd} onOpenSession={onSelectSession} />
-            )}
             {newSessionCwd && (
               githubUsername
                 ? <GithubHeatmap username={githubUsername} />
