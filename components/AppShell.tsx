@@ -10,9 +10,11 @@ import { TabBar, type Tab } from "./TabBar";
 import { TodoPanel } from "./TodoPanel";
 import { PlaywrightDashboardPanel } from "./PlaywrightDashboardPanel";
 import { CollectionPanel } from "./CollectionPanel";
+import { TranslatePanel } from "./TranslatePanel";
 
 const TODO_TAB_ID = "todo:global";
 const FAVORITES_TAB_ID = "favorites:global";
+const TRANSLATE_TAB_ID = "translate:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -507,6 +509,16 @@ export function AppShell() {
       return [{ kind: "favorites", id: FAVORITES_TAB_ID, label: t("Favorites") }, ...prev];
     });
     setActiveFileTabId(FAVORITES_TAB_ID);
+    setRightPanelState("normal");
+  }, [t]);
+
+  // Open the translate tab — same pattern as todos / favorites.
+  const handleOpenTranslateTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((t) => t.kind === "translate")) return prev;
+      return [{ kind: "translate", id: TRANSLATE_TAB_ID, label: t("Translate") }, ...prev];
+    });
+    setActiveFileTabId(TRANSLATE_TAB_ID);
     setRightPanelState("normal");
   }, [t]);
 
@@ -1231,6 +1243,8 @@ export function AppShell() {
               onSelectSession={handleSelectSession}
               onToggleFavorite={toggleSessionFavorite}
             />
+          ) : activeFileTab?.kind === "translate" ? (
+            <TranslatePanel />
           ) : activeFileTab?.kind === "file" ? (
             <FileViewer filePath={activeFileTab.filePath} cwd={activeCwd ?? undefined} />
           ) : (
@@ -1305,6 +1319,30 @@ export function AppShell() {
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill={activeFileTab?.kind === "favorites" ? "var(--accent)" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+        </button>
+        </Tooltip>
+        {/* Open translate — always visible */}
+        <Tooltip content={t("Open translate")}>
+        <button
+          onClick={handleOpenTranslateTab}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 36, height: 36, padding: 0,
+            background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+            color: activeFileTab?.kind === "translate" ? "var(--text)" : "var(--text-muted)",
+            cursor: "pointer", transition: "color 0.12s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "translate" ? "var(--text)" : "var(--text-muted)"; }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 5h12" />
+            <path d="M9 3v2" />
+            <path d="M5 5c0 4 3 7 6 9" />
+            <path d="M11 5c0 3-2 6-6 8" />
+            <path d="M14 21l5-12 5 12" />
+            <path d="M15.5 17h7" />
           </svg>
         </button>
         </Tooltip>

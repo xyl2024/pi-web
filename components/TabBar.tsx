@@ -8,7 +8,8 @@ import { Tooltip } from "./Tooltip";
 export type Tab =
   | { kind: "file"; id: string; label: string; filePath: string }
   | { kind: "todo"; id: string; label: string }
-  | { kind: "favorites"; id: string; label: string };
+  | { kind: "favorites"; id: string; label: string }
+  | { kind: "translate"; id: string; label: string };
 
 interface Props {
   tabs: Tab[];
@@ -42,6 +43,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
             <TodoTabIcon />
           ) : tab.kind === "favorites" ? (
             <FavoritesTabIcon />
+          ) : tab.kind === "translate" ? (
+            <TranslateTabIcon />
           ) : (
             getFileIcon(tab.label, 13)
           );
@@ -139,6 +142,19 @@ function FavoritesTabIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
+function TranslateTabIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 5h12" />
+      <path d="M9 3v2" />
+      <path d="M5 5c0 4 3 7 6 9" />
+      <path d="M11 5c0 3-2 6-6 8" />
+      <path d="M14 21l5-12 5 12" />
+      <path d="M15.5 17h7" />
     </svg>
   );
 }

@@ -585,6 +585,17 @@ const ZH_TRANSLATIONS = {
   "Hide dashboard": "隐藏 Dashboard",
   "Dashboard": "Dashboard",
   "Browser": "浏览器",
+  // Translate panel (right-panel tab)
+  "Translate": "翻译",
+  "Open translate": "打开翻译",
+  "Translation input": "翻译输入",
+  "Translation output": "译文",
+  "Type text to translate…": "输入要翻译的文本…",
+  "Translated text will appear here": "翻译结果将显示在此处",
+  "Translating…": "正在翻译…",
+  "Translation failed": "翻译失败",
+  "Translator prompt": "翻译器提示词",
+  "Reset to default": "恢复默认",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

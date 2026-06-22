@@ -1,0 +1,636 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "@/hooks/useI18n";
+import { useToast } from "./Toast";
+import { Tooltip } from "./Tooltip";
+import { ProviderIcon } from "./ProviderIcon";
+import { DEFAULT_TRANSLATE_PROMPT, MAX_TRANSLATE_PROMPT_CHARS } from "@/lib/translate";
+
+const PROMPT_STORAGE_KEY = "pi-translate-prompt";
+
+interface ModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+}
+
+interface ModelOption {
+  provider: string;
+  modelId: string;
+  name: string;
+}
+
+interface ModelsApiResponse {
+  modelList?: ModelInfo[];
+  models?: Record<string, string>;
+  defaultModel?: { provider: string; modelId: string } | null;
+}
+
+const DEBOUNCE_MS = 400;
+
+export function TranslatePanel() {
+  const { t } = useI18n();
+  const toast = useToast();
+
+  const [modelList, setModelList] = useState<ModelInfo[]>([]);
+  const [model, setModel] = useState<{ provider: string; modelId: string } | null>(null);
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [modelDropdownRect, setModelDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  const [input, setInput] = useState("");
+  const [output, setOutput] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const outputRef = useRef<HTMLDivElement | null>(null);
+
+  // Custom translator prompt (null = use built-in default).
+  const [customPrompt, setCustomPrompt] = useState<string | null>(null);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [promptDraft, setPromptDraft] = useState(DEFAULT_TRANSLATE_PROMPT);
+  const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Load custom prompt from localStorage on mount.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PROMPT_STORAGE_KEY);
+      if (saved && saved.trim()) setCustomPrompt(saved);
+    } catch { /* localStorage unavailable — keep default */ }
+  }, []);
+
+  // When the editor opens, sync draft to the active prompt (custom or default).
+  useEffect(() => {
+    if (promptOpen) {
+      setPromptDraft(customPrompt ?? DEFAULT_TRANSLATE_PROMPT);
+      // Focus + auto-resize the textarea after the panel renders.
+      requestAnimationFrame(() => {
+        const ta = promptTextareaRef.current;
+        if (!ta) return;
+        ta.focus();
+        ta.style.height = "auto";
+        ta.style.height = `${Math.min(ta.scrollHeight, 280)}px`;
+      });
+    }
+  }, [promptOpen, customPrompt]);
+
+  // Load models on mount, pre-select the default.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/models");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as ModelsApiResponse;
+        if (cancelled) return;
+        setModelList(data.modelList ?? []);
+        if (data.defaultModel) setModel(data.defaultModel);
+        else if (data.modelList && data.modelList.length > 0) {
+          const first = data.modelList[0];
+          setModel({ provider: first.provider, modelId: first.id });
+        }
+      } catch (e) {
+        if (!cancelled) toast.show({ kind: "error", message: e instanceof Error ? e.message : t("Translation failed") });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [toast, t]);
+
+  // Close model dropdown on outside click.
+  useEffect(() => {
+    if (!modelDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      const tgt = e.target as Node;
+      if (dropdownRef.current?.contains(tgt)) return;
+      if (panelRef.current?.contains(tgt)) return;
+      setModelDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [modelDropdownOpen]);
+
+  // Auto-resize textarea as the user types.
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, 240)}px`;
+  }, [input]);
+
+  // Auto-scroll output to the bottom while streaming.
+  useEffect(() => {
+    const el = outputRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [output]);
+
+  // Abort any in-flight request + clear any pending debounce on unmount.
+  useEffect(() => () => {
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+    abortRef.current?.abort();
+  }, []);
+
+  const runTranslation = useCallback(async (text: string) => {
+    if (!model) return;
+    // Replace any in-flight request.
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setOutput("");
+    setError(null);
+    setIsStreaming(true);
+
+    // Send the custom prompt only if the user has saved one — otherwise the
+    // server falls back to the built-in default, keeping payloads small.
+    const body: { text: string; provider: string; modelId: string; systemPrompt?: string } = {
+      text,
+      provider: model.provider,
+      modelId: model.modelId,
+    };
+    if (customPrompt) body.systemPrompt = customPrompt;
+
+    try {
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+      if (!res.ok || !res.body) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status}${errText ? `: ${errText}` : ""}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const frame = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          const line = frame.split("\n").find((l) => l.startsWith("data: "));
+          if (!line) continue;
+          let payload: { type?: string; text?: string; message?: string };
+          try { payload = JSON.parse(line.slice(6)); } catch { continue; }
+          if (payload.type === "delta" && typeof payload.text === "string") {
+            setOutput((o) => o + payload.text!);
+          } else if (payload.type === "error") {
+            throw new Error(payload.message || t("Translation failed"));
+          }
+          // "done" → loop exits on next read returning done.
+        }
+      }
+    } catch (e) {
+      if ((e as { name?: string })?.name === "AbortError") return;
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      toast.show({ kind: "error", message: msg || t("Translation failed") });
+    } finally {
+      // Only reset if we're still the active controller — a newer
+      // translation may have taken over while we were unwinding.
+      if (abortRef.current === ctrl) {
+        abortRef.current = null;
+        setIsStreaming(false);
+      }
+    }
+  }, [model, customPrompt, toast, t]);
+
+  // Auto-translate: 400ms after the user stops typing (or model changes),
+  // fire a translation. Empty input aborts any in-flight and clears output.
+  useEffect(() => {
+    const trimmed = input.trim();
+    if (!trimmed) {
+      if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+      abortRef.current?.abort();
+      setOutput("");
+      setError(null);
+      return;
+    }
+    if (!model) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    abortRef.current?.abort();
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      void runTranslation(trimmed);
+    }, DEBOUNCE_MS);
+    return () => {
+      if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+    };
+  }, [input, model, runTranslation]);
+
+  const handleStop = useCallback(() => {
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+    abortRef.current?.abort();
+  }, []);
+
+  const handleClear = useCallback(() => {
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+    abortRef.current?.abort();
+    setInput("");
+    setOutput("");
+    setError(null);
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    if (!output) return;
+    try {
+      await navigator.clipboard.writeText(output);
+      toast.show({ kind: "success", message: t("Copied") });
+    } catch {
+      toast.show({ kind: "error", message: t("Translation failed") });
+    }
+  }, [output, toast, t]);
+
+  const handlePromptSave = useCallback(() => {
+    const trimmed = promptDraft.trim();
+    if (!trimmed) {
+      toast.show({ kind: "error", message: t("Translation failed") });
+      return;
+    }
+    if (trimmed.length > MAX_TRANSLATE_PROMPT_CHARS) {
+      toast.show({ kind: "error", message: t("Translation failed") });
+      return;
+    }
+    try {
+      localStorage.setItem(PROMPT_STORAGE_KEY, trimmed);
+      setCustomPrompt(trimmed);
+      setPromptOpen(false);
+    } catch {
+      toast.show({ kind: "error", message: t("Translation failed") });
+    }
+  }, [promptDraft, toast, t]);
+
+  const handlePromptReset = useCallback(() => {
+    try { localStorage.removeItem(PROMPT_STORAGE_KEY); } catch { /* ignore */ }
+    setCustomPrompt(null);
+    setPromptDraft(DEFAULT_TRANSLATE_PROMPT);
+    setPromptOpen(false);
+  }, []);
+
+  const handlePromptCancel = useCallback(() => {
+    setPromptDraft(customPrompt ?? DEFAULT_TRANSLATE_PROMPT);
+    setPromptOpen(false);
+  }, [customPrompt]);
+
+  // Auto-resize the prompt editor textarea as the user types.
+  useEffect(() => {
+    if (!promptOpen) return;
+    const ta = promptTextareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, 280)}px`;
+  }, [promptDraft, promptOpen]);
+
+  const modelOptions: ModelOption[] = useMemo(
+    () => modelList.map((m) => ({ provider: m.provider, modelId: m.id, name: m.name })),
+    [modelList],
+  );
+
+  const modelsByProvider = useMemo(() => {
+    const groups: { provider: string; options: ModelOption[] }[] = [];
+    for (const opt of modelOptions) {
+      const g = groups.find((x) => x.provider === opt.provider);
+      if (g) g.options.push(opt);
+      else groups.push({ provider: opt.provider, options: [opt] });
+    }
+    return groups;
+  }, [modelOptions]);
+
+  const currentName = useMemo(() => {
+    if (!model) return null;
+    return modelOptions.find((o) => o.provider === model.provider && o.modelId === model.modelId)?.name ?? model.modelId;
+  }, [model, modelOptions]);
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100%",
+      background: "var(--bg)",
+    }}>
+      {/* Top bar: model selector + copy + clear */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
+        borderBottom: "1px solid var(--border)", flexShrink: 0, position: "relative",
+      }}>
+        <div ref={dropdownRef} style={{ position: "relative" }}>
+          <button
+            onClick={(e) => {
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              setModelDropdownRect({ top: rect.top, left: rect.left, width: rect.width });
+              setModelDropdownOpen((v) => !v);
+            }}
+            disabled={isStreaming || !currentName}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "6px 10px", height: 28,
+              maxWidth: 240, overflow: "hidden",
+              background: modelDropdownOpen ? "var(--bg-hover)" : "var(--bg-panel)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              color: "var(--text-muted)",
+              cursor: isStreaming ? "not-allowed" : "pointer",
+              fontSize: 12,
+              opacity: isStreaming ? 0.5 : 1,
+            }}
+          >
+            <ProviderIcon id={model?.provider ?? ""} size={12} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {currentName ?? t("Model")}
+            </span>
+          </button>
+          {modelDropdownOpen && modelDropdownRect && (
+            <div ref={panelRef} style={{
+              position: "fixed",
+              top: modelDropdownRect.top + 32,
+              left: modelDropdownRect.left,
+              zIndex: 500,
+              background: "var(--bg)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+              width: "max-content",
+              minWidth: modelDropdownRect.width,
+              maxHeight: Math.max(120, Math.min(window.innerHeight - modelDropdownRect.top - 40, 360)),
+              overflowY: "auto",
+            }}>
+              {modelsByProvider.map((group, gi) => (
+                <div key={group.provider}>
+                  {modelsByProvider.length > 1 && (
+                    <div style={{
+                      padding: "6px 12px 4px",
+                      fontSize: 10, fontWeight: 600, color: "var(--text-dim)",
+                      textTransform: "uppercase", letterSpacing: "0.07em",
+                      borderTop: gi > 0 ? "1px solid var(--border)" : "none",
+                    }}>
+                      {group.provider}
+                    </div>
+                  )}
+                  {group.options.map((opt) => {
+                    const isActive = opt.modelId === model?.modelId && opt.provider === model?.provider;
+                    return (
+                      <button
+                        key={`${opt.provider}:${opt.modelId}`}
+                        onClick={() => {
+                          setModelDropdownOpen(false);
+                          if (!isActive) setModel({ provider: opt.provider, modelId: opt.modelId });
+                        }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 8,
+                          width: "100%", padding: "7px 12px",
+                          background: isActive ? "var(--bg-selected)" : "none",
+                          border: "none",
+                          color: isActive ? "var(--text)" : "var(--text-muted)",
+                          cursor: "pointer", fontSize: 12, textAlign: "left",
+                          fontWeight: isActive ? 600 : 400, whiteSpace: "nowrap",
+                        }}
+                        onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = isActive ? "var(--bg-selected)" : "none"; }}
+                      >
+                        {isActive
+                          ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="1.5 5 4 7.5 8.5 2.5" /></svg>
+                          : <span style={{ width: 10, flexShrink: 0 }} />}
+                        {opt.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={{ flex: 1 }} />
+        <Tooltip content={t("Translator prompt")}>
+          <button
+            onClick={() => setPromptOpen((v) => !v)}
+            aria-pressed={promptOpen}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              gap: 4, padding: "0 10px", height: 28,
+              background: promptOpen ? "var(--bg-hover)" : (customPrompt ? "var(--bg-selected)" : "var(--bg-panel)"),
+              color: promptOpen ? "var(--text)" : (customPrompt ? "var(--text)" : "var(--text-muted)"),
+              border: "1px solid var(--border)", borderRadius: 6,
+              cursor: "pointer", fontSize: 12,
+              fontWeight: customPrompt ? 600 : 400,
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="9" y1="13" x2="15" y2="13" />
+              <line x1="9" y1="17" x2="13" y2="17" />
+            </svg>
+            {t("Prompts")}
+          </button>
+        </Tooltip>
+        <Tooltip content={output ? "" : t("Clear")}>
+          <button
+            onClick={handleCopy}
+            disabled={!output}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              gap: 4, padding: "0 10px", height: 28,
+              background: "var(--bg-panel)", color: "var(--text-muted)",
+              border: "1px solid var(--border)", borderRadius: 6,
+              cursor: !output ? "not-allowed" : "pointer", fontSize: 12,
+              opacity: !output ? 0.5 : 1,
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            {t("Copy")}
+          </button>
+        </Tooltip>
+        <button
+          onClick={handleClear}
+          disabled={!input && !output}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            gap: 4, padding: "0 10px", height: 28,
+            background: "var(--bg-panel)", color: "var(--text-muted)",
+            border: "1px solid var(--border)", borderRadius: 6,
+            cursor: (!input && !output) ? "not-allowed" : "pointer", fontSize: 12,
+            opacity: (!input && !output) ? 0.5 : 1,
+          }}
+        >
+          {t("Clear")}
+        </button>
+      </div>
+
+      {/* Prompt editor — expands inline below the top bar when the Prompts button is active. */}
+      {promptOpen && (
+        <div style={{
+          padding: "8px 12px",
+          borderBottom: "1px solid var(--border)",
+          background: "var(--bg-panel)",
+          flexShrink: 0,
+          display: "flex", flexDirection: "column", gap: 6,
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            fontSize: 11, color: "var(--text-dim)",
+          }}>
+            <span>{t("Translator prompt")}</span>
+            <span style={{ color: promptDraft.length > MAX_TRANSLATE_PROMPT_CHARS ? "#ef4444" : "var(--text-dim)" }}>
+              {promptDraft.length} / {MAX_TRANSLATE_PROMPT_CHARS}
+            </span>
+          </div>
+          <textarea
+            ref={promptTextareaRef}
+            value={promptDraft}
+            onChange={(e) => setPromptDraft(e.target.value)}
+            placeholder={DEFAULT_TRANSLATE_PROMPT}
+            rows={4}
+            style={{
+              width: "100%", minHeight: 80, maxHeight: 280, resize: "none",
+              padding: "8px 10px",
+              background: "var(--bg)",
+              color: "var(--text)",
+              border: `1px solid ${promptDraft.length > MAX_TRANSLATE_PROMPT_CHARS ? "#ef4444" : "var(--border)"}`,
+              borderRadius: 6,
+              fontFamily: "var(--font-mono)",
+              fontSize: 12,
+              lineHeight: 1.5,
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button
+              onClick={handlePromptReset}
+              style={{
+                padding: "0 10px", height: 26,
+                background: "transparent", color: "var(--text-muted)",
+                border: "1px solid var(--border)", borderRadius: 6,
+                cursor: "pointer", fontSize: 11,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
+            >
+              {t("Reset to default")}
+            </button>
+            <div style={{ flex: 1 }} />
+            <button
+              onClick={handlePromptCancel}
+              style={{
+                padding: "0 12px", height: 26,
+                background: "transparent", color: "var(--text-muted)",
+                border: "1px solid var(--border)", borderRadius: 6,
+                cursor: "pointer", fontSize: 11,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
+            >
+              {t("Cancel")}
+            </button>
+            <button
+              onClick={handlePromptSave}
+              disabled={!promptDraft.trim() || promptDraft.length > MAX_TRANSLATE_PROMPT_CHARS}
+              style={{
+                padding: "0 14px", height: 26,
+                background: (!promptDraft.trim() || promptDraft.length > MAX_TRANSLATE_PROMPT_CHARS) ? "var(--bg-panel)" : "var(--accent)",
+                color: (!promptDraft.trim() || promptDraft.length > MAX_TRANSLATE_PROMPT_CHARS) ? "var(--text-dim)" : "var(--bg)",
+                border: "1px solid var(--border)", borderRadius: 6,
+                cursor: (!promptDraft.trim() || promptDraft.length > MAX_TRANSLATE_PROMPT_CHARS) ? "not-allowed" : "pointer",
+                fontSize: 11, fontWeight: 600,
+              }}
+            >
+              {t("Save")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Input area */}
+      <div style={{ padding: "10px 12px 6px", flexShrink: 0 }}>
+        <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 4 }}>
+          {t("Translation input")}
+        </div>
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={t("Type text to translate…")}
+          rows={3}
+          style={{
+            width: "100%", minHeight: 72, maxHeight: 240, resize: "none",
+            padding: "8px 10px",
+            background: "var(--bg-panel)",
+            color: "var(--text)",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            fontFamily: "var(--font-mono)",
+            fontSize: 12,
+            lineHeight: 1.5,
+            outline: "none",
+            boxSizing: "border-box",
+          }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+        />
+      </div>
+
+      {/* Output area */}
+      <div style={{ padding: "0 12px 12px", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          fontSize: 11, color: "var(--text-dim)", marginBottom: 4, minHeight: 16,
+        }}>
+          <span>{t("Translation output")}</span>
+          {isStreaming && (
+            <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--accent)" }}>
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor" style={{ animation: "pulse 1.2s infinite" }}>
+                <circle cx="5" cy="5" r="3" />
+              </svg>
+              <span>{t("Translating…")}</span>
+              <Tooltip content={t("Stop")}>
+                <button
+                  onClick={handleStop}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 18, height: 18, padding: 0,
+                    background: "transparent",
+                    border: "1px solid var(--border)",
+                    borderRadius: 4,
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.borderColor = "var(--text-muted)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.borderColor = "var(--border)"; }}
+                >
+                  <svg width="8" height="8" viewBox="0 0 10 10" fill="currentColor"><rect x="1" y="1" width="8" height="8" rx="1" /></svg>
+                </button>
+              </Tooltip>
+            </span>
+          )}
+        </div>
+        <div
+          ref={outputRef}
+          style={{
+            flex: 1, minHeight: 0, overflowY: "auto",
+            padding: "10px 12px",
+            background: "var(--bg-panel)",
+            color: error ? "#ef4444" : "var(--text)",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            fontSize: 13, lineHeight: 1.6,
+            whiteSpace: "pre-wrap", wordBreak: "break-word",
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          {error ? error : output || (
+            <span style={{ color: "var(--text-dim)" }}>{t("Translated text will appear here")}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
