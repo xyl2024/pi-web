@@ -118,7 +118,7 @@ export function TodoDescriptionView({
             alt={el.attribs?.alt ?? ""}
             resolveSrc={(s) => s}
             onImageClick={onImageClick}
-            maxWidth="100%"
+            maxWidth="200px"
           />
         );
       }
