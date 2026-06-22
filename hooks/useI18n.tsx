@@ -234,6 +234,14 @@ const ZH_TRANSLATIONS = {
   "Pin session": "置顶会话",
   "Unpin session": "取消置顶",
   "Pinned sessions": "已置顶会话",
+  "Favorite session": "收藏会话",
+  "Unfavorite session": "取消收藏",
+  "Favorites": "收藏夹",
+  "Open favorites": "打开收藏夹",
+  "Hide favorites": "关闭收藏夹",
+  "Failed to update favorite": "更新收藏失败",
+  "No favorites yet — click ☆ on any session to add it.":
+    "暂无收藏会话 — 点击会话上的 ☆ 即可收藏",
   // Tool call stats drawer
   "Tool call statistics": "工具调用统计",
   "Tool Calls": "工具调用",

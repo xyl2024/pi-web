@@ -7,7 +7,8 @@ import { Tooltip } from "./Tooltip";
 
 export type Tab =
   | { kind: "file"; id: string; label: string; filePath: string }
-  | { kind: "todo"; id: string; label: string };
+  | { kind: "todo"; id: string; label: string }
+  | { kind: "favorites"; id: string; label: string };
 
 interface Props {
   tabs: Tab[];
@@ -38,6 +39,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
         const icon =
           tab.kind === "todo" ? (
             <TodoTabIcon />
+          ) : tab.kind === "favorites" ? (
+            <FavoritesTabIcon />
           ) : (
             getFileIcon(tab.label, 13)
           );
@@ -123,6 +126,14 @@ function TodoTabIcon() {
     <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="2" width="12" height="12" rx="2" />
       <polyline points="5 8 7 10 11 6" />
+    </svg>
+  );
+}
+
+function FavoritesTabIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
     </svg>
   );
 }

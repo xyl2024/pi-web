@@ -9,8 +9,10 @@ import { FileViewer } from "./FileViewer";
 import { TabBar, type Tab } from "./TabBar";
 import { TodoPanel } from "./TodoPanel";
 import { PlaywrightDashboardPanel } from "./PlaywrightDashboardPanel";
+import { CollectionPanel } from "./CollectionPanel";
 
 const TODO_TAB_ID = "todo:global";
+const FAVORITES_TAB_ID = "favorites:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -21,6 +23,7 @@ import { BranchNavigator } from "./BranchNavigator";
 import { CommandPalette } from "./CommandPalette";
 import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
+import { useToast } from "./Toast";
 import type { SessionInfo, SessionSearchResult } from "@/lib/types";
 import type { ChatInputHandle } from "./ChatInput";
 import { sendAgentCommand } from "@/lib/agent-client";
@@ -53,6 +56,7 @@ export function AppShell() {
   const searchParams = useSearchParams();
   const { preset, setPreset } = useTheme();
   const { locale, toggleLocale, t } = useI18n();
+  const toast = useToast();
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   // When user clicks +, we only store the cwd — no fake session id
@@ -180,6 +184,36 @@ export function AppShell() {
   const [fileTabs, setFileTabs] = useState<Tab[]>([]);
   const [activeFileTabId, setActiveFileTabId] = useState<string | null>(null);
   const [rightPanelState, setRightPanelState] = useState<"closed" | "normal" | "expanded">("closed");
+
+  // Favorites — global list of session IDs, shared between the sidebar indicator
+  // and the right-panel CollectionPanel so the two views stay in sync.
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  useEffect(() => {
+    fetch("/api/favorites")
+      .then((r) => r.json())
+      .then((d: { sessionIds?: string[] }) => {
+        if (Array.isArray(d.sessionIds)) setFavoriteIds(d.sessionIds);
+      })
+      .catch(() => {});
+  }, []);
+  const toggleSessionFavorite = useCallback(async (sessionId: string) => {
+    const prev = favoriteIds;
+    const next = prev.includes(sessionId)
+      ? prev.filter((id) => id !== sessionId)
+      : [...prev, sessionId];
+    setFavoriteIds(next);
+    try {
+      const res = await fetch("/api/favorites", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionIds: next }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch {
+      setFavoriteIds(prev);
+      toast.show({ kind: "error", message: t("Failed to update favorite") });
+    }
+  }, [favoriteIds, t, toast]);
 
   // ── Drag-resize state ────────────────────────────────────────────
   const [leftWidth, setLeftWidth] = useState<number>(DEFAULT_LEFT_WIDTH);
@@ -477,6 +511,30 @@ export function AppShell() {
     }
   }, [fileTabs, activeFileTabId, t]);
 
+  // Toggle the favorites tab — same pattern as todos. If the favorites tab is
+  // already open, close it; otherwise append it to the tab strip and activate it.
+  const handleToggleFavoritesTab = useCallback(() => {
+    if (fileTabs.some((t) => t.kind === "favorites")) {
+      setFileTabs((prev) => prev.filter((t) => t.kind !== "favorites"));
+      setActiveFileTabId((cur) => {
+        if (cur !== FAVORITES_TAB_ID) return cur;
+        const remaining = fileTabs.filter((t) => t.kind !== "favorites");
+        if (remaining.length === 0) setRightPanelState("closed");
+        return remaining.length > 0 ? remaining[remaining.length - 1].id : null;
+      });
+    } else {
+      setFileTabs((prev) => {
+        if (prev.some((t) => t.kind === "favorites")) return prev;
+        return [
+          ...prev.filter((t) => t.id !== activeFileTabId),
+          { kind: "favorites", id: FAVORITES_TAB_ID, label: t("Favorites") },
+        ];
+      });
+      setActiveFileTabId(FAVORITES_TAB_ID);
+      setRightPanelState("normal");
+    }
+  }, [fileTabs, activeFileTabId, t]);
+
   const handleCloseFileTab = useCallback((tabId: string) => {
     setFileTabs((prev) => {
       const next = prev.filter((t) => t.id !== tabId);
@@ -520,6 +578,8 @@ export function AppShell() {
         onOpenSearch={() => setPaletteOpen(true)}
         onFileDeleted={handleFileDeleted}
         onOpenScheduledSession={handleOpenScheduledSession}
+        favoriteIds={favoriteIds}
+        onToggleFavorite={toggleSessionFavorite}
       />
       <div style={{ padding: "8px", flexShrink: 0, display: "flex", justifyContent: "space-between", gap: 4 }}>
         {([
@@ -1128,6 +1188,12 @@ export function AppShell() {
         <div style={{ flex: 1, overflow: "hidden" }}>
           {activeFileTab?.kind === "todo" ? (
             <TodoPanel />
+          ) : activeFileTab?.kind === "favorites" ? (
+            <CollectionPanel
+              favoriteIds={favoriteIds}
+              onSelectSession={handleSelectSession}
+              onToggleFavorite={toggleSessionFavorite}
+            />
           ) : activeFileTab?.kind === "file" ? (
             <FileViewer filePath={activeFileTab.filePath} cwd={activeCwd ?? undefined} />
           ) : (
@@ -1183,6 +1249,25 @@ export function AppShell() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="2" width="12" height="12" rx="2" />
             <polyline points="5 8 7 10 11 6" />
+          </svg>
+        </button>
+        </Tooltip>
+        {/* Show/hide favorites — always visible */}
+        <Tooltip content={activeFileTab?.kind === "favorites" ? t("Hide favorites") : t("Open favorites")}>
+        <button
+          onClick={handleToggleFavoritesTab}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 36, height: 36, padding: 0,
+            background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+            color: activeFileTab?.kind === "favorites" ? "var(--text)" : "var(--text-muted)",
+            cursor: "pointer", transition: "color 0.12s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "favorites" ? "var(--text)" : "var(--text-muted)"; }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill={activeFileTab?.kind === "favorites" ? "var(--accent)" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
         </button>
         </Tooltip>
