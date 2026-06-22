@@ -9,7 +9,8 @@ export type Tab =
   | { kind: "file"; id: string; label: string; filePath: string }
   | { kind: "todo"; id: string; label: string }
   | { kind: "favorites"; id: string; label: string }
-  | { kind: "translate"; id: string; label: string };
+  | { kind: "translate"; id: string; label: string }
+  | { kind: "toolCalls"; id: string; label: string };
 
 interface Props {
   tabs: Tab[];
@@ -45,6 +46,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
             <FavoritesTabIcon />
           ) : tab.kind === "translate" ? (
             <TranslateTabIcon />
+          ) : tab.kind === "toolCalls" ? (
+            <ToolCallsTabIcon />
           ) : (
             getFileIcon(tab.label, 13)
           );
@@ -155,6 +158,17 @@ function TranslateTabIcon() {
       <path d="M11 5c0 3-2 6-6 8" />
       <path d="M14 21l5-12 5 12" />
       <path d="M15.5 17h7" />
+    </svg>
+  );
+}
+
+function ToolCallsTabIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="2" y1="12" x2="2" y2="7" />
+      <line x1="6" y1="12" x2="6" y2="4" />
+      <line x1="10" y1="12" x2="10" y2="2" />
+      <line x1="0.5" y1="12.5" x2="13.5" y2="12.5" />
     </svg>
   );
 }

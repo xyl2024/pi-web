@@ -11,10 +11,13 @@ import { TodoPanel } from "./TodoPanel";
 import { PlaywrightDashboardPanel } from "./PlaywrightDashboardPanel";
 import { CollectionPanel } from "./CollectionPanel";
 import { TranslatePanel } from "./TranslatePanel";
+import { ToolCallStatsPanel } from "./ToolCallStatsPanel";
+import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 
 const TODO_TAB_ID = "todo:global";
 const FAVORITES_TAB_ID = "favorites:global";
 const TRANSLATE_TAB_ID = "translate:global";
+const TOOL_CALLS_TAB_ID = "toolCalls:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -521,6 +524,24 @@ export function AppShell() {
     setActiveFileTabId(TRANSLATE_TAB_ID);
     setRightPanelState("normal");
   }, [t]);
+
+  // Open the tool-calls tab. Toggles: clicking when it's already the active
+  // tab hides the right panel entirely; otherwise activate (or create) the
+  // tab. Mirrors the original drawer toggle behaviour.
+  const handleOpenToolCallsTab = useCallback(() => {
+    const alreadyActive = activeFileTabId === TOOL_CALLS_TAB_ID && rightPanelState !== "closed";
+    if (alreadyActive) {
+      setActiveFileTabId(null);
+      setRightPanelState("closed");
+      return;
+    }
+    setFileTabs((prev) => {
+      if (prev.some((tab) => tab.kind === "toolCalls")) return prev;
+      return [{ kind: "toolCalls", id: TOOL_CALLS_TAB_ID, label: t("Tool Calls") }, ...prev];
+    });
+    setActiveFileTabId(TOOL_CALLS_TAB_ID);
+    setRightPanelState("normal");
+  }, [activeFileTabId, rightPanelState, t]);
 
   const handleCloseFileTab = useCallback((tabId: string) => {
     setFileTabs((prev) => {
@@ -1245,6 +1266,8 @@ export function AppShell() {
             />
           ) : activeFileTab?.kind === "translate" ? (
             <TranslatePanel />
+          ) : activeFileTab?.kind === "toolCalls" ? (
+            <ToolCallStatsTabBody />
           ) : activeFileTab?.kind === "file" ? (
             <FileViewer filePath={activeFileTab.filePath} cwd={activeCwd ?? undefined} />
           ) : (
@@ -1346,6 +1369,8 @@ export function AppShell() {
           </svg>
         </button>
         </Tooltip>
+        {/* Open tool calls — always visible; shows running/total badge */}
+        <ToolCallsVerticalButton active={activeFileTab?.kind === "toolCalls"} onClick={handleOpenToolCallsTab} />
         {/* Expand/collapse — only when panel is open and has tabs */}
         {rightPanelState !== "closed" && fileTabs.length > 0 && (
           <Tooltip content={rightPanelState === "expanded" ? t("Collapse file panel") : t("Expand file panel")}>
@@ -1396,4 +1421,63 @@ export function AppShell() {
     />
     </>
   );
+}
+
+// ── Tool-calls vertical button ────────────────────────────────────────────
+// Mirrors the style of the other right-bar buttons (todos / favorites /
+// translate) and overlays a tiny live badge for the running / total count.
+
+function ToolCallsVerticalButton({ active, onClick }: { active: boolean; onClick: () => void }) {
+  const { t } = useI18n();
+  const { snapshot } = useToolCallStatsView();
+  const { runningCount, totalCount } = snapshot;
+
+  const badgeColor = runningCount > 0
+    ? "var(--accent)"
+    : totalCount > 0
+      ? "var(--text-muted)"
+      : null;
+
+  return (
+    <Tooltip content={t("Tool Calls")}>
+      <button
+        onClick={onClick}
+        style={{
+          position: "relative",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          width: 36, height: 36, padding: 0,
+          background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+          color: active ? "var(--text)" : "var(--text-muted)",
+          cursor: "pointer", transition: "color 0.12s",
+          gap: 1,
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = active ? "var(--text)" : "var(--text-muted)"; }}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="2" y1="14" x2="2" y2="9" />
+          <line x1="7" y1="14" x2="7" y2="5" />
+          <line x1="12" y1="14" x2="12" y2="2" />
+          <line x1="0.5" y1="14.5" x2="15.5" y2="14.5" />
+        </svg>
+        {badgeColor !== null && (
+          <span style={{
+            fontSize: 9, lineHeight: "10px", fontFamily: "var(--font-mono)", fontWeight: 600,
+            color: badgeColor,
+          }}>
+            {runningCount > 0 ? `${runningCount}/${totalCount}` : totalCount}
+          </span>
+        )}
+      </button>
+    </Tooltip>
+  );
+}
+
+// ── Tool-calls tab body ───────────────────────────────────────────────────
+// Wires the published snapshot + scroll callback into the panel component.
+
+function ToolCallStatsTabBody() {
+  const { snapshot } = useToolCallStatsView();
+  const scrollToToolCall = useToolCallStatsScroll();
+  return <ToolCallStatsPanel snapshot={snapshot} onScrollToToolCall={scrollToToolCall} />;
 }

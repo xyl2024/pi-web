@@ -17,7 +17,7 @@ import { useI18n, type Locale } from "@/hooks/useI18n";
 import type { SlashResource } from "./ChatInput";
 import { ToolCallStatsProvider, useToolCallStatsEmit } from "@/hooks/ToolCallStatsContext";
 import { useToolCallStats } from "@/hooks/useToolCallStats";
-import { ToolCallStatsDrawer } from "./ToolCallStatsDrawer";
+import { setToolCallStatsScrollCallback, setToolCallStatsState } from "@/hooks/toolCallStatsStore";
 import { SessionSearch } from "./SessionSearch";
 
 interface Props {
@@ -152,8 +152,9 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     onScrollComplete,
   });
 
-  // Tool call stats hook
-  const { snapshot, isDrawerOpen, toggleDrawer } = useToolCallStats(messages);
+  // Tool call stats hook — snapshot is published to the module store so the
+  // right-panel tab + vertical button (in AppShell) can render it.
+  const { snapshot } = useToolCallStats(messages);
 
   // ── GitHub username from ~/.pi-web/config.yaml (one-shot fetch on mount) ──
   const [githubUsername, setGithubUsername] = useState<string>("");
@@ -169,12 +170,19 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     return () => { cancelled = true; };
   }, []);
 
-  // Running summary for the drawer toggle button
+  // Running summary for the vertical toolbar badge
   const runningSummary = agentPhase?.kind === "running_tools" && agentPhase.tools.length > 0
     ? t("{n} running · {m} total").replace("{n}", String(agentPhase.tools.length)).replace("{m}", String(snapshot.totalCount))
     : snapshot.totalCount > 0
       ? t("{n} total").replace("{n}", String(snapshot.totalCount))
       : undefined;
+
+  // Publish the latest stats snapshot + summary to the module store so
+  // AppShell's right-panel tab + vertical button can render them without
+  // owning the reducer state themselves.
+  useEffect(() => {
+    setToolCallStatsState({ snapshot, runningSummary });
+  }, [snapshot, runningSummary]);
 
   // ── Scroll-to-bottom: auto-track during streaming, pause on user scroll-up ──
   const [showToBottom, setShowToBottom] = useState(false);
@@ -382,6 +390,14 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       container.scrollTo({ top: elTop - 20, behavior: "smooth" });
     }
   }, [toolCallToVisibleIdx, messageRefs, scrollContainerRef]);
+
+  // Register the scroll callback with the module store so the right-panel tab
+  // body can jump to a tool-call message when the user clicks a row. Clear on
+  // unmount so a stale callback can't be invoked from a different session.
+  useEffect(() => {
+    setToolCallStatsScrollCallback(handleScrollToToolCall);
+    return () => setToolCallStatsScrollCallback(null);
+  }, [handleScrollToToolCall]);
 
   const isEmptyNew = isNew && messages.length === 0 && !streamState.isStreaming && !agentRunning;
 
@@ -671,14 +687,8 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
           </Tooltip>
         )}
 
-        {/* Tool call stats drawer — jump to chat message on click */}
-        <ToolCallStatsDrawer
-          snapshot={snapshot}
-          open={isDrawerOpen}
-          onToggle={toggleDrawer}
-          runningSummary={runningSummary}
-          onScrollToToolCall={handleScrollToToolCall}
-        />
+        {/* Tool call stats are rendered as a right-panel tab by AppShell.
+            We just publish the snapshot + scroll callback to the module store. */}
       </div>
 
       <div className="relative">
