@@ -112,7 +112,10 @@ const ListParams = Type.Object({
 const CreateParams = Type.Object({
   title: Type.String({ description: "Todo title (1-200 chars, trimmed)." }),
   description: Type.Optional(
-    Type.String({ description: "Optional markdown description." }),
+    Type.String({
+      description:
+        "Optional HTML description. Supports standard HTML tags (<b>, <i>, <u>, <code>, <a href=\"...\">, <ul>, <ol>, <li>, <table>, <img src=\"https://...\">, <pre><code class=\"language-xxx\"> for code blocks, etc.). Stored verbatim and rendered with sanitization in the UI. Plain text is also fine and will be escaped.",
+    }),
   ),
   deadline: Type.Optional(
     Type.Number({ description: "Optional deadline as ms since epoch (local end-of-day recommended)." }),
@@ -204,7 +207,8 @@ const todoListTool = defineTool<typeof ListParams, ListDetails>({
 const todoCreateTool = defineTool<typeof CreateParams, TodoDetails>({
   name: "todo_create",
   label: "Todo Create",
-  description: "Create a new todo in the user's pi-web todo list. Returns the created todo with its assigned id.",
+  description:
+    "Create a new todo in the user's pi-web todo list. Returns the created todo with its assigned id. The `description` field is stored as HTML and rendered in the rich-text editor; pass sanitized HTML or plain text (which will be escaped).",
   parameters: CreateParams,
   executionMode: "sequential",
   async execute(_toolCallId, params) {
@@ -227,7 +231,7 @@ const todoUpdateTool = defineTool<typeof UpdateParams, TodoDetails>({
   name: "todo_update",
   label: "Todo Update",
   description:
-    "Update an existing todo in the user's pi-web todo list by id. Any subset of title / description / done / deadline may be provided. Pass null for description or deadline to clear them. Server manages the completedAt timestamp when 'done' changes.",
+    "Update an existing todo in the user's pi-web todo list by id. Any subset of title / description / done / deadline may be provided. Pass null for description or deadline to clear them. Server manages the completedAt timestamp when 'done' changes. `description` is stored as HTML; pass sanitized HTML or plain text.",
   parameters: UpdateParams,
   executionMode: "sequential",
   async execute(_toolCallId, params) {

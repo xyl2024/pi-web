@@ -11,6 +11,7 @@
  */
 
 import { getDb } from "@/lib/db";
+import DOMPurify from "isomorphic-dompurify";
 
 export interface Todo {
   id: string;
@@ -25,6 +26,37 @@ export interface Todo {
 
 export const MAX_TITLE_LENGTH = 200;
 export const MAX_TAG_LENGTH = 50;
+export const MAX_DESCRIPTION_LENGTH = 100_000; // 100 KB — generous cap on raw HTML payload
+
+// Tags allowed inside a todo description. Mirrors what the Tiptap editor
+// emits + a couple of legacy HTML aliases (`b`/`i`/`strike`/`s`/`u`) so the
+// sanitizer is robust to input from outside the editor (agent tool, copy
+// paste from other apps). Every tag is balanced with the attribute list
+// below — DOMPurify strips attributes that are not on the allowlist.
+const DESCRIPTION_ALLOWED_TAGS = [
+  // Block
+  "p", "h1", "h2", "h3", "h4", "h5", "h6",
+  "ul", "ol", "li",
+  "blockquote", "pre", "hr", "br", "div",
+  "table", "thead", "tbody", "tr", "th", "td",
+  // Inline
+  "strong", "b", "em", "i", "s", "strike", "u", "code", "a", "span", "img", "sub", "sup",
+  // Form (Tiptap's TaskList renders <input type="checkbox" disabled>)
+  "input",
+  "label",
+] as const;
+
+// Attributes allowed on the tags above. Kept narrow on purpose — Tiptap
+// only emits `class` (for code-block language), `data-type` (for task
+// list), `colspan`/`rowspan` (for tables), and link safety attrs.
+const DESCRIPTION_ALLOWED_ATTR = [
+  "href", "src", "alt", "title", "class",
+  "colspan", "rowspan",
+  "type", "checked", "disabled", "value",
+  "target", "rel",
+  "data-type", "data-checked",
+  "start",
+] as const;
 
 export type DeadlineFilter = "overdue" | "today" | "thisWeek" | "noDeadline";
 
@@ -93,6 +125,35 @@ function validateOptionalDeadline(value: unknown): number | undefined {
     throw new TodoValidationError("deadline must be a number", "deadline");
   }
   return value;
+}
+
+/**
+ * Sanitize a todo description (HTML) for storage. Pass-through when input is
+ * `undefined` (no change) or an empty string. Throws on non-string. The
+ * resulting string is DOMPurify-cleaned against the description allowlist
+ * defined above — `<script>`, inline event handlers, `javascript:` URLs, and
+ * any tag/attribute outside the allowlist are stripped before the row is
+ * written. Length-capped to MAX_DESCRIPTION_LENGTH (in raw characters,
+ * pre-sanitize) to keep the SQLite column bounded.
+ */
+export function normalizeDescription(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") {
+    throw new TodoValidationError("description must be a string", "description");
+  }
+  if (value.length > MAX_DESCRIPTION_LENGTH) {
+    throw new TodoValidationError("description is too long", "description");
+  }
+  if (value.length === 0) return "";
+  return DOMPurify.sanitize(value, {
+    ALLOWED_TAGS: [...DESCRIPTION_ALLOWED_TAGS],
+    ALLOWED_ATTR: [...DESCRIPTION_ALLOWED_ATTR],
+    // Note: ALLOW_DATA_ATTR is intentionally left at its default (true) so the
+    // explicit `data-type` / `data-checked` entries in DESCRIPTION_ALLOWED_ATTR
+    // actually take effect — DOMPurify treats data-* attributes specially and
+    // `ALLOW_DATA_ATTR: false` would override the explicit allowlist.
+    KEEP_CONTENT: true,
+  });
 }
 
 /**
@@ -180,10 +241,7 @@ function rowToTodo(row: TodoRow): Todo {
 
 export function createTodo(_filePath: string, input: TodoCreateInput): Todo {
   const title = validateTitle(input.title);
-  if (input.description !== undefined && typeof input.description !== "string") {
-    throw new TodoValidationError("description must be a string", "description");
-  }
-  const description = input.description;
+  const description = normalizeDescription(input.description);
   const deadline = validateOptionalDeadline(input.deadline);
   const tags = normalizeTags(input.tags);
 
@@ -244,10 +302,15 @@ export function updateTodo(_filePath: string, id: string, patch: TodoUpdateInput
       next.title = validateTitle(patch.title);
     }
     if (patch.description !== undefined) {
-      if (typeof patch.description !== "string") {
-        throw new TodoValidationError("description must be a string", "description");
+      // The agent tool normalizes `null → undefined` before calling us, so
+      // the only way normalizeDescription returns undefined here is the
+      // "clear" path. Empty string is a valid description.
+      const normalized = normalizeDescription(patch.description);
+      if (normalized === undefined) {
+        delete next.description;
+      } else {
+        next.description = normalized;
       }
-      next.description = patch.description;
     }
     if (patch.done !== undefined) {
       if (typeof patch.done !== "boolean") {

@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { marked } from "marked";
+import DOMPurify from "isomorphic-dompurify";
 import { useToast } from "@/components/Toast";
 import { useI18n } from "./useI18n";
 
@@ -33,12 +35,65 @@ interface TodoContextValue {
 
 const TodoContext = createContext<TodoContextValue | null>(null);
 
+// Mirrors lib/todo-store.ts — kept narrow on purpose so legacy Markdown that
+// slips through the heuristic doesn't smuggle a <script> tag into the DB.
+const MIGRATION_SANITIZE_CONFIG: Parameters<typeof DOMPurify.sanitize>[1] = {
+  ALLOWED_TAGS: [
+    "p", "h1", "h2", "h3", "h4", "h5", "h6",
+    "ul", "ol", "li",
+    "blockquote", "pre", "hr", "br", "div",
+    "table", "thead", "tbody", "tr", "th", "td",
+    "strong", "b", "em", "i", "s", "strike", "u", "code", "a", "span", "img", "sub", "sup",
+    "input", "label",
+  ],
+  ALLOWED_ATTR: [
+    "href", "src", "alt", "title", "class",
+    "colspan", "rowspan",
+    "type", "checked", "disabled", "value",
+    "target", "rel",
+    "data-type", "data-checked",
+    "start",
+  ],
+};
+
+/**
+ * Heuristic: does this string look like legacy Markdown rather than Tiptap
+ * HTML? Used to gate the lazy markdown→HTML migration in `refresh()`. Skips
+ * anything that already starts with a tag, anything that contains a
+ * Tiptap-specific marker (data-type="taskList" or language-mermaid), and
+ * anything that's pure plain text. Heuristics:
+ *   - at least one markdown line marker (heading / list / quote / image / fence)
+ *   - OR bold / italic with paired markers (** / __)
+ */
+function looksLikeMarkdown(s: string): boolean {
+  if (!s) return false;
+  const t = s.trimStart();
+  if (t.startsWith("<")) return false;
+  // Tiptap outputs — already converted, skip.
+  if (/data-type="taskList"|data-type="taskItem"|class="language-mermaid"/.test(s)) return false;
+  // Image / link markdown that's not yet inside <a>/<img> tags
+  if (/!\[[^\]]*\]\([^)]+\)/.test(s)) return true;
+  if (/\[[^\]]+\]\([^)]+\)/.test(s)) return true;
+  if (/(^|\n)#{1,6}\s+\S/.test(s)) return true;
+  if (/(^|\n)\s*[-*+]\s+\S/.test(s)) return true;
+  if (/(^|\n)\s*\d+\.\s+\S/.test(s)) return true;
+  if (/(^|\n)>\s/.test(s)) return true;
+  if (/```/.test(s)) return true;
+  if (/\*\*[^*\n]+\*\*/.test(s) || /(^|\W)__[^_\n]+__(?=\W|$)/.test(s)) return true;
+  return false;
+}
+
 export function TodoProvider({ children }: { children: ReactNode }) {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
   const { t } = useI18n();
+  // Track ids we've already attempted to migrate this session so refresh()
+  // doesn't repeatedly hit the API for the same todo. Re-mounting (page
+  // reload) naturally re-attempts; that's fine — successful migration means
+  // the server no longer returns markdown, so the second pass is a no-op.
+  const migratedRef = useRef<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -46,14 +101,17 @@ export function TodoProvider({ children }: { children: ReactNode }) {
       const res = await fetch("/api/todos");
       if (!res.ok) throw new Error(`status ${res.status}`);
       const data = (await res.json()) as { todos?: Todo[] };
-      setTodos(data.todos ?? []);
+      const list = data.todos ?? [];
+      setTodos(list);
       setError(null);
+      // Best-effort migration. Failures are isolated and toast-reported.
+      void migrateMarkdownTodos(list, migratedRef.current, setTodos, toast, t);
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast, t]);
 
   useEffect(() => {
     refresh();
@@ -266,4 +324,56 @@ export function useTodos(): TodoContextValue {
   const ctx = useContext(TodoContext);
   if (!ctx) throw new Error("useTodos must be used within TodoProvider");
   return ctx;
+}
+
+// ---------------------------------------------------------------------------
+// Lazy markdown → HTML migration
+// ---------------------------------------------------------------------------
+
+async function migrateMarkdownTodos(
+  list: Todo[],
+  done: Set<string>,
+  setTodos: React.Dispatch<React.SetStateAction<Todo[]>>,
+  toast: { show: (input: { kind: "info" | "error" | "success"; message: string }) => void },
+  t: (key: string) => string,
+): Promise<void> {
+  const targets = list.filter((x) => x.description && !done.has(x.id) && looksLikeMarkdown(x.description));
+  if (targets.length === 0) return;
+  let successCount = 0;
+  let lastError: string | null = null;
+  for (const todo of targets) {
+    done.add(todo.id);
+    try {
+      const raw = marked.parse(todo.description as string, { async: false }) as string;
+      const html = DOMPurify.sanitize(raw, MIGRATION_SANITIZE_CONFIG);
+      if (!html || html === todo.description) continue;
+      const res = await fetch("/api/todos", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: todo.id, description: html }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || `status ${res.status}`);
+      }
+      const { todo: updated } = (await res.json()) as { todo: Todo };
+      setTodos((prev) => prev.map((x) => (x.id === todo.id ? updated : x)));
+      successCount++;
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    }
+  }
+  if (successCount > 0) {
+    toast.show({
+      kind: "info",
+      message: t("Migrated {n} todo description to rich text")
+        .replace("{n}", String(successCount)),
+    });
+  }
+  if (lastError) {
+    toast.show({
+      kind: "error",
+      message: t("Save failed") + ": " + lastError,
+    });
+  }
 }

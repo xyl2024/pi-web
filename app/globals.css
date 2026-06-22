@@ -459,3 +459,184 @@ span.linenumber {
 }
 
 
+
+/* ---------------------------------------------------------------------
+   Tiptap rich-text editor (todo description)
+   --------------------------------------------------------------------- */
+
+.tiptap-rich-text {
+  outline: none;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  min-height: 200px;
+}
+.tiptap-rich-text:focus,
+.tiptap-rich-text:focus-visible,
+.tiptap-rich-text:focus-within,
+.ProseMirror:focus,
+.ProseMirror:focus-visible,
+.ProseMirror:focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+}
+.tiptap-rich-text > *:first-child { margin-top: 0; }
+.tiptap-rich-text > *:last-child  { margin-bottom: 0; }
+.tiptap-rich-text p { margin: 0 0 8px; }
+.tiptap-rich-text h1,
+.tiptap-rich-text h2,
+.tiptap-rich-text h3,
+.tiptap-rich-text h4,
+.tiptap-rich-text h5,
+.tiptap-rich-text h6 {
+  font-weight: 600;
+  margin: 10px 0 4px;
+  color: var(--text);
+  line-height: 1.3;
+}
+.tiptap-rich-text h1 { font-size: 1.2em; }
+.tiptap-rich-text h2 { font-size: 1.1em; }
+.tiptap-rich-text h3 { font-size: 1.0em; }
+.tiptap-rich-text h4, .tiptap-rich-text h5, .tiptap-rich-text h6 { font-size: 0.95em; }
+.tiptap-rich-text ul, .tiptap-rich-text ol {
+  padding-left: 22px;
+  margin: 4px 0 8px;
+}
+.tiptap-rich-text ul { list-style: disc; }
+.tiptap-rich-text ol { list-style: decimal; }
+.tiptap-rich-text li { margin: 2px 0; }
+.tiptap-rich-text a {
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.tiptap-rich-text blockquote {
+  border-left: 3px solid var(--border);
+  margin: 4px 0;
+  padding: 2px 10px;
+  color: var(--text-muted);
+}
+.tiptap-rich-text code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--bg-subtle);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.tiptap-rich-text pre {
+  font-family: var(--font-mono);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px 10px;
+  margin: 4px 0;
+  overflow-x: auto;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.tiptap-rich-text pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 11px;
+}
+.tiptap-rich-text hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 10px 0;
+}
+.tiptap-rich-text img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+.tiptap-rich-text img[src*="/api/todo-images/"] {
+  border: 1px solid var(--border);
+}
+.tiptap-rich-text table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  font-size: 12px;
+  table-layout: fixed;
+}
+.tiptap-rich-text th,
+.tiptap-rich-text td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+  min-width: 60px;
+  position: relative;
+}
+.tiptap-rich-text th {
+  background: var(--bg-panel);
+  font-weight: 600;
+}
+.tiptap-rich-text .selectedCell {
+  background: var(--bg-selected);
+}
+.tiptap-rich-text .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.tiptap-rich-text .tableWrapper {
+  overflow-x: auto;
+}
+.tiptap-rich-text.resize-cursor {
+  cursor: ew-resize;
+}
+
+/* Task list — uses data-type attributes that Tiptap emits; TodoDescriptionView
+   reads the same attribute (and also our className) to apply the right look
+   in the read-only view. */
+.tiptap-rich-text ul[data-type="taskList"],
+ul.todo-task-list {
+  list-style: none;
+  padding-left: 4px;
+  margin: 4px 0;
+}
+.tiptap-rich-text ul[data-type="taskList"] li,
+li.todo-task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 2px 0;
+}
+.tiptap-rich-text ul[data-type="taskList"] li > label,
+.tiptap-rich-text ul[data-type="taskList"] li > div,
+.tiptap-rich-text ul[data-type="taskList"] li > p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.tiptap-rich-text ul[data-type="taskList"] li > label input[type="checkbox"],
+.tiptap-rich-text ul[data-type="taskList"] li > div > input[type="checkbox"],
+li.todo-task-item > input[type="checkbox"] {
+  margin: 3px 0 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tiptap-rich-text ul[data-type="taskList"] li[data-checked="true"],
+li.todo-task-item[data-checked="true"] {
+  color: var(--text-muted);
+}
+.tiptap-rich-text ul[data-type="taskList"] li[data-checked="true"] > *,
+li.todo-task-item[data-checked="true"] > div {
+  text-decoration: line-through;
+}
+
+/* Placeholder shown when the editor is empty. */
+.tiptap-rich-text p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--text-dim);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

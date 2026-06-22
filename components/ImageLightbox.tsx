@@ -25,6 +25,27 @@ export function extractImageGallery(
   return out;
 }
 
+// Extract every image reference from an HTML string. Used by the Tiptap-based
+// todo description view; the original `extractImageGallery` stays for the
+// markdown file viewer / ShowFileRenderer which still render raw markdown.
+// Returns an empty list in SSR environments (no DOMParser) so the import is
+// safe in React Server Components, even though this code is "use client".
+export function extractImagesFromHtml(content: string): ImageItem[] {
+  if (typeof content !== "string" || content.length === 0) return [];
+  if (typeof DOMParser === "undefined") return [];
+  try {
+    const doc = new DOMParser().parseFromString(content, "text/html");
+    return Array.from(doc.querySelectorAll("img"))
+      .map((img) => ({
+        alt: img.getAttribute("alt") ?? "",
+        src: img.getAttribute("src") ?? "",
+      }))
+      .filter((x) => x.src);
+  } catch {
+    return [];
+  }
+}
+
 // Custom <img> for ReactMarkdown. Calls onImageClick with the resolved src.
 // maxWidth caps the rendered width relative to the container; defaults to
 // filling it (100%). Pass a smaller value (e.g. "50%") to shrink inline

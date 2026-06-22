@@ -1,18 +1,16 @@
 "use client";
 
-import { useCallback, useMemo, useState, useRef, useEffect, Fragment, cloneElement, createElement, isValidElement, type ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import type { Components } from "react-markdown";
+import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { useI18n, type Locale } from "@/hooks/useI18n";
 import { useTodos, type Todo } from "@/hooks/useTodos";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
-import { MermaidBlock } from "./MermaidBlock";
-import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { DatePicker } from "./DatePicker";
-import { extractImageGallery, MarkdownImage, ImageLightbox } from "./ImageLightbox";
+import { extractImagesFromHtml, ImageLightbox } from "./ImageLightbox";
+import { TodoDescriptionView } from "./TodoDescriptionView";
+import { highlightMatch } from "./HighlightText";
 
 type StatusFilter = "all" | "active" | "done";
 type DeadlineFilter = "all" | "overdue" | "today" | "thisWeek" | "thisMonth" | "noDeadline";
@@ -205,52 +203,6 @@ function CalendarIcon({ size = 11 }: { size?: number }) {
       <line x1="8" y1="1.5" x2="8" y2="3.5" />
     </svg>
   );
-}
-
-function highlightMatch(text: string, term: string): ReactNode {
-  if (!term) return text;
-  const lower = text.toLowerCase();
-  const t = term.toLowerCase();
-  const ranges: Array<[number, number]> = [];
-  let i = 0;
-  while (i < text.length) {
-    const idx = lower.indexOf(t, i);
-    if (idx === -1) break;
-    ranges.push([idx, idx + t.length]);
-    i = idx + t.length;
-  }
-  if (!ranges.length) return text;
-  const out: ReactNode[] = [];
-  let cursor = 0;
-  ranges.forEach(([s, e], k) => {
-    if (s > cursor) out.push(text.slice(cursor, s));
-    out.push(
-      <mark
-        key={k}
-        style={{ background: "#fde047", color: "#1a1a1a", borderRadius: 2, padding: "0 1px" }}
-      >
-        {text.slice(s, e)}
-      </mark>
-    );
-    cursor = e;
-  });
-  if (cursor < text.length) out.push(text.slice(cursor));
-  return out;
-}
-
-function highlightDeep(node: ReactNode, term: string): ReactNode {
-  if (!term) return node;
-  if (node == null || typeof node === "boolean") return node;
-  if (typeof node === "number") return String(node);
-  if (typeof node === "string") return highlightMatch(node, term);
-  if (Array.isArray(node)) {
-    return node.map((child, i) => <Fragment key={i}>{highlightDeep(child, term)}</Fragment>);
-  }
-  if (isValidElement<{ children?: ReactNode }>(node)) {
-    const element = node;
-    return cloneElement(element, { children: highlightDeep(element.props.children, term) });
-  }
-  return node;
 }
 
 export function TodoPanel() {
@@ -2024,65 +1976,14 @@ function TodoItem({
   const openDeadlinePicker = () => setDeadlinePickerOpen(true);
 
   // Gallery of every image reference in the description, for lightbox
-  // prev/next navigation. Todo image URLs are already absolute
-  // (/api/todo-images/...) so we use the identity resolver.
+  // prev/next navigation. Scans the Tiptap-emitted HTML (not legacy markdown)
+  // — see `extractImagesFromHtml` in components/ImageLightbox.tsx. Todo image
+  // URLs are already absolute (/api/todo-images/...) so the view passes
+  // identity for the resolveSrc callback.
   const gallery = useMemo(
-    () => extractImageGallery(todo.description ?? ""),
+    () => extractImagesFromHtml(todo.description ?? ""),
     [todo.description],
   );
-
-  const markdownComponents = useMemo(() => {
-    const imgComp = (props: { src?: string | Blob; alt?: string }) => (
-      <MarkdownImage
-        src={props.src}
-        alt={props.alt}
-        resolveSrc={(s) => s}
-        maxWidth="50%"
-        onImageClick={(src) => {
-          const idx = gallery.findIndex((g) => g.src === src);
-          if (idx >= 0) setLightboxIndex(idx);
-        }}
-      />
-    );
-    if (!searchTerm) return { img: imgComp };
-    const wrap = (children: ReactNode) => highlightDeep(children, searchTerm);
-    const passthrough = (Tag: string) => {
-      const Component = (props: { children?: ReactNode }) => {
-        const { children, ...rest } = props;
-        return createElement(Tag, rest, wrap(children));
-      };
-      Component.displayName = `Highlight(${Tag})`;
-      return Component;
-    };
-    return {
-      img: imgComp,
-      p: passthrough("p"),
-      li: passthrough("li"),
-      h1: passthrough("h1"),
-      h2: passthrough("h2"),
-      h3: passthrough("h3"),
-      h4: passthrough("h4"),
-      h5: passthrough("h5"),
-      h6: passthrough("h6"),
-      td: passthrough("td"),
-      th: passthrough("th"),
-      em: passthrough("em"),
-      strong: passthrough("strong"),
-      a: passthrough("a"),
-      code: ((props: { className?: string; children?: React.ReactNode }) => {
-        const className = props.className;
-        const children = props.children;
-        const lang = className?.replace("language-", "") ?? "";
-        const raw = String(children ?? "");
-        if (lang === "mermaid") {
-          // Stable key keeps the MermaidBlock instance alive across re-renders.
-          return <MermaidBlock key={raw} code={raw.replace(/\n$/, "")} />;
-        }
-        return passthrough("code")(props);
-      }) as Components["code"],
-      pre: (({ children }: { children?: React.ReactNode }) => <>{children}</>) as Components["pre"],
-    };
-  }, [searchTerm, gallery]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -2273,7 +2174,7 @@ function TodoItem({
         </div>
       ) : null}
       {detailsVisible && (editingDesc && !todo.done ? (
-        <MarkdownEditor
+        <RichTextEditor
           defaultValue={todo.description ?? ""}
           onSave={commitDescription}
           onCancel={() => setEditingDesc(false)}
@@ -2295,14 +2196,14 @@ function TodoItem({
             }}
           >
             {todo.description ? (
-              <div
-                className="markdown-body"
-                style={{
-                  fontSize: 12,
+              <TodoDescriptionView
+                html={todo.description}
+                searchTerm={searchTerm}
+                onImageClick={(src) => {
+                  const idx = gallery.findIndex((g) => g.src === src);
+                  if (idx >= 0) setLightboxIndex(idx);
                 }}
-              >
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{todo.description}</ReactMarkdown>
-              </div>
+              />
             ) : (
               <span style={{ color: "var(--text-dim)", fontStyle: "italic" }}>{t("Add description...")}</span>
             )}
