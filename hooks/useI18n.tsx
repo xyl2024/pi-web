@@ -538,6 +538,7 @@ const ZH_TRANSLATIONS = {
   "Open dashboard": "打开 Dashboard",
   "Hide dashboard": "隐藏 Dashboard",
   "Dashboard": "Dashboard",
+  "Browser": "浏览器",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

@@ -873,7 +873,7 @@ export function AppShell() {
                   <path d="M8 2a8 8 0 0 1 0 12" />
                   <path d="M8 2a8 8 0 0 0 0 12" />
                 </svg>
-                <span>{t("Dashboard")}</span>
+                <span>{t("Browser")}</span>
               </button>
               </Tooltip>
               {selectedSession?.id && (
