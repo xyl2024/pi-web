@@ -1222,77 +1222,85 @@ export function AppShell() {
           )}
         </div>
       </div>
-    </div>
-    {/* File panel toggle buttons — fixed at top-right */}
-    {/* Expand/collapse — only when panel is open and has tabs */}
-    {rightPanelState !== "closed" && fileTabs.length > 0 && (
-      <Tooltip content={rightPanelState === "expanded" ? t("Collapse file panel") : t("Expand file panel")}>
-      <button
-        onClick={() => setRightPanelState((v) => v === "expanded" ? "normal" : "expanded")}
-        style={{
-          position: "fixed", top: 0, right: 108, zIndex: 300,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          width: 36, height: 36, padding: 0,
-          background: "var(--bg-panel)", border: "none", borderLeft: "1px solid var(--border)", borderBottom: "1px solid var(--border)",
-          color: "var(--text-muted)", cursor: "pointer", transition: "color 0.12s",
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
-      >
-        {rightPanelState === "expanded" ? (
+
+      {/* Right button bar — dedicated column for panel toggle buttons, always visible */}
+      <div style={{
+        display: "flex",
+        flexDirection: "column",
+        flexShrink: 0,
+        width: 36,
+        background: "var(--bg-panel)",
+        borderLeft: "1px solid var(--border)",
+      }}>
+        {/* Show/hide file panel — always visible */}
+        <Tooltip content={rightPanelState !== "closed" ? t("Hide file panel") : t("Show file panel")}>
+        <button
+          onClick={() => setRightPanelState((v) => v === "closed" ? "normal" : "closed")}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 36, height: 36, padding: 0,
+            background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+            color: rightPanelState !== "closed" ? "var(--text)" : "var(--text-muted)",
+            cursor: "pointer", transition: "color 0.12s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = rightPanelState !== "closed" ? "var(--text)" : "var(--text-muted)"; }}
+        >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="13 7 18 12 13 17" />
-            <polyline points="6 7 11 12 6 17" />
+            <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="15" y1="3" x2="15" y2="21" />
           </svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="11 17 6 12 11 7" />
-            <polyline points="18 17 13 12 18 7" />
+        </button>
+        </Tooltip>
+        {/* Show/hide todos — always visible */}
+        <Tooltip content={activeFileTab?.kind === "todo" ? t("Hide todos") : t("Open todos")}>
+        <button
+          onClick={handleToggleTodoTab}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 36, height: 36, padding: 0,
+            background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+            color: activeFileTab?.kind === "todo" ? "var(--text)" : "var(--text-muted)",
+            cursor: "pointer", transition: "color 0.12s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "todo" ? "var(--text)" : "var(--text-muted)"; }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="2" width="12" height="12" rx="2" />
+            <polyline points="5 8 7 10 11 6" />
           </svg>
+        </button>
+        </Tooltip>
+        {/* Expand/collapse — only when panel is open and has tabs */}
+        {rightPanelState !== "closed" && fileTabs.length > 0 && (
+          <Tooltip content={rightPanelState === "expanded" ? t("Collapse file panel") : t("Expand file panel")}>
+          <button
+            onClick={() => setRightPanelState((v) => v === "expanded" ? "normal" : "expanded")}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, padding: 0,
+              background: "transparent", border: "none",
+              color: "var(--text-muted)", cursor: "pointer", transition: "color 0.12s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
+          >
+            {rightPanelState === "expanded" ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="13 7 18 12 13 17" />
+                <polyline points="6 7 11 12 6 17" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="11 17 6 12 11 7" />
+                <polyline points="18 17 13 12 18 7" />
+              </svg>
+            )}
+          </button>
+          </Tooltip>
         )}
-      </button>
-      </Tooltip>
-    )}
-    {/* Show/hide — always visible */}
-    <Tooltip content={activeFileTab?.kind === "todo" ? t("Hide todos") : t("Open todos")}>
-    <button
-      onClick={handleToggleTodoTab}
-      style={{
-        position: "fixed", top: 0, right: 36, zIndex: 300,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        width: 36, height: 36, padding: 0,
-        background: "var(--bg-panel)", border: "none", borderLeft: "1px solid var(--border)", borderBottom: "1px solid var(--border)",
-        color: activeFileTab?.kind === "todo" ? "var(--text)" : "var(--text-muted)",
-        cursor: "pointer", transition: "color 0.12s",
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "todo" ? "var(--text)" : "var(--text-muted)"; }}
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="2" width="12" height="12" rx="2" />
-        <polyline points="5 8 7 10 11 6" />
-      </svg>
-    </button>
-    </Tooltip>
-    <Tooltip content={rightPanelState !== "closed" ? t("Hide file panel") : t("Show file panel")}>
-    <button
-      onClick={() => setRightPanelState((v) => v === "closed" ? "normal" : "closed")}
-      style={{
-        position: "fixed", top: 0, right: 0, zIndex: 300,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        width: 36, height: 36, padding: 0,
-        background: "var(--bg-panel)", border: "none", borderLeft: "1px solid var(--border)", borderBottom: "1px solid var(--border)",
-        color: rightPanelState !== "closed" ? "var(--text)" : "var(--text-muted)",
-        cursor: "pointer", transition: "color 0.12s",
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.color = rightPanelState !== "closed" ? "var(--text)" : "var(--text-muted)"; }}
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="15" y1="3" x2="15" y2="21" />
-      </svg>
-    </button>
-    </Tooltip>
+      </div>
+    </div>
     {modelsConfigOpen && <ModelsConfig onClose={() => { setModelsConfigOpen(false); setModelsRefreshKey((k) => k + 1); }} />}
     {skillsConfigOpen && (activeCwd ?? selectedSession?.cwd ?? newSessionCwd) && (
       <SkillsConfig cwd={(activeCwd ?? selectedSession?.cwd ?? newSessionCwd)!} onClose={() => setSkillsConfigOpen(false)} />
