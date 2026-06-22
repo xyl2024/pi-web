@@ -1307,16 +1307,22 @@ function FilterPopover({
                       </svg>
                     )}
                   </span>
-                  {tag.color && (
+                  {tag.color ? (
                     <span
-                      aria-hidden
                       style={{
-                        width: 6, height: 6, borderRadius: "50%",
-                        background: tag.color, flexShrink: 0,
+                        padding: "0 6px",
+                        borderRadius: 8,
+                        background: tag.color,
+                        color: tagContrastText(tag.color),
+                        fontSize: 10,
+                        lineHeight: 1.5,
                       }}
-                    />
+                    >
+                      {tag.name}
+                    </span>
+                  ) : (
+                    tag.name
                   )}
-                  {tag.name}
                 </button>
               );
             })}
@@ -1852,6 +1858,19 @@ const TAG_COLOR_PRESETS = [
   "#ec4899", // pink
 ] as const;
 
+// Pick white or near-black so tag text stays legible on the saturated
+// background. sRGB luminance (BT.601) is enough for the preset palette and
+// any reasonable custom color — the 0.6 threshold keeps yellow readable.
+function tagContrastText(hex: string): string {
+  const m = hex.replace("#", "");
+  if (m.length !== 6) return "#1a1a1a";
+  const r = parseInt(m.slice(0, 2), 16);
+  const g = parseInt(m.slice(2, 4), 16);
+  const b = parseInt(m.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? "#1a1a1a" : "#ffffff";
+}
+
 /**
  * Small popover anchored to a tag-management row's color swatch button. Lives
  * inside the manager popover's DOM tree, so the manager's click-outside handler
@@ -2056,22 +2075,13 @@ function TagChips({
               display: "inline-flex", alignItems: "center", gap: 4,
               padding: "1px 4px 1px 8px",
               fontSize: 11,
-              background: "var(--bg-hover)",
-              color: "var(--text-muted)",
-              border: "1px solid var(--border)",
+              background: tg.color ?? "var(--bg-hover)",
+              color: tg.color ? tagContrastText(tg.color) : "var(--text-muted)",
+              border: tg.color ? "none" : "1px solid var(--border)",
               borderRadius: 10,
               lineHeight: 1.5,
             }}
           >
-            {tg.color && (
-              <span
-                aria-hidden
-                style={{
-                  width: 6, height: 6, borderRadius: "50%",
-                  background: tg.color, flexShrink: 0,
-                }}
-              />
-            )}
             {tg.name}
             {editable && (
               <button
@@ -2084,12 +2094,19 @@ function TagChips({
                   background: "transparent",
                   border: "none",
                   borderRadius: 7,
-                  color: "var(--text-dim)",
+                  color: tg.color ? "inherit" : "var(--text-dim)",
+                  opacity: tg.color ? 0.65 : 1,
                   cursor: "pointer",
                   fontFamily: "inherit",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-dim)")}
+                onMouseEnter={(e) => {
+                  if (tg.color) e.currentTarget.style.opacity = "1";
+                  else e.currentTarget.style.color = "var(--text)";
+                }}
+                onMouseLeave={(e) => {
+                  if (tg.color) e.currentTarget.style.opacity = "0.65";
+                  else e.currentTarget.style.color = "var(--text-dim)";
+                }}
               >
                 <svg width="7" height="7" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                   <line x1="1" y1="1" x2="7" y2="7" />
@@ -2163,16 +2180,22 @@ function TagChips({
               onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
             >
-              {s.color && (
+              {s.color ? (
                 <span
-                  aria-hidden
                   style={{
-                    width: 6, height: 6, borderRadius: "50%",
-                    background: s.color, flexShrink: 0,
+                    padding: "0 6px",
+                    borderRadius: 8,
+                    background: s.color,
+                    color: tagContrastText(s.color),
+                    fontSize: 10,
+                    lineHeight: 1.5,
                   }}
-                />
+                >
+                  {s.name}
+                </span>
+              ) : (
+                s.name
               )}
-              {s.name}
             </button>
           ))}
         </div>
