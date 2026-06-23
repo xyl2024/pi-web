@@ -113,13 +113,9 @@ export function TranslatePanel() {
     return () => document.removeEventListener("mousedown", handler);
   }, [modelDropdownOpen]);
 
-  // Auto-resize textarea as the user types.
-  useEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    ta.style.height = "auto";
-    ta.style.height = `${Math.min(ta.scrollHeight, 240)}px`;
-  }, [input]);
+  // No auto-resize needed: the input wrapper is `flex: 1`, so the textarea
+  // fills half the panel vertically (matching the output area 1:1) and
+  // scrolls internally when content overflows.
 
   // Auto-scroll output to the bottom while streaming.
   useEffect(() => {
@@ -549,8 +545,8 @@ export function TranslatePanel() {
         </div>
       )}
 
-      {/* Input area */}
-      <div style={{ padding: "10px 12px 6px", flexShrink: 0 }}>
+      {/* Input area — flex: 1 so it shares the panel height 1:1 with the output area. */}
+      <div style={{ padding: "10px 12px 6px", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 4 }}>
           {t("Translation input")}
         </div>
@@ -559,9 +555,8 @@ export function TranslatePanel() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={t("Type text to translate…")}
-          rows={3}
           style={{
-            width: "100%", minHeight: 72, maxHeight: 240, resize: "none",
+            width: "100%", flex: 1, minHeight: 0, resize: "none",
             padding: "8px 10px",
             background: "var(--bg-panel)",
             color: "var(--text)",
