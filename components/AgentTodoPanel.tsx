@@ -21,6 +21,7 @@ import type { AgentTask } from "@/lib/agent-todo-tool-types";
 import { useAgentTodo } from "@/hooks/useAgentTodo";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "@/components/Toast";
+import { Tooltip } from "@/components/Tooltip";
 
 const PANEL_BREAKPOINT = 1100;
 
@@ -73,49 +74,34 @@ const TaskRow = memo(function TaskRow({
     onNotify(tNotCompleted);
   }, [jumpable, toolCallId, isCompleted, onJumpToTask, onNotify, tNotInBranch, tNotCompleted]);
 
+  const tooltipContent = jumpable ? `${tTitleSuffix} · #${task.id}` : `#${task.id}`;
+
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      title={jumpable ? `${tTitleSuffix} · #${task.id}` : `#${task.id}`}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 2,
-        width: "100%",
-        padding: "6px 8px",
-        borderRadius: 4,
-        border: "none",
-        background: "transparent",
-        textAlign: "left",
-        cursor: "pointer",
-        color: "var(--text)",
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-hover)";
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-      }}
-    >
+    <Tooltip content={tooltipContent}>
+      <button
+        type="button"
+        onClick={handleClick}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+          width: "100%",
+          padding: "6px 8px",
+          borderRadius: 4,
+          border: "none",
+          background: "transparent",
+          textAlign: "left",
+          cursor: "pointer",
+          color: "var(--text)",
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-hover)";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+        }}
+      >
       <span style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-        <span
-          aria-hidden
-          style={{
-            display: "inline-block",
-            width: 14,
-            color: isInProgress
-              ? "var(--accent)"
-              : isCompleted
-                ? "var(--text-dim)"
-                : "var(--text-muted)",
-            fontFamily: "var(--font-mono)",
-            fontSize: 12,
-            flexShrink: 0,
-          }}
-        >
-          {isCompleted ? "✓" : isInProgress ? "◐" : "○"}
-        </span>
         <span
           style={{
             color: "var(--text-muted)",
@@ -157,7 +143,8 @@ const TaskRow = memo(function TaskRow({
           {task.activeForm}
         </span>
       ) : null}
-    </button>
+      </button>
+    </Tooltip>
   );
 });
 
