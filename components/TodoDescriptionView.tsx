@@ -7,6 +7,7 @@ import { useI18n } from "@/hooks/useI18n";
 import { MarkdownImage } from "./ImageLightbox";
 import { MermaidBlock } from "./MermaidBlock";
 import { SvgBlock } from "./SvgBlock";
+import { CodeBlock } from "./CodeBlock";
 import { highlightDeep } from "./HighlightText";
 
 interface Props {
@@ -90,6 +91,9 @@ export function TodoDescriptionView({
       const el = node as Element;
 
       // <pre><code class="language-mermaid">…</code></pre> → MermaidBlock
+      // <pre><code class="language-svg">…</code></pre>    → SvgBlock
+      // <pre><code>…</code></pre>                       → CodeBlock (shared with
+      //                                                      MessageView / FileViewer)
       if (el.name === "pre") {
         const codeChild = el.children?.find(
           (c): c is Element => c.type === "tag" && (c as Element).name === "code",
@@ -115,6 +119,10 @@ export function TodoDescriptionView({
               />
             );
           }
+          const lang = langMatch?.[1] ?? "";
+          const text = stringifyChildren(codeChild.children as DOMNode[]);
+          const code = String(text ?? "").replace(/\n$/, "");
+          return <CodeBlock key={`code-${lang}-${code}`} code={code} lang={lang} />;
         }
       }
 
