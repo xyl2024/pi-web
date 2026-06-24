@@ -8,6 +8,7 @@ import { ProviderIcon } from "./ProviderIcon";
 import { DEFAULT_TRANSLATE_PROMPT, MAX_TRANSLATE_PROMPT_CHARS } from "@/lib/translate";
 
 const PROMPT_STORAGE_KEY = "pi-translate-prompt";
+const STATE_STORAGE_KEY = "pi-translate-state";
 
 interface ModelInfo {
   id: string;
@@ -25,6 +26,12 @@ interface ModelsApiResponse {
   modelList?: ModelInfo[];
   models?: Record<string, string>;
   defaultModel?: { provider: string; modelId: string } | null;
+}
+
+interface PersistedState {
+  input?: string;
+  output?: string;
+  model?: { provider: string; modelId: string };
 }
 
 const DEBOUNCE_MS = 400;
@@ -49,6 +56,21 @@ export function TranslatePanel() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const outputRef = useRef<HTMLDivElement | null>(null);
 
+  // Persistence refs (not in state — changes here should not trigger renders).
+  // `savedModelRef` holds the model the user previously selected; the models
+  // fetch effect consults it once the model list is available so we restore
+  // the same model instead of falling back to the default.
+  const savedModelRef = useRef<{ provider: string; modelId: string } | null>(null);
+  // `userInteractedRef` is false until the user types or clicks something in
+  // this panel. The auto-translate effect bails out while it's false, so
+  // rehydrating input/model from localStorage doesn't trigger a redundant
+  // API call against the already-restored output.
+  const userInteractedRef = useRef(false);
+  // `initializedRef` gates the save effect so the very first run (with
+  // pre-restore default values) doesn't clobber the data we're about to
+  // rehydrate.
+  const initializedRef = useRef(false);
+
   // Custom translator prompt (null = use built-in default).
   const [customPrompt, setCustomPrompt] = useState<string | null>(null);
   const [promptOpen, setPromptOpen] = useState(false);
@@ -62,6 +84,38 @@ export function TranslatePanel() {
       if (saved && saved.trim()) setCustomPrompt(saved);
     } catch { /* localStorage unavailable — keep default */ }
   }, []);
+
+  // Restore input/output/model from localStorage so switching tabs (or
+  // closing/reopening the translate tab) preserves the last translation.
+  // The auto-translate effect respects `userInteractedRef` and won't fire
+  // a re-translation against the just-restored output.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STATE_STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw) as PersistedState;
+      if (typeof data?.input === "string") setInput(data.input);
+      if (typeof data?.output === "string") setOutput(data.output);
+      if (data?.model && typeof data.model.provider === "string" && typeof data.model.modelId === "string") {
+        savedModelRef.current = { provider: data.model.provider, modelId: data.model.modelId };
+      }
+    } catch { /* malformed JSON or localStorage unavailable — ignore */ }
+  }, []);
+
+  // Persist input/output/model to localStorage on every change. The first
+  // run is skipped so the initial empty state doesn't overwrite the data we
+  // are about to rehydrate above.
+  useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      return;
+    }
+    try {
+      const payload: PersistedState = { input, output };
+      if (model) payload.model = model;
+      localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(payload));
+    } catch { /* quota exceeded or localStorage unavailable — ignore */ }
+  }, [input, output, model]);
 
   // When the editor opens, sync draft to the active prompt (custom or default).
   useEffect(() => {
@@ -87,11 +141,17 @@ export function TranslatePanel() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as ModelsApiResponse;
         if (cancelled) return;
-        setModelList(data.modelList ?? []);
-        if (data.defaultModel) setModel(data.defaultModel);
-        else if (data.modelList && data.modelList.length > 0) {
-          const first = data.modelList[0];
-          setModel({ provider: first.provider, modelId: first.id });
+        const list = data.modelList ?? [];
+        setModelList(list);
+        // Prefer the model the user had selected last session; fall back to
+        // the default model, then to the first entry in the list.
+        const saved = savedModelRef.current;
+        if (saved && list.some((m) => m.provider === saved.provider && m.id === saved.modelId)) {
+          setModel(saved);
+        } else if (data.defaultModel) {
+          setModel(data.defaultModel);
+        } else if (list.length > 0) {
+          setModel({ provider: list[0].provider, modelId: list[0].id });
         }
       } catch (e) {
         if (!cancelled) toast.show({ kind: "error", message: e instanceof Error ? e.message : t("Translation failed") });
@@ -201,7 +261,11 @@ export function TranslatePanel() {
 
   // Auto-translate: 400ms after the user stops typing (or model changes),
   // fire a translation. Empty input aborts any in-flight and clears output.
+  // Skipped entirely until the user actually drives a state change, so that
+  // rehydrating input/model from localStorage doesn't re-run the translation
+  // against the output we just restored.
   useEffect(() => {
+    if (!userInteractedRef.current) return;
     const trimmed = input.trim();
     if (!trimmed) {
       if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
@@ -233,6 +297,7 @@ export function TranslatePanel() {
     setInput("");
     setOutput("");
     setError(null);
+    userInteractedRef.current = true;
   }, []);
 
   const handleCopy = useCallback(async () => {
@@ -375,7 +440,10 @@ export function TranslatePanel() {
                         key={`${opt.provider}:${opt.modelId}`}
                         onClick={() => {
                           setModelDropdownOpen(false);
-                          if (!isActive) setModel({ provider: opt.provider, modelId: opt.modelId });
+                          if (!isActive) {
+                            userInteractedRef.current = true;
+                            setModel({ provider: opt.provider, modelId: opt.modelId });
+                          }
                         }}
                         style={{
                           display: "flex", alignItems: "center", gap: 8,
@@ -553,7 +621,10 @@ export function TranslatePanel() {
         <textarea
           ref={textareaRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            userInteractedRef.current = true;
+            setInput(e.target.value);
+          }}
           placeholder={t("Type text to translate…")}
           style={{
             width: "100%", flex: 1, minHeight: 0, resize: "none",
