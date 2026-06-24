@@ -9,6 +9,7 @@ import { MermaidBlock } from "./MermaidBlock";
 import { SvgBlock } from "./SvgBlock";
 import { CodeBlock } from "./CodeBlock";
 import { highlightDeep } from "./HighlightText";
+import { buildDescriptionSanitizeConfig } from "@/lib/description-sanitize";
 
 interface Props {
   /** Sanitized HTML produced by the Tiptap editor (or DOMPurify output). */
@@ -22,28 +23,6 @@ interface Props {
   /** Empty-state placeholder when `html` is empty / blank. */
   emptyPlaceholder?: string;
 }
-
-// Sanitize config — kept narrow on purpose. The server-side allowlist in
-// lib/todo-store.ts is the source of truth; this is a defense-in-depth
-// pass on the client in case untrusted content slips through.
-const SANITIZE_CONFIG: Parameters<typeof DOMPurify.sanitize>[1] = {
-  ALLOWED_TAGS: [
-    "p", "h1", "h2", "h3", "h4", "h5", "h6",
-    "ul", "ol", "li",
-    "blockquote", "pre", "hr", "br", "div",
-    "table", "thead", "tbody", "tr", "th", "td",
-    "strong", "b", "em", "i", "s", "strike", "u", "code", "a", "span", "img", "sub", "sup",
-    "input", "label",
-  ],
-  ALLOWED_ATTR: [
-    "href", "src", "alt", "title", "class",
-    "colspan", "rowspan",
-    "type", "checked", "disabled", "value",
-    "target", "rel",
-    "data-type", "data-checked",
-    "start",
-  ],
-};
 
 /**
  * Read-only render of a todo description (Tiptap-emitted HTML). The container
@@ -74,11 +53,14 @@ export function TodoDescriptionView({
   const { t } = useI18n();
 
   // Sanitize once per html change. The cost is non-trivial on large docs, so
-  // memoize on the input string.
+  // memoize on the input string. `allowStyle: true` lets `<span style="color:
+  // #rrggbb">` through; the helper's `uponSanitizeAttribute` hook rewrites
+  // any other style property out before this point (defense-in-depth even
+  // though the server-side store would already have done this).
   const sanitized = useMemo(() => {
     if (!html) return "";
     try {
-      return DOMPurify.sanitize(html, SANITIZE_CONFIG);
+      return DOMPurify.sanitize(html, buildDescriptionSanitizeConfig({ allowStyle: true }));
     } catch {
       return "";
     }

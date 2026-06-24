@@ -433,6 +433,7 @@ const ZH_TRANSLATIONS = {
   "Failed to delete tag": "删除标签失败",
   "New tag name": "新标签名",
   "Tag color": "标签颜色",
+  "Text color": "文字颜色",
   "No color": "无颜色",
   "Custom color": "自定义颜色",
   "Tag color updated": "标签颜色已更新",

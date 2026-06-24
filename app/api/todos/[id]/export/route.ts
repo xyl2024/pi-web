@@ -3,9 +3,11 @@ import { existsSync, readFileSync } from "fs";
 import { join, resolve } from "path";
 import { homedir } from "os";
 import JSZip from "jszip";
+import DOMPurify from "isomorphic-dompurify";
 import { createLogger, elapsedMs } from "@/lib/logger";
 import { getTodoById } from "@/lib/todo-store";
 import { extractTodoImageFilenames } from "@/lib/todo-images-utils";
+import { buildDescriptionSanitizeConfig } from "@/lib/description-sanitize";
 
 const log = createLogger("api/todos/[id]/export");
 const TODO_IMAGES_DIR = join(homedir(), ".pi-web", "todo_images");
@@ -53,9 +55,28 @@ export async function GET(
     const slug = slugifyTitle(todo.title, todo.id);
     const description = todo.description ?? "";
 
+    // Strip color spans before writing the .md. Two passes via the shared
+    // sanitizer:
+    //   1. allowStyle:false — drops every `style` attribute (so
+    //      `<span style="color: #ff0000">red</span>` becomes
+    //      `<span>red</span>`).
+    //   2. remove `span` from ALLOWED_TAGS — unwraps the now-styleless
+    //      span (KEEP_CONTENT preserves the inner text).
+    // Result: `<span style="color: #ff0000">red</span>` → `red`. Other HTML
+    // (paragraphs, lists, images, code blocks) is preserved as-is.
+    const stripStyleConfig = buildDescriptionSanitizeConfig({ allowStyle: false });
+    const stripSpanConfig = {
+      ...stripStyleConfig,
+      ALLOWED_TAGS: (stripStyleConfig.ALLOWED_TAGS ?? []).filter((tag) => tag !== "span"),
+    };
+    const strippedDescription = DOMPurify.sanitize(
+      DOMPurify.sanitize(description, stripStyleConfig),
+      stripSpanConfig,
+    );
+
     // Rewrite /api/todo-images/<file> → images/<file> in the markdown so the
     // exported bundle is self-contained.
-    const rewrittenDescription = description.replace(
+    const rewrittenDescription = strippedDescription.replace(
       /\/api\/todo-images\/([^)\s]+)/g,
       "images/$1",
     );

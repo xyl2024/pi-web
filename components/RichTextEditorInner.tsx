@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
-import { useEditor, EditorContent, Editor } from "@tiptap/react";
+import { useEditor, EditorContent, Editor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -11,9 +11,14 @@ import TaskItem from "@tiptap/extension-task-item";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { TableKit } from "@tiptap/extension-table";
 import { createLowlight, common } from "lowlight";
+import { TextStyle } from "@tiptap/extension-text-style";
+import { Color } from "@tiptap/extension-color";
+import { BubbleMenu } from "@tiptap/react/menus";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "@/components/Toast";
 import { uploadTodoImages, extractImageFiles, extractClipboardImageFiles } from "@/lib/todo-image-upload";
+import { buildDescriptionSanitizeConfig } from "@/lib/description-sanitize";
+import { TextColorPicker, TextColorToolbarButton, applyEditorColor } from "@/components/TextColorPicker";
 
 interface Props {
   defaultValue: string;
@@ -38,28 +43,11 @@ try {
   // the picker and the block falls back to plain rendering
 }
 
-// Whitelist for the DOMPurify pass that runs on save. Kept narrower than
-// the server-side allowlist (lib/todo-store.ts) because Tiptap will never
-// emit e.g. <input> — but defense-in-depth on the client too, in case the
-// editor content was seeded from an untrusted source.
-const CLIENT_SANITIZE_CONFIG = {
-  ALLOWED_TAGS: [
-    "p", "h1", "h2", "h3", "h4", "h5", "h6",
-    "ul", "ol", "li",
-    "blockquote", "pre", "hr", "br", "div",
-    "table", "thead", "tbody", "tr", "th", "td",
-    "strong", "b", "em", "i", "s", "strike", "u", "code", "a", "span", "img", "sub", "sup",
-    "input", "label",
-  ],
-  ALLOWED_ATTR: [
-    "href", "src", "alt", "title", "class",
-    "colspan", "rowspan",
-    "type", "checked", "disabled", "value",
-    "target", "rel",
-    "data-type", "data-checked",
-    "start",
-  ],
-};
+// Sanitize config for both the seed (mount) and save passes. Shared with the
+// server-side allowlist via lib/description-sanitize.ts — `allowStyle: true`
+// so `<span style="color: #rrggbb">` round-trips intact (the helper's hook
+// rewrites every other style property out before this point).
+const SANITIZE_CONFIG = buildDescriptionSanitizeConfig({ allowStyle: true });
 
 export function RichTextEditorInner({
   defaultValue,
@@ -77,7 +65,7 @@ export function RichTextEditorInner({
     const editor = editorRef.current;
     if (!editor) return;
     const html = editor.getHTML();
-    const safe = DOMPurify.sanitize(html, CLIENT_SANITIZE_CONFIG);
+    const safe = DOMPurify.sanitize(html, SANITIZE_CONFIG);
     onSave(safe);
   }, [onSave]);
 
@@ -90,7 +78,7 @@ export function RichTextEditorInner({
   const seed = useMemo(() => {
     if (!defaultValue) return "";
     try {
-      return DOMPurify.sanitize(defaultValue, CLIENT_SANITIZE_CONFIG);
+      return DOMPurify.sanitize(defaultValue, SANITIZE_CONFIG);
     } catch {
       return "";
     }
@@ -128,6 +116,13 @@ export function RichTextEditorInner({
       TaskItem.configure({ nested: true }),
       CodeBlockLowlight.configure({ lowlight }),
       TableKit.configure({ table: { resizable: true } }),
+      // Text color: TextStyle provides the <span style="…"> host schema,
+      // Color provides the mark + setColor / unsetColor commands. Tiptap v3
+      // doesn't bundle TextStyle in StarterKit, so it must be added
+      // explicitly. `types: ["textStyle"]` (the default) keeps color marks
+      // scoped to textStyle-marked spans — they don't leak into <p>/<pre>.
+      TextStyle,
+      Color,
     ],
     editorProps: {
       attributes: {
@@ -221,7 +216,44 @@ export function RichTextEditorInner({
       >
         <EditorContent editor={editor} />
       </div>
+      {editor && (
+        <BubbleMenu
+          editor={editor}
+          shouldShow={({ editor: e, from, to }) => {
+            // Only show the bubble menu when the editor is editable and
+            // there's a non-empty text selection. This matches the standard
+            // Tiptap "format on selection" UX.
+            if (!e.isEditable) return false;
+            return from !== to;
+          }}
+        >
+          <BubbleMenuColorContent editor={editor} />
+        </BubbleMenu>
+      )}
     </div>
+  );
+}
+
+/**
+ * Body of the bubble menu's text-color picker. Uses `useEditorState` so the
+ * current color reflects the selection — when the user clicks a swatch and
+ * `setColor` runs, the editor state changes and the picker re-renders with
+ * the new color highlighted (or unhighlighted, when "No color" is picked).
+ */
+function BubbleMenuColorContent({ editor }: { editor: Editor }) {
+  const currentColor = useEditorState({
+    editor,
+    selector: (snapshot) => {
+      const attrs = snapshot.editor.getAttributes("textStyle");
+      const c = attrs.color;
+      return typeof c === "string" && c.length > 0 ? c : null;
+    },
+  });
+  return (
+    <TextColorPicker
+      value={currentColor}
+      onChange={(next) => applyEditorColor(editor, next)}
+    />
   );
 }
 
@@ -300,6 +332,12 @@ function Toolbar({
           onClick={() => editor?.chain().focus().toggleCode().run()}
           glyph={<code style={{ fontSize: 10 }}>{"</>"}</code>}
         />
+        {editor && (
+          <TextColorToolbarButton
+            editor={editor}
+            active={editor.isActive("textStyle")}
+          />
+        )}
       </ToolbarGroup>
       <ToolbarGroup>
         <ToolbarButton

@@ -5,6 +5,7 @@ import { marked } from "marked";
 import DOMPurify from "isomorphic-dompurify";
 import { useToast } from "@/components/Toast";
 import { useI18n } from "./useI18n";
+import { buildDescriptionSanitizeConfig } from "@/lib/description-sanitize";
 
 export interface Tag {
   name: string;
@@ -43,24 +44,9 @@ const TodoContext = createContext<TodoContextValue | null>(null);
 
 // Mirrors lib/todo-store.ts — kept narrow on purpose so legacy Markdown that
 // slips through the heuristic doesn't smuggle a <script> tag into the DB.
-const MIGRATION_SANITIZE_CONFIG: Parameters<typeof DOMPurify.sanitize>[1] = {
-  ALLOWED_TAGS: [
-    "p", "h1", "h2", "h3", "h4", "h5", "h6",
-    "ul", "ol", "li",
-    "blockquote", "pre", "hr", "br", "div",
-    "table", "thead", "tbody", "tr", "th", "td",
-    "strong", "b", "em", "i", "s", "strike", "u", "code", "a", "span", "img", "sub", "sup",
-    "input", "label",
-  ],
-  ALLOWED_ATTR: [
-    "href", "src", "alt", "title", "class",
-    "colspan", "rowspan",
-    "type", "checked", "disabled", "value",
-    "target", "rel",
-    "data-type", "data-checked",
-    "start",
-  ],
-};
+// `allowStyle: false` because legacy markdown has no color spans; nothing
+// to gain from opening `style` for this code path.
+const MIGRATION_SANITIZE_CONFIG = buildDescriptionSanitizeConfig({ allowStyle: false });
 
 /**
  * Heuristic: does this string look like legacy Markdown rather than Tiptap
