@@ -201,7 +201,7 @@ lib/
   file-name.ts          validateFileName() for create/rename routes
   logger.ts             structured logger used by every route + lib file
   npx.ts                helpers to run `npm` / `npx` from the server (skill install)
-  fonts/                next/font Inter loader
+  fonts/                vendored LXGW WenKai webfonts (woff2, subsetted) + OFL + README
   wechat/               WeChat client + workspace push utilities
 
 components/
@@ -231,8 +231,8 @@ components/
   ConfirmDialog.tsx     reusable confirm dialog
   Toast.tsx             toast notifications
   Tooltip.tsx           Radix-backed tooltip wrapper
-  MarkdownEditor.tsx + MarkdownEditorInner.tsx
-                        CodeMirror markdown editor (used in TodoPanel)
+  RichTextEditor.tsx + RichTextEditorInner.tsx
+                        Tiptap-based rich text editor (used in TodoPanel)
   ImageLightbox.tsx     image preview overlay
   FileIcons.tsx         file-type icon set
   WeChatSettingsSection.tsx
@@ -314,7 +314,7 @@ Theme presets (`.theme-default`, `.theme-midnight`, `.theme-synthwave`, `.theme-
 --bg --bg-panel --bg-hover --bg-selected --bg-subtle --border
 --text --text-muted --text-dim
 --accent --accent-hover --user-bg --assistant-bg --tool-bg
---font-mono
+--font-sans --font-mono
 ```
 
 ---

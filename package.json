@@ -79,6 +79,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "postcss": "^8",
+    "subset-font": "^2.5.0",
     "tailwindcss": "^4.2.2",
     "typescript": "^5"
   }
