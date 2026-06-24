@@ -1,17 +1,18 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import type { Locale } from "@/hooks/useI18n";
 
 export type ThemePreset = "default" | "midnight" | "synthwave" | "forest" | "sepia";
 
 export const PRESETS: ThemePreset[] = ["default", "midnight", "synthwave", "forest", "sepia"];
 
-export const PRESET_LABELS: Record<ThemePreset, string> = {
-  default: "默认",
-  midnight: "暗夜",
-  synthwave: "赛博",
-  forest: "森林",
-  sepia: "羊皮",
+export const PRESET_LABELS: Record<ThemePreset, Record<Locale, string>> = {
+  default: { en: "Default", zh: "默认" },
+  midnight: { en: "Midnight", zh: "暗夜" },
+  synthwave: { en: "Synthwave", zh: "赛博" },
+  forest: { en: "Forest", zh: "森林" },
+  sepia: { en: "Sepia", zh: "羊皮" },
 };
 
 /** Whether a preset uses dark background tones — used for syntax-highlighter themes. */

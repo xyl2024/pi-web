@@ -171,6 +171,8 @@ const ZH_TRANSLATIONS = {
   "Language": "语言",
   "English": "English",
   "Chinese": "中文",
+  "Appearance": "外观",
+  "Theme": "主题",
   "Steer immediately / queue follow-up...": "插话立即注入 / 追问排队发送...",
   "Interrupt the running agent and inject this message": "打断 Agent 当前运行，立即注入消息",
   "Queue this message after the agent finishes": "在 Agent 完成后排队发送",

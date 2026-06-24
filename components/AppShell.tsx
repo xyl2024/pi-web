@@ -26,7 +26,6 @@ import { SettingsModal } from "./SettingsModal";
 import { PayloadsModal } from "./PayloadsModal";
 import { BranchNavigator } from "./BranchNavigator";
 import { CommandPalette } from "./CommandPalette";
-import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
 import { useContextMenu, type ContextMenuItem } from "./ContextMenu";
@@ -60,12 +59,10 @@ const defaultRightWidth = (): number => {
 export function AppShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { preset, setPreset } = useTheme();
-  const { locale, toggleLocale, t } = useI18n();
+  const { t } = useI18n();
   const toast = useToast();
   const cm = useContextMenu();
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   // When user clicks +, we only store the cwd — no fake session id
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -795,92 +792,6 @@ export function AppShell() {
                 <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             )}
-          </button>
-          </Tooltip>
-          {/* Theme preset selector */}
-          <div style={{ position: "relative", overflow: "visible" }}>
-            <Tooltip content={t("Switch theme")}>
-            <button
-              onClick={() => {
-                setThemeMenuOpen((v) => !v);
-              }}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                width: 36, height: 36, padding: 0,
-                background: "none", border: "none", borderRight: "1px solid var(--border)",
-                color: "var(--text-muted)", cursor: "pointer", flexShrink: 0, transition: "color 0.12s",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-              </svg>
-            </button>
-            </Tooltip>
-            {themeMenuOpen && (
-              <>
-                <div
-                  style={{ position: "fixed", inset: 0, zIndex: 40 }}
-                  onClick={() => setThemeMenuOpen(false)}
-                />
-                <div
-                  style={{
-                    position: "absolute", top: "100%", left: 0, zIndex: 50,
-                    marginTop: 4, background: "var(--bg-panel)",
-                    border: "1px solid var(--border)", borderRadius: 8,
-                    boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
-                    minWidth: 120, overflow: "hidden",
-                  }}
-                >
-                  {PRESETS.map((p) => (
-                    <button
-                      key={p}
-                      onClick={(e: React.MouseEvent) => {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const origin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-                        setThemeMenuOpen(false);
-                        setPreset(p, origin);
-                      }}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        width: "100%", padding: "9px 14px",
-                        background: "none", border: "none",
-                        color: preset === p ? "var(--accent)" : "var(--text)",
-                        cursor: "pointer", fontSize: 13, textAlign: "left",
-                        transition: "background 0.1s",
-                      }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-hover)"; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "none"; }}
-                    >
-                      {preset === p && (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                      )}
-                      {preset !== p && <span style={{ width: 12 }} />}
-                      {PRESET_LABELS[p]}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-          <Tooltip content={t("Switch language")}>
-          <button
-            onClick={toggleLocale}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center",
-              width: 36, height: 36, padding: 0,
-              background: "none", border: "none", borderRight: "1px solid var(--border)",
-              color: "var(--text-muted)", cursor: "pointer", flexShrink: 0, transition: "color 0.12s",
-              fontSize: 11, fontWeight: 700, fontFamily: "var(--font-mono)",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
-          >
-            {locale === "zh" ? "EN" : "中"}
           </button>
           </Tooltip>
           {showChat && (
