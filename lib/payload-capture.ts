@@ -108,10 +108,11 @@ function append(sessionId: string, line: Line): void {
   }
 }
 
-/** Record an outgoing provider request payload. */
-export function recordRequest(sessionId: string, payload: unknown): void {
+/** Record an outgoing provider request payload. Returns the assigned index. */
+export function recordRequest(sessionId: string, payload: unknown): number {
   const index = allocateIndex(sessionId);
   append(sessionId, { kind: "request", index, timestamp: Date.now(), payload });
+  return index;
 }
 
 /**

@@ -625,6 +625,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                     highlightEntryId={highlightEntryId}
                     isSearchMatch={matchedEntryIds.has(entryIds[idx])}
                     cwd={session?.cwd}
+                    sessionId={session?.id}
                   />
                 );
                 if (!isVisible) return view;
@@ -640,7 +641,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
             })()}
 
             {streamState.isStreaming && streamState.streamingMessage && (
-              <MessageView message={streamState.streamingMessage as AgentMessage} isStreaming modelNames={modelNames} cwd={session?.cwd} />
+              <MessageView message={streamState.streamingMessage as AgentMessage} isStreaming modelNames={modelNames} cwd={session?.cwd} sessionId={session?.id} />
             )}
 
             {agentRunning && !streamState.streamingMessage && (

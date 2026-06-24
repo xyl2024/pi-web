@@ -57,8 +57,39 @@ export class AgentSessionWrapper {
   private _alive = true;
   private pendingPermissions: Map<string, PendingPermission> = new Map();
   private allowedThisSession: Set<string> = new Set();
+  // entryId (session-file entry id of an assistant message) → payload index.
+  // Populated by the message_start extension hook and read by the payloads
+  // API to support per-message payload lookup. Not persisted — cold sessions
+  // fall back to index-order matching in the route handler.
+  private payloadIndexByEntryId: Map<string, number> = new Map();
+  // Index of the most recent in-flight or just-completed provider request,
+  // awaiting its assistant message_start. Cleared once the entry id is known.
+  private pendingPayloadIndex: number | null = null;
 
   constructor(public readonly inner: AgentSessionLike) {}
+
+  /** Look up the captured payload index for an assistant entry id, if known. */
+  getPayloadIndexForEntry(entryId: string): number | undefined {
+    return this.payloadIndexByEntryId.get(entryId);
+  }
+
+  /** Record the index of an in-flight or just-completed provider request. */
+  setPendingPayloadIndex(index: number): void {
+    this.pendingPayloadIndex = index;
+  }
+
+  /**
+   * Associate the most recent pending payload index with an assistant entry
+   * id (called from the message_start hook) and return it. Returns undefined
+   * if no pending index is set.
+   */
+  consumePendingPayloadIndex(entryId: string): number | undefined {
+    const idx = this.pendingPayloadIndex;
+    if (idx === null) return undefined;
+    this.pendingPayloadIndex = null;
+    this.payloadIndexByEntryId.set(entryId, idx);
+    return idx;
+  }
 
   get sessionId(): string {
     return this.inner.sessionId;
@@ -473,10 +504,17 @@ export async function startRpcSession(
       extensionFactories: [
         (pi) => {
           pi.on("before_provider_request", (event) => {
-            if (capturedSessionId) recordRequest(capturedSessionId, event.payload);
+            if (!capturedSessionId) return;
+            const idx = recordRequest(capturedSessionId, event.payload);
+            wrapperRef.current?.setPendingPayloadIndex(idx);
           });
           pi.on("after_provider_response", (event) => {
             if (capturedSessionId) recordResponse(capturedSessionId, event.status, event.headers);
+          });
+          pi.on("message_start", (event) => {
+            const msg = (event as { message?: { role?: string; id?: string } }).message;
+            if (!msg || msg.role !== "assistant" || !msg.id) return;
+            wrapperRef.current?.consumePendingPayloadIndex(msg.id);
           });
           pi.on("tool_call", async (event) => {
             if (!isToolCallEventType("bash", event)) return;

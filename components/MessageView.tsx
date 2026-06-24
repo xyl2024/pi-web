@@ -10,6 +10,7 @@ import { MermaidBlock } from "./MermaidBlock";
 import { SvgBlock } from "./SvgBlock";
 import { CodeBlock, copyText } from "./CodeBlock";
 import { SHOW_FILE_TOOL_NAME } from "@/lib/show-file-tool-types";
+import { PayloadChip } from "./PayloadChip";
 import type {
   AgentMessage,
   UserMessage,
@@ -35,6 +36,8 @@ interface Props {
   onEditContent?: (content: string) => void;
   showTimestamp?: boolean;
   prevTimestamp?: number;
+  /** Session id — used to fetch the captured provider request for this message. */
+  sessionId?: string;
   /** Keywords to highlight with <mark> (from in-session search) */
   keywords?: string[];
   /** If this entryId matches, apply a flash animation */
@@ -81,7 +84,7 @@ function highlightKeywords(text: string, keywords?: string[], isSearchMatch?: bo
   return parts.length > 0 ? parts : text;
 }
 
-export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, prevTimestamp, keywords, highlightEntryId, isSearchMatch, cwd }: Props) {
+export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, prevTimestamp, keywords, highlightEntryId, isSearchMatch, cwd, sessionId }: Props) {
   const isFocused = !!(highlightEntryId && entryId === highlightEntryId);
 
   if (message.role === "user") {
@@ -94,7 +97,7 @@ export function MessageView({ message, isStreaming, toolResults, modelNames, ent
   if (message.role === "assistant") {
     return (
       <div className={isFocused ? "search-flash" : undefined}>
-        <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} />
+        <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} sessionId={sessionId} entryId={entryId} />
       </div>
     );
   }
@@ -319,6 +322,8 @@ function AssistantMessageView({
   keywords,
   isSearchMatch,
   cwd,
+  sessionId,
+  entryId,
 }: {
   message: AssistantMessage;
   isStreaming?: boolean;
@@ -329,6 +334,8 @@ function AssistantMessageView({
   keywords?: string[];
   isSearchMatch?: boolean;
   cwd?: string;
+  sessionId?: string;
+  entryId?: string;
 }) {
   const { t } = useI18n();
   const time = showTimestamp ? formatTime(message.timestamp) : null;
@@ -452,6 +459,9 @@ function AssistantMessageView({
       >
         {message.provider && (
           <span>{modelNames?.[`${message.provider}:${message.model}`] ?? modelNames?.[message.model] ?? message.model}</span>
+        )}
+        {sessionId && entryId && (
+          <PayloadChip sessionId={sessionId} entryId={entryId} pending={!!isStreaming} />
         )}
         {isStreaming && (() => {
           let chars = 0;
