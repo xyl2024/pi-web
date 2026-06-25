@@ -50,9 +50,34 @@ const DESCRIPTION_ALLOWED_ATTR = [
   "start",
 ] as const;
 
-// Hex colors only; canonicalized to lowercase before storage. Matches the
-// format <input type="color"> emits natively, so the picker round-trips.
-const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+// Hex colors only — canonical form for storage. The picker is <input
+// type="color">, which always emits #rrggbb, so hex is what we round-trip.
+// The browser, however, normalizes any inline style value to `rgb(r, g, b)`
+// when read back through `element.style.color`. Tiptap does exactly that
+// when it parses a saved `<span style="color: #ff0000">` and then re-emits
+// the document — the next save would carry `color: rgb(255, 0, 0)`, which
+// this hook used to silently strip. Accept rgb()/rgba() here too and
+// normalize back to lowercase hex so the stored HTML stays in one shape.
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+const RGB_COLOR_PATTERN = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)$/;
+
+/**
+ * Normalize a CSS color value to lowercase `#rrggbb`. Returns null for any
+ * non-RGB color (named, hsl, currentcolor, …) so the hook can drop it.
+ */
+function normalizeColor(value: string): string | null {
+  if (HEX_COLOR_PATTERN.test(value)) return value.toLowerCase();
+  const m = RGB_COLOR_PATTERN.exec(value);
+  if (!m) return null;
+  // Alpha is dropped: the picker has no alpha channel, and the editor only
+  // round-trips RGB-equivalent colors.
+  const hex =
+    "#" +
+    [m[1], m[2], m[3]]
+      .map((n) => Number(n).toString(16).padStart(2, "0"))
+      .join("");
+  return hex;
+}
 
 /**
  * Parse a CSS declaration block (e.g. `"color: red; background: blue;"`)
@@ -66,8 +91,9 @@ function extractColorFromStyle(styleValue: string): string {
     if (colon < 0) continue;
     const key = decl.slice(0, colon).trim().toLowerCase();
     const value = decl.slice(colon + 1).trim();
-    if (key === "color" && COLOR_PATTERN.test(value)) {
-      color = value.toLowerCase();
+    if (key === "color") {
+      const normalized = normalizeColor(value);
+      if (normalized) color = normalized;
     }
   }
   return color ? `color: ${color}; ` : "";
