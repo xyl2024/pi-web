@@ -15,6 +15,7 @@ import { extractImageGallery, MarkdownImage, ImageLightbox } from "./ImageLightb
 import { MermaidBlock } from "./MermaidBlock";
 import { SvgBlock } from "./SvgBlock";
 import { CodeBlock } from "./CodeBlock";
+import { FileSearchBar } from "./FileSearchBar";
 import { encodeFilePathForApi, getFileName, getRelativeFilePath, normalizeFilePathSlashes } from "@/lib/file-paths";
 import { Document, Page, pdfjs } from "react-pdf";
 
@@ -1301,6 +1302,15 @@ function TextFileViewer({ filePath, cwd }: Props) {
   const [saving, setSaving] = useState(false);
   const [externalChangeWhileEditing, setExternalChangeWhileEditing] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // Inline search state. `searchInputValue` updates on every keystroke for a
+  // responsive input field; `searchQuery` lags behind by 250ms (see effect
+  // below) and is what drives match computation.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchInputValue, setSearchInputValue] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
+  const [searchMatchIndex, setSearchMatchIndex] = useState(0);
+  const contentRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
   const editingRef = useRef(false);
 
@@ -1371,6 +1381,69 @@ function TextFileViewer({ filePath, cwd }: Props) {
     }),
     [resolveSrc, gallery],
   );
+
+  // ── Inline search ────────────────────────────────────────────────
+  // 250ms debounce on the raw input value → drives match computation.
+  useEffect(() => {
+    const id = setTimeout(() => setSearchQuery(searchInputValue), 250);
+    return () => clearTimeout(id);
+  }, [searchInputValue]);
+
+  // Find every match position in the current file content. Returns the
+  // 1-based line number for each match — used by `lineProps` to paint a
+  // background on matching lines and by the scroll-into-view effect.
+  const searchMatches = useMemo(() => {
+    if (!data || !searchQuery) return [];
+    const needle = searchCaseSensitive ? searchQuery : searchQuery.toLowerCase();
+    if (!needle) return [];
+    const haystack = searchCaseSensitive ? data.content : data.content.toLowerCase();
+    const results: Array<{ line: number }> = [];
+    let pos = 0;
+    while ((pos = haystack.indexOf(needle, pos)) !== -1) {
+      const before = data.content.slice(0, pos);
+      const line = (before.match(/\n/g)?.length ?? 0) + 1;
+      results.push({ line });
+      pos += needle.length;
+    }
+    return results;
+  }, [data, searchQuery, searchCaseSensitive]);
+
+  const matchedLines = useMemo(
+    () => new Set(searchMatches.map((m) => m.line)),
+    [searchMatches],
+  );
+  const currentMatchLine = searchMatches[searchMatchIndex]?.line ?? null;
+
+  // Clamp the current match index when match count changes (SSE update,
+  // case toggle, or query edit) so we never point past the end.
+  useEffect(() => {
+    setSearchMatchIndex((i) =>
+      searchMatches.length === 0 ? 0 : Math.min(i, searchMatches.length - 1),
+    );
+  }, [searchMatches.length]);
+
+  // Ctrl/Cmd+F toggles the search bar. Mirrors the ChatWindow pattern.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey) || e.key !== "f") return;
+      if (!data) return;
+      e.preventDefault();
+      setSearchOpen((v) => !v);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [data]);
+
+  // Scroll the current match into view (centered). No-op if the search bar
+  // is closed or the match is on a line that's not currently mounted (e.g.
+  // when the user is viewing the diff or preview branches).
+  useEffect(() => {
+    if (currentMatchLine == null) return;
+    const el = contentRef.current?.querySelector(`[data-fv-line="${currentMatchLine}"]`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [currentMatchLine]);
+
+  // ── End inline search ────────────────────────────────────────────
 
   const fetchContent = useCallback((filePath: string, isRefresh = false) => {
     const encoded = encodeFilePathForApi(filePath);
@@ -1471,6 +1544,14 @@ function TextFileViewer({ filePath, cwd }: Props) {
     setIsEditing(false);
     setExternalChangeWhileEditing(false);
     setLightboxIndex(null);
+    // Reset inline search state on file switch — matches the spec ("clear on
+    // filePath change"). The search bar unmounts because the conditional in
+    // the JSX evaluates `!previewMode && !isEditing`; we explicitly clear the
+    // state so reopening after a new file lands on an empty bar.
+    setSearchOpen(false);
+    setSearchInputValue("");
+    setSearchQuery("");
+    setSearchMatchIndex(0);
     editingRef.current = false;
 
     if (esRef.current) {
@@ -1641,6 +1722,43 @@ function TextFileViewer({ filePath, cwd }: Props) {
               </div>
             )}
 
+            {/* Search toggle — opens the inline search bar (Ctrl+F). Source view only. */}
+            {viewMode === "source" && !previewMode && (
+              <Tooltip content={t("Search file")}>
+                <button
+                  onClick={() => setSearchOpen((v) => !v)}
+                  aria-label={t("Search file")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 26,
+                    height: 22,
+                    cursor: "pointer",
+                    background: searchOpen ? "var(--bg-selected)" : "var(--bg-hover)",
+                    color: searchOpen ? "var(--text)" : "var(--text-muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 5,
+                    padding: 0,
+                  }}
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                </button>
+              </Tooltip>
+            )}
+
             {/* Word wrap toggle */}
             {viewMode === "source" && !previewMode && (
               <Tooltip content={wrapLines ? t("Disable word wrap") : t("Enable word wrap")}>
@@ -1730,8 +1848,31 @@ function TextFileViewer({ filePath, cwd }: Props) {
         )}
       </div>
 
+      {/* Inline search bar — mounted only in source view, hidden in edit / preview / diff. */}
+      {searchOpen && viewMode === "source" && !previewMode && !isEditing && (
+        <FileSearchBar
+          query={searchInputValue}
+          onQueryChange={setSearchInputValue}
+          caseSensitive={searchCaseSensitive}
+          onCaseSensitiveChange={setSearchCaseSensitive}
+          matchIndex={searchMatchIndex}
+          matchCount={searchMatches.length}
+          onPrev={() => setSearchMatchIndex((i) => Math.max(0, i - 1))}
+          onNext={() =>
+            setSearchMatchIndex((i) => Math.max(0, Math.min(searchMatches.length - 1, i + 1)))
+          }
+          onClose={() => {
+            setSearchOpen(false);
+            setSearchInputValue("");
+            setSearchQuery("");
+            setSearchMatchIndex(0);
+          }}
+          visible={searchOpen}
+        />
+      )}
+
       {/* Content area */}
-      <div style={{ flex: 1, overflow: "auto", background: "var(--bg)" }}>
+      <div ref={contentRef} style={{ flex: 1, overflow: "auto", background: "var(--bg)" }}>
         {isEditing ? (
           <textarea
             value={editContent}
@@ -1777,11 +1918,30 @@ function TextFileViewer({ filePath, cwd }: Props) {
             language={data.language === "text" ? "plaintext" : data.language}
             style={isDark ? vscDarkPlus : vs}
             showLineNumbers
+            // Force per-line <span> wrappers when the search bar is open
+            // (react-syntax-highlighter only calls `lineProps` when wrapLines
+            // is true). For `language="text"` (plaintext, no tokens) the
+            // default would skip wrapping entirely — that would silently
+            // disable all highlights. Keep the user's wrap preference in
+            // effect when the search bar is closed.
+            wrapLines={searchOpen || wrapLines}
             lineNumberStyle={{
               color: "var(--text-dim)",
               fontStyle: "normal",
               minWidth: "3em",
               paddingRight: "1em",
+            }}
+            lineProps={(lineNumber: number) => {
+              const isCurrent = lineNumber === currentMatchLine;
+              const isMatch = !isCurrent && matchedLines.has(lineNumber);
+              return {
+                "data-fv-line": lineNumber,
+                style: isCurrent
+                  ? { background: "rgba(255, 200, 0, 0.30)" }
+                  : isMatch
+                  ? { background: "rgba(255, 200, 0, 0.12)" }
+                  : {},
+              };
             }}
             customStyle={{
               margin: 0,

@@ -608,6 +608,14 @@ const ZH_TRANSLATIONS = {
   "Translation failed": "翻译失败",
   "Translator prompt": "翻译器提示词",
   "Reset to default": "恢复默认",
+  // File viewer inline search
+  "Search file": "在文件中搜索",
+  "Search file...": "搜索文件内容…",
+  "Match case": "区分大小写",
+  "No file matches": "文件内无匹配",
+  "Next match": "下一匹配",
+  "Previous match": "上一匹配",
+  "Close search": "关闭搜索",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
