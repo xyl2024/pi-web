@@ -24,6 +24,9 @@ interface Props {
   defaultValue: string;
   onSave: (value: string) => void;
   onCancel: () => void;
+  /** Called with the current sanitized HTML on every change. Lets the parent
+   *  flush unsaved edits during page unload (pagehide + keepalive). */
+  onChange?: (html: string) => void;
   placeholder?: string;
   minHeight?: number;
   className?: string;
@@ -53,6 +56,7 @@ export function RichTextEditorInner({
   defaultValue,
   onSave,
   onCancel,
+  onChange,
   placeholder,
   minHeight = 240,
   className,
@@ -61,15 +65,39 @@ export function RichTextEditorInner({
   const { show: showToast } = useToast();
   const editorRef = useRef<Editor | null>(null);
 
+  // Capture the seed at mount so the unmount-save diff isn't fooled by a
+  // later defaultValue prop change (defensive — in practice defaultValue is
+  // stable for the lifetime of the editor).
+  const initialSeedRef = useRef(defaultValue);
+  // Latest sanitized HTML, updated on every transaction. Read by the unmount
+  // cleanup so we can flush an unsaved edit when the panel unmounts mid-edit
+  // (tab close / tab switch / React-driven page tear-down).
+  const latestHtmlRef = useRef(defaultValue);
+  // Explicit Save / Cancel both suppress the unmount-save path so we don't
+  // double-fire onUpdate or override a deliberate Cancel.
+  const savedRef = useRef(false);
+  const cancelledRef = useRef(false);
+  // Keep the latest onSave in a ref so the unmount cleanup can call it
+  // without re-running on every render.
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  // Keep onChange in a ref for the same reason — the editor's `update`
+  // listener closes over it via this ref so we don't re-subscribe per render.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
   const handleSave = useCallback(() => {
     const editor = editorRef.current;
     if (!editor) return;
     const html = editor.getHTML();
     const safe = DOMPurify.sanitize(html, SANITIZE_CONFIG);
+    savedRef.current = true;
+    latestHtmlRef.current = safe;
     onSave(safe);
   }, [onSave]);
 
   const handleCancel = useCallback(() => {
+    cancelledRef.current = true;
     onCancel();
   }, [onCancel]);
 
@@ -163,6 +191,36 @@ export function RichTextEditorInner({
       editorRef.current = null;
     };
   }, [editor]);
+
+  // Mirror the editor's HTML into latestHtmlRef and notify the parent on every
+  // transaction. The ref is what the unmount cleanup reads; onChange lets the
+  // parent run a keepalive fetch on pagehide (page refresh / tab close).
+  useEffect(() => {
+    if (!editor) return;
+    const onUpdate = () => {
+      const html = editor.getHTML();
+      const safe = DOMPurify.sanitize(html, SANITIZE_CONFIG);
+      latestHtmlRef.current = safe;
+      onChangeRef.current?.(safe);
+    };
+    editor.on("update", onUpdate);
+    return () => {
+      editor.off("update", onUpdate);
+    };
+  }, [editor]);
+
+  // Auto-save on unmount when the user is leaving the editor with unsaved
+  // changes — e.g. closing the Todo tab, switching to another tab in the right
+  // panel, or the React tree being torn down on refresh. Skipped when the
+  // user explicitly hit Save or Cancel (those have already settled state).
+  useEffect(() => {
+    return () => {
+      if (savedRef.current || cancelledRef.current) return;
+      const latest = latestHtmlRef.current;
+      if (!latest || latest === initialSeedRef.current) return;
+      onSaveRef.current(latest);
+    };
+  }, []);
 
   // Keyboard shortcuts: Mod-s / Mod-Enter save, Escape cancel. Tiptap ships
   // its own keymap for bold/italic/etc; we add ours on top.

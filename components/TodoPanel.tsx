@@ -2209,6 +2209,19 @@ function TodoItem({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [deadlinePickerOpen, setDeadlinePickerOpen] = useState(false);
 
+  // Latest HTML coming out of the RichTextEditor while editingDesc is true.
+  // Read by the pagehide flush below so a page refresh can keep the request
+  // alive across unload via fetch keepalive. Kept in a ref (not state) so
+  // reading it on unload doesn't trigger a re-render.
+  const latestDescriptionRef = useRef<string>(todo.description ?? "");
+  // Latest todo.id / todo.description — kept in refs so the pagehide handler
+  // (registered once when editingDesc flips on) always sees the current
+  // values instead of the stale ones captured by the original closure.
+  const todoIdRef = useRef(todo.id);
+  const todoDescRef = useRef(todo.description ?? "");
+  todoIdRef.current = todo.id;
+  todoDescRef.current = todo.description ?? "";
+
   const openDeadlinePicker = () => setDeadlinePickerOpen(true);
 
   // Gallery of every image reference in the description, for lightbox
@@ -2284,6 +2297,43 @@ function TodoItem({
     }
     setEditingDesc(false);
   };
+
+  // Keep latestDescriptionRef in sync with the live editor while it is open.
+  // RichTextEditorInner fires this on every transaction (sanitized HTML), so
+  // pagehide below has something authoritative to send.
+  const handleEditorChange = useCallback((html: string) => {
+    latestDescriptionRef.current = html;
+  }, []);
+
+  // Flush unsaved description edits when the page is going away (refresh /
+  // browser tab close). The editor's own unmount-cleanup in
+  // RichTextEditorInner handles in-page navigation (tab switch), but the
+  // browser may unload the React tree before that cleanup completes — so we
+  // also wire a keepalive fetch on pagehide. pagehide fires after React's
+  // cleanups on most browsers, making it a reliable backstop.
+  useEffect(() => {
+    if (!editingDesc) return;
+    const flush = () => {
+      const latest = latestDescriptionRef.current;
+      if (latest === todoDescRef.current) return;
+      // Fire-and-forget: keepalive lets the request outlive the unload so
+      // a refresh during active editing doesn't drop the diff.
+      try {
+        void fetch("/api/todos", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: todoIdRef.current, description: latest }),
+          keepalive: true,
+        });
+      } catch {
+        // Best-effort — nothing useful we can do in a synchronous unload hook.
+      }
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [editingDesc]);
 
   const commitTags = (next: Tag[]) => {
     // Compare by (name, color) per index. Identity (`===`) would always be
@@ -2419,6 +2469,7 @@ function TodoItem({
           defaultValue={todo.description ?? ""}
           onSave={commitDescription}
           onCancel={() => setEditingDesc(false)}
+          onChange={handleEditorChange}
           placeholder={t("Add description...")}
         />
       ) : (

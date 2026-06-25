@@ -15,6 +15,9 @@ export interface RichTextEditorProps {
   onSave: (html: string) => void;
   /** Called when the user discards the edit. */
   onCancel: () => void;
+  /** Called with the current sanitized HTML on every change. Lets the parent
+   *  flush unsaved edits during page unload (pagehide + keepalive). */
+  onChange?: (html: string) => void;
   placeholder?: string;
   minHeight?: number;
   className?: string;
