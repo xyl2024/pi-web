@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
@@ -11,13 +10,6 @@ import { AudioPlayer } from "@/components/AudioPlayer";
 import { MermaidBlock } from "@/components/MermaidBlock";
 import { SvgBlock } from "@/components/SvgBlock";
 import { encodeFilePathForApi, joinFilePath } from "@/lib/file-paths";
-
-// Heavy client-only component; lazy-load with SSR off so show_file
-// doesn't pull the excalidraw bundle until an .excalidraw file is shown.
-const Excalidraw = dynamic(
-  async () => (await import("@excalidraw/excalidraw")).Excalidraw,
-  { ssr: false },
-);
 
 interface Props {
   filePath: string;
@@ -34,10 +26,9 @@ const AUDIO_EXTS = new Set([
 ]);
 const PDF_EXTS = new Set(["pdf"]);
 const HTML_EXTS = new Set(["html", "htm"]);
-const EXCALIDRAW_EXTS = new Set(["excalidraw"]);
 const MARKDOWN_EXTS = new Set(["md", "markdown"]);
 
-type Category = "image" | "video" | "audio" | "pdf" | "html" | "excalidraw" | "markdown" | "text" | "binary";
+type Category = "image" | "video" | "audio" | "pdf" | "html" | "markdown" | "text" | "binary";
 
 function getExt(filePath: string): string {
   const dot = filePath.lastIndexOf(".");
@@ -51,7 +42,6 @@ function categorize(filePath: string): Category {
   if (AUDIO_EXTS.has(ext)) return "audio";
   if (PDF_EXTS.has(ext)) return "pdf";
   if (HTML_EXTS.has(ext)) return "html";
-  if (EXCALIDRAW_EXTS.has(ext)) return "excalidraw";
   if (MARKDOWN_EXTS.has(ext)) return "markdown";
   return "text";
 }
@@ -72,8 +62,8 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
   const url = fileApiUrl(resolved);
 
   // One lightbox at a time. Image uses the rich ImageLightbox (zoom/pan);
-  // HTML and Excalidraw use a generic FullscreenOverlay that wraps the
-  // rendered content at viewport size.
+  // HTML uses a generic FullscreenOverlay that wraps the rendered content
+  // at viewport size.
   const [lightbox, setLightbox] = useState<
     | { kind: "image"; src: string; alt: string }
     | { kind: "content"; title: string; node: React.ReactNode }
@@ -166,22 +156,6 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
     return (
       <>
         <HtmlContent
-          url={url}
-          onExpand={(node, title) => setLightbox({ kind: "content", title, node })}
-        />
-        {lightbox?.kind === "content" && (
-          <FullscreenOverlay title={lightbox.title} onClose={() => setLightbox(null)}>
-            {lightbox.node}
-          </FullscreenOverlay>
-        )}
-      </>
-    );
-  }
-
-  if (category === "excalidraw") {
-    return (
-      <>
-        <ExcalidrawContent
           url={url}
           onExpand={(node, title) => setLightbox({ kind: "content", title, node })}
         />
@@ -509,134 +483,10 @@ function TextContent({ url, ext }: { url: string; ext: string }) {
   );
 }
 
-function ExcalidrawContent({ url, onExpand }: { url: string; onExpand: (node: React.ReactNode, title: string) => void }) {
-  const { t } = useI18n();
-  const [state, setState] = useState<
-    | { kind: "loading" }
-    | { kind: "ready"; initialData: object }
-    | { kind: "error"; message: string }
-  >({ kind: "loading" });
-
-  useEffect(() => {
-    let cancelled = false;
-    setState({ kind: "loading" });
-
-    Promise.all([
-      fetch(url).then(async (r) => {
-        if (!r.ok) {
-          const body = await r.json().catch(() => ({}));
-          throw new Error(body.error ?? `HTTP ${r.status}`);
-        }
-        return r.json() as Promise<{ content: string }>;
-      }),
-      import("@excalidraw/excalidraw").then((m) => m.restore),
-    ])
-      .then(([data, restore]) => {
-        if (cancelled) return;
-        try {
-          const raw = JSON.parse(data.content);
-          const restored = restore(
-            { elements: raw.elements, appState: raw.appState, files: raw.files },
-            null,
-            null,
-          ) as Record<string, unknown> & { appState?: Record<string, unknown> };
-          // Ensure collaborators is a Map (matches FileViewer robustness fix)
-          if (restored.appState) {
-            const collab = restored.appState.collaborators;
-            if (!(collab instanceof Map)) {
-              restored.appState.collaborators = new Map(
-                Array.isArray(collab) ? collab : Object.entries(collab ?? {}),
-              );
-            }
-          }
-          setState({ kind: "ready", initialData: restored });
-        } catch {
-          setState({ kind: "error", message: t("Invalid Excalidraw file") });
-        }
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        const message = e instanceof Error ? e.message : String(e);
-        setState({ kind: "error", message });
-      });
-
-    return () => { cancelled = true; };
-  }, [url, t]);
-
-  if (state.kind === "loading") {
-    return (
-      <div style={{ padding: "8px 10px", color: "var(--text-dim)", fontSize: 12 }}>
-        {t("Loading…")}
-      </div>
-    );
-  }
-  if (state.kind === "error") {
-    return (
-      <div
-        style={{
-          padding: "8px 10px",
-          color: "#f87171",
-          fontSize: 12,
-          border: "1px solid rgba(248,113,113,0.3)",
-          borderRadius: 6,
-          background: "rgba(248,113,113,0.05)",
-        }}
-      >
-        {t("Failed to load file")}: {state.message}
-      </div>
-    );
-  }
-
-  // The fullscreen instance uses a different `key` so Excalidraw re-measures
-  // its canvas against the new (viewport-sized) parent container.
-  return (
-    <div
-      style={{
-        position: "relative",
-        display: "block",
-        width: "100%",
-        border: "1px solid var(--border)",
-        borderRadius: 6,
-        overflow: "hidden",
-        background: "#fff",
-      }}
-    >
-      <div
-        style={{
-          display: "block",
-          width: "100%",
-          height: "70vh",
-          background: "#fff",
-        }}
-      >
-        <Excalidraw
-          key="excalidraw-thumb"
-          initialData={state.initialData}
-          viewModeEnabled
-          zenModeEnabled
-        />
-      </div>
-      <ExpandButton
-        onClick={() =>
-          onExpand(
-            <Excalidraw
-              key="excalidraw-fullscreen"
-              initialData={state.initialData}
-              viewModeEnabled
-              zenModeEnabled
-            />,
-            t("excalidraw"),
-          )
-        }
-      />
-    </div>
-  );
-}
-
-// Corner button used to open the lightbox/overlay from image, HTML, and
-// Excalidraw previews. Sits in the top-right of its `position:relative`
-// parent and only becomes fully opaque on hover so it doesn't fight the
-// content underneath.
+// Corner button used to open the lightbox/overlay from image and HTML
+// previews. Sits in the top-right of its `position:relative` parent and
+// only becomes fully opaque on hover so it doesn't fight the content
+// underneath.
 function ExpandButton({ onClick }: { onClick: () => void }) {
   const { t } = useI18n();
   return (
@@ -680,9 +530,9 @@ function ExpandButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-// Viewport-sized overlay used to expand non-image content (HTML iframe,
-// Excalidraw scene) fullscreen. Esc or backdrop click closes. The child
-// node is mounted fresh on each open via the caller's `key` strategy.
+// Viewport-sized overlay used to expand non-image content (HTML iframe)
+// fullscreen. Esc or backdrop click closes. The child node is mounted
+// fresh on each open via the caller's `key` strategy.
 function FullscreenOverlay({ title, onClose, children }: {
   title: string;
   onClose: () => void;

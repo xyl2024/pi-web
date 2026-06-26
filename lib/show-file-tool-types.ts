@@ -21,7 +21,6 @@ const AUDIO_EXTS = new Set([
 ]);
 const PDF_EXTS = new Set(["pdf"]);
 const HTML_EXTS = new Set(["html", "htm"]);
-const EXCALIDRAW_EXTS = new Set(["excalidraw"]);
 const TEXT_EXTS = new Set([
   "txt", "md", "markdown", "json", "jsonl", "xml", "yaml", "yml",
   "csv", "tsv", "log", "ini", "conf", "sh", "bash", "zsh", "fish",
@@ -33,7 +32,7 @@ const TEXT_EXTS = new Set([
 ]);
 
 export type ShowFileCategory =
-  | "image" | "video" | "audio" | "pdf" | "html" | "excalidraw" | "text" | "binary";
+  | "image" | "video" | "audio" | "pdf" | "html" | "text" | "binary";
 
 /** Per-file entry in the `show_file` tool result. */
 export interface ShowFileEntry {
@@ -66,7 +65,6 @@ export function categorizeByExt(filePath: string): ShowFileCategory {
   if (AUDIO_EXTS.has(ext)) return "audio";
   if (PDF_EXTS.has(ext)) return "pdf";
   if (HTML_EXTS.has(ext)) return "html";
-  if (EXCALIDRAW_EXTS.has(ext)) return "excalidraw";
   if (TEXT_EXTS.has(ext)) return "text";
   return "binary";
 }

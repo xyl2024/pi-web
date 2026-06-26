@@ -3,8 +3,7 @@
 // Tiptap is browser-only (it touches `document` on mount). Load the actual
 // implementation as a separate chunk so the editor code only ships when a
 // user opens a todo description for editing. Mirrors the pattern used by
-// the legacy MarkdownEditor shim and the Excalidraw dynamic import in
-// components/FileViewer.tsx.
+// the legacy MarkdownEditor shim.
 import type { ComponentType } from "react";
 import dynamic from "next/dynamic";
 

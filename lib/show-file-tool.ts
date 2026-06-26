@@ -93,7 +93,7 @@ export const showFileTool = defineTool<typeof ShowFileParams, ShowFileDetails>({
   name: SHOW_FILE_TOOL_NAME,
   label: "Show File",
   description:
-    "Display up to 5 files inline in the chat (supported file types: images, video, audio, PDFs, HTML, Excalidraw, text/markdown).",
+    "Display up to 5 files inline in the chat (supported file types: images, video, audio, PDFs, HTML, text/markdown).",
   parameters: ShowFileParams,
   executionMode: "sequential",
   async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

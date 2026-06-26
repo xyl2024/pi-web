@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import dynamic from "next/dynamic";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vs } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
@@ -19,16 +18,10 @@ import { FileSearchBar } from "./FileSearchBar";
 import { encodeFilePathForApi, getFileName, getRelativeFilePath, normalizeFilePathSlashes } from "@/lib/file-paths";
 import { Document, Page, pdfjs } from "react-pdf";
 
-import "@excalidraw/excalidraw/index.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-
-const Excalidraw = dynamic(
-  async () => (await import("@excalidraw/excalidraw")).Excalidraw,
-  { ssr: false },
-);
 
 interface Props {
   filePath: string;
@@ -44,7 +37,6 @@ interface FileData {
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif"]);
 const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "oga", "opus", "m4a", "aac", "flac", "weba", "webm"]);
 const PDF_EXTS = new Set(["pdf"]);
-const EXCALIDRAW_EXT = "excalidraw";
 
 function isImagePath(filePath: string): boolean {
   const base = getFileName(filePath);
@@ -56,12 +48,6 @@ function isAudioPath(filePath: string): boolean {
   const base = getFileName(filePath);
   const ext = base.toLowerCase().split(".").pop() ?? "";
   return AUDIO_EXTS.has(ext);
-}
-
-function isExcalidrawPath(filePath: string): boolean {
-  const base = getFileName(filePath);
-  const ext = base.toLowerCase().split(".").pop() ?? "";
-  return ext === EXCALIDRAW_EXT;
 }
 
 function isPdfPath(filePath: string): boolean {
@@ -591,240 +577,6 @@ function AudioViewer({ filePath, cwd }: { filePath: string; cwd?: string }) {
   );
 }
 
-function ExcalidrawViewer({ filePath, cwd }: Props) {
-  const { t } = useI18n();
-  const toast = useToast();
-  const [initialData, setInitialData] = useState<object | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editKey, setEditKey] = useState(0);
-  const sceneRef = useRef<{ elements: readonly unknown[]; appState: unknown; files: unknown } | null>(null);
-  const rawFileRef = useRef<Record<string, unknown> | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const restoreRef = useRef<((...args: any[]) => any) | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setInitialData(null);
-    setIsEditing(false);
-    setDirty(false);
-    setEditKey(0);
-    rawFileRef.current = null;
-    sceneRef.current = null;
-
-    const encoded = encodeFilePathForApi(filePath);
-
-    Promise.all([
-      fetch(`/api/files/${encoded}?type=read`).then((r) => r.json()),
-      import("@excalidraw/excalidraw").then((m) => { restoreRef.current = m.restore; return m.restore; }),
-    ])
-      .then(([d, restore]) => {
-        if (cancelled) return;
-        if ((d as FileData & { error?: string }).error) {
-          setError((d as FileData & { error?: string }).error!);
-          toast.show({ kind: "error", message: t("Failed to load file") });
-          return;
-        }
-        try {
-          const raw = JSON.parse(d.content);
-          rawFileRef.current = raw;
-          const restored = restore(
-            { elements: raw.elements, appState: raw.appState, files: raw.files },
-            null,
-            null,
-          ) as Record<string, unknown> & { appState?: Record<string, unknown> };
-          // In v0.18.x, restore may not convert collaborators to a Map, and
-          // Next.js hot-reload can turn Maps into plain objects. Ensure it's
-          // always a Map before handing it to the Excalidraw component.
-          if (restored.appState) {
-            const collab = (restored.appState as Record<string, unknown>).collaborators;
-            if (!(collab instanceof Map)) {
-              (restored.appState as Record<string, unknown>).collaborators = new Map(
-                Array.isArray(collab) ? collab : Object.entries(collab ?? {}),
-              );
-            }
-          }
-          setInitialData(restored);
-        } catch {
-          setError(t("Invalid Excalidraw file"));
-          toast.show({ kind: "error", message: t("Failed to load file") });
-        }
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(String(e));
-        toast.show({ kind: "error", message: t("Failed to load file") });
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
-
-    return () => { cancelled = true; };
-  }, [filePath, t, toast]);
-
-  const handleEdit = useCallback(() => {
-    setIsEditing(true);
-  }, []);
-
-  const handleCancel = useCallback(() => {
-    setIsEditing(false);
-    setDirty(false);
-    setEditKey((k) => k + 1);
-    sceneRef.current = null;
-  }, []);
-
-  const handleSave = useCallback(async () => {
-    if (!sceneRef.current || !rawFileRef.current || !restoreRef.current) return;
-    setSaving(true);
-    try {
-      const saveData = {
-        ...rawFileRef.current,
-        elements: sceneRef.current.elements,
-        appState: sceneRef.current.appState,
-        files: sceneRef.current.files,
-      };
-      const encoded = encodeFilePathForApi(filePath);
-      const res = await fetch(`/api/files/${encoded}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: JSON.stringify(saveData, null, 2) }),
-      });
-      if (!res.ok) throw new Error(`Save failed: ${res.status}`);
-      rawFileRef.current = saveData;
-      // Re-restore so future cancel remounts start from the saved state
-      const fresh = restoreRef.current(
-        { elements: saveData.elements, appState: saveData.appState, files: saveData.files },
-        null,
-        null,
-      ) as Record<string, unknown> & { appState?: Record<string, unknown> };
-      if (fresh.appState) {
-        const c = (fresh.appState as Record<string, unknown>).collaborators;
-        if (!(c instanceof Map)) {
-          (fresh.appState as Record<string, unknown>).collaborators = new Map(
-            Array.isArray(c) ? c : Object.entries(c ?? {}),
-          );
-        }
-      }
-      setInitialData(fresh);
-      setDirty(false);
-      toast.show({ kind: "success", message: t("File saved") });
-    } catch (e) {
-      console.error("Excalidraw save failed", e);
-      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to save file") });
-    } finally {
-      setSaving(false);
-    }
-  }, [filePath, t, toast]);
-
-  const handleChange = useCallback((elements: readonly unknown[], appState: unknown, files: unknown) => {
-    sceneRef.current = { elements, appState, files };
-    setDirty(true);
-  }, []);
-
-  if (loading) {
-    return (
-      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 13 }}>
-        {t("Loading...")}
-      </div>
-    );
-  }
-
-  if (error || !initialData) {
-    return (
-      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#f87171", fontSize: 13 }}>
-        {error || t("Failed to load Excalidraw file")}
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "4px 16px",
-          borderBottom: "1px solid var(--border)",
-          fontSize: 11,
-          color: "var(--text-dim)",
-          background: "var(--bg)",
-          flexShrink: 0,
-        }}
-      >
-        <Tooltip content={filePath}><span style={{ fontFamily: "var(--font-mono)" }}>
-          {getRelativeFilePath(filePath, cwd)}
-        </span></Tooltip>
-        <span style={{ marginLeft: "auto" }}>excalidraw</span>
-        {isEditing ? (
-          <>
-            {dirty && <span style={{ color: "#fbbf24", fontWeight: 600 }}>● unsaved</span>}
-            <button
-              onClick={handleSave}
-              disabled={saving || !dirty}
-              style={{
-                padding: "2px 10px",
-                fontSize: 11,
-                fontWeight: 600,
-                cursor: saving || !dirty ? "default" : "pointer",
-                background: dirty ? "var(--accent)" : "var(--bg-hover)",
-                color: dirty ? "#fff" : "var(--text-muted)",
-                border: "1px solid var(--border)",
-                borderRadius: 5,
-                opacity: saving || !dirty ? 0.5 : 1,
-              }}
-            >
-              {saving ? t("Saving...") : t("Save")}
-            </button>
-            <button
-              onClick={handleCancel}
-              style={{
-                padding: "2px 10px",
-                fontSize: 11,
-                cursor: "pointer",
-                background: "var(--bg-hover)",
-                color: "var(--text)",
-                border: "1px solid var(--border)",
-                borderRadius: 5,
-              }}
-            >
-              {t("Cancel")}
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={handleEdit}
-            style={{
-              padding: "2px 10px",
-              fontSize: 11,
-              fontWeight: 600,
-              cursor: "pointer",
-              background: "var(--bg-hover)",
-              color: "var(--text)",
-              border: "1px solid var(--border)",
-              borderRadius: 5,
-            }}
-          >
-            {t("Edit")}
-          </button>
-        )}
-      </div>
-      <div style={{ flex: 1, overflow: "hidden" }}>
-        <Excalidraw
-          key={editKey}
-          initialData={initialData}
-          viewModeEnabled={!isEditing}
-          zenModeEnabled={!isEditing}
-          onChange={isEditing ? handleChange : undefined}
-        />
-      </div>
-    </div>
-  );
-}
-
 function PdfViewer({ filePath, cwd }: Props) {
   const { t } = useI18n();
   const toast = useToast();
@@ -1274,9 +1026,6 @@ export function FileViewer({ filePath, cwd }: Props) {
   }
   if (isAudioPath(filePath)) {
     return <AudioViewer filePath={filePath} cwd={cwd} />;
-  }
-  if (isExcalidrawPath(filePath)) {
-    return <ExcalidrawViewer filePath={filePath} cwd={cwd} />;
   }
   if (isPdfPath(filePath)) {
     return <PdfViewer filePath={filePath} cwd={cwd} />;
