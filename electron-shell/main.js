@@ -44,7 +44,12 @@ button:hover{background:#3a7bc8}
 </style></head><body><div class="container">
 <h1>Pi 服务未连接</h1>
 <p>请确保 WSL2 中 Pi Agent Web 已启动（端口 ${PI_PORT}）</p>
-<button onclick="window.piShell.retry()">手动重试</button>
+<button id="retry-btn">手动重试</button>
+<script>
+document.getElementById("retry-btn").addEventListener("click", function () {
+  try { parent.postMessage("pi-retry", "*"); } catch (_) {}
+});
+</script>
 </div></body></html>`)}`;
 }
 
@@ -59,6 +64,9 @@ function createWindow() {
     autoHideMenuBar: true,
     show: !startHidden,
     icon: iconPath,
+    // Hide the native title bar — the macOS-style traffic lights are
+    // drawn in titlebar.html and the Pi Web app runs inside an <iframe>.
+    frame: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -66,29 +74,44 @@ function createWindow() {
     },
   });
 
-  // Catch navigation failures to the Pi URL → show error page
+  // Iframe (subframe) load failure → ask the title bar to swap the
+  // iframe's src to the error page. The main frame (titlebar.html) is a
+  // local file and should always load, so we ignore main-frame failures.
   win.webContents.on("did-fail-load", (_event, _code, _desc, validatedURL, isMainFrame) => {
-    if (isMainFrame && validatedURL === PI_URL) {
-      win.loadURL(errorPage()).catch(() => {});
+    if (!isMainFrame && validatedURL && validatedURL.startsWith(PI_URL)) {
+      win.webContents.send("iframe-error", errorPage());
     }
   });
 
-  // IPC: manual retry from error page
+  // IPC: title bar traffic-light buttons
+  ipcMain.on("titlebar-close", () => {
+    if (win) win.close(); // 'close' handler below hides to tray
+  });
+
+  ipcMain.on("titlebar-minimize", () => {
+    if (win) win.minimize();
+  });
+
+  ipcMain.on("titlebar-maximize", () => {
+    if (win) {
+      if (win.isMaximized()) win.unmaximize();
+      else win.maximize();
+    }
+  });
+
+  // IPC: manual retry from the error page (the error page lives inside
+  // the iframe and reaches us via window.top.location.reload(); the
+  // title bar's iframe-retry listener then restores the Pi URL).
   ipcMain.on("retry-connection", () => {
     if (win) {
       console.log("[Pi Shell] Manual retry...");
-      win.loadURL(PI_URL).catch(() => {
-        win.loadURL(errorPage()).catch(() => {});
-      });
+      win.webContents.send("iframe-retry");
     }
   });
 
-  // Try connecting once
-  console.log(`[Pi Shell] Connecting to ${PI_URL}`);
-  win.loadURL(PI_URL).catch(() => {
-    // Initial failure → show error page (did-fail-load will also fire)
-    win.loadURL(errorPage()).catch(() => {});
-  });
+  // Load the title bar — the Pi Web app is loaded inside its <iframe>.
+  console.log(`[Pi Shell] Loading title bar (iframe will connect to ${PI_URL})`);
+  win.loadFile(path.join(__dirname, "titlebar.html"));
 
   // Hide to tray instead of closing
   win.on("close", (e) => {
