@@ -73,7 +73,7 @@ export interface HttpState {
 }
 
 let kvIdCounter = 0;
-function newKvId(): string {
+export function newKvId(): string {
   kvIdCounter += 1;
   return `kv-${kvIdCounter}-${Date.now().toString(36)}`;
 }

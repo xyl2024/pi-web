@@ -24,6 +24,7 @@ import {
   kvRowsToObject,
   buildFinalUrl,
   deriveContentType,
+  newKvId,
   type HttpMethod,
   type BodyMode,
   type KVRow,
@@ -31,6 +32,7 @@ import {
   type HttpResponse,
   type HttpError,
 } from "@/hooks/httpStore";
+import { parseCurl } from "@/lib/curl-parser";
 
 const HTTP_METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const DIVIDER_STORAGE_KEY = "pi-http-divider-height";
@@ -207,6 +209,71 @@ export function HttpPanel() {
     setHttpHeaders([...state.draft.headers, row]);
   }, [state.draft.headers]);
 
+  // ── Import cURL modal state ──────────────────────────────────────────
+  const [importCurlOpen, setImportCurlOpen] = useState(false);
+  const [importCurlText, setImportCurlText] = useState("");
+  const [importCurlError, setImportCurlError] = useState<string | null>(null);
+
+  const handleImportClick = useCallback(() => {
+    setImportCurlText("");
+    setImportCurlError(null);
+    setImportCurlOpen(true);
+  }, []);
+
+  const handleImportClose = useCallback(() => {
+    setImportCurlOpen(false);
+    setImportCurlText("");
+    setImportCurlError(null);
+  }, []);
+
+  const handleImportConfirm = useCallback(async () => {
+    const result = parseCurl(importCurlText);
+    if (!result.ok) {
+      setImportCurlError(
+        t("Could not parse cURL command: {message}").replace("{message}", result.message),
+      );
+      return;
+    }
+    const draft = state.draft;
+    const dirty =
+      draft.url.trim() !== "" ||
+      draft.params.length > 0 ||
+      draft.headers.length > 0 ||
+      draft.body.trim() !== "";
+    if (dirty) {
+      const ok = await confirm({
+        title: t("Replace the current request?"),
+        description: t("This will overwrite the current request form (method, URL, headers, body)."),
+        confirmLabel: t("Replace"),
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+    const parsed = result.parsed;
+    const headers: KVRow[] = parsed.headers.map((h) => ({
+      id: newKvId(),
+      key: h.key,
+      value: h.value,
+      enabled: true,
+    }));
+    setHttpMethod(parsed.method);
+    setHttpUrl(parsed.url);
+    setHttpHeaders(headers);
+    setHttpBodyMode(parsed.bodyMode);
+    setHttpBody(parsed.body);
+    setHttpLastResponse(null);
+    setHttpError(null);
+    setImportCurlOpen(false);
+    setImportCurlText("");
+    setImportCurlError(null);
+    if (parsed.skipped.length > 0) {
+      toast.show({
+        kind: "info",
+        message: t("Skipped unsupported flags: {list}").replace("{list}", parsed.skipped.join(", ")),
+      });
+    }
+  }, [importCurlText, state.draft, confirm, toast, t]);
+
   const inFlight = !!state.inFlight;
 
   return (
@@ -214,7 +281,7 @@ export function HttpPanel() {
       ref={containerRef}
       style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg)", overflow: "hidden" }}
     >
-      <PanelHeader onClear={handleClear} />
+      <PanelHeader onClear={handleClear} onImport={handleImportClick} />
       <RequestLine
         draft={state.draft}
         inFlight={inFlight}
@@ -243,13 +310,160 @@ export function HttpPanel() {
           onResend={handleSend}
         />
       </div>
+      {importCurlOpen && (
+        <ImportCurlModal
+          value={importCurlText}
+          error={importCurlError}
+          onChange={setImportCurlText}
+          onClose={handleImportClose}
+          onConfirm={handleImportConfirm}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Import cURL modal ─────────────────────────────────────────────────────
+
+function ImportCurlModal({
+  value,
+  error,
+  onChange,
+  onClose,
+  onConfirm,
+}: {
+  value: string;
+  error: string | null;
+  onChange: (v: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const { t } = useI18n();
+
+  // Esc closes the modal (no warning — a typed cURL is cheap to retype).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1000,
+        background: "rgba(0,0,0,0.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          width: 600,
+          maxWidth: "100%",
+          background: "var(--bg-panel)",
+          border: "1px solid var(--border)",
+          borderRadius: 8,
+          padding: 20,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.32)",
+        }}
+      >
+        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{t("Import cURL")}</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+          {t("Paste a cURL command to populate the request form.")}
+        </div>
+        <textarea
+          autoFocus
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          spellCheck={false}
+          placeholder={"curl -X POST 'https://api.example.com/users' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"name\":\"alice\"}'"}
+          style={{
+            width: "100%",
+            minHeight: 200,
+            maxHeight: 360,
+            padding: "9px 10px",
+            background: "var(--bg)",
+            border: error ? "1px solid #ef4444" : "1px solid var(--border)",
+            borderRadius: 6,
+            color: "var(--text)",
+            fontFamily: "var(--font-mono)",
+            fontSize: 12,
+            lineHeight: 1.5,
+            outline: "none",
+            resize: "vertical",
+            boxSizing: "border-box",
+          }}
+        />
+        {error && (
+          <div
+            style={{
+              fontSize: 11,
+              color: "#ef4444",
+              fontFamily: "var(--font-mono)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {error}
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: "6px 14px",
+              background: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              color: "var(--text)",
+              cursor: "pointer",
+              fontSize: 12,
+            }}
+          >
+            {t("Cancel")}
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: "6px 14px",
+              background: "var(--accent)",
+              border: "1px solid var(--accent)",
+              borderRadius: 4,
+              color: "var(--bg)",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            {t("Import cURL")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
 // ── Panel header ──────────────────────────────────────────────────────────
 
-function PanelHeader({ onClear }: { onClear: () => void }) {
+function PanelHeader({ onClear, onImport }: { onClear: () => void; onImport: () => void }) {
   const { t } = useI18n();
   return (
     <div
@@ -267,42 +481,78 @@ function PanelHeader({ onClear }: { onClear: () => void }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{t("HTTP")}</span>
       </div>
-      <Tooltip content={t("Clear request and response")}>
-        <button
-          onClick={onClear}
-          aria-label={t("Clear")}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 26,
-            height: 26,
-            padding: 0,
-            background: "transparent",
-            border: "1px solid var(--border)",
-            borderRadius: 6,
-            color: "var(--text-muted)",
-            cursor: "pointer",
-            transition: "color 0.12s, background 0.12s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = "#ef4444";
-            e.currentTarget.style.background = "var(--bg-hover)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = "var(--text-muted)";
-            e.currentTarget.style.background = "transparent";
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-            <path d="M10 11v6" />
-            <path d="M14 11v6" />
-            <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-          </svg>
-        </button>
-      </Tooltip>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <Tooltip content={t("Import cURL")}>
+          <button
+            onClick={onImport}
+            aria-label={t("Import cURL")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 26,
+              height: 26,
+              padding: 0,
+              background: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              transition: "color 0.12s, background 0.12s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "var(--accent)";
+              e.currentTarget.style.background = "var(--bg-hover)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = "var(--text-muted)";
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </button>
+        </Tooltip>
+        <Tooltip content={t("Clear request and response")}>
+          <button
+            onClick={onClear}
+            aria-label={t("Clear")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 26,
+              height: 26,
+              padding: 0,
+              background: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              transition: "color 0.12s, background 0.12s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "#ef4444";
+              e.currentTarget.style.background = "var(--bg-hover)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = "var(--text-muted)";
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+              <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+            </svg>
+          </button>
+        </Tooltip>
+      </div>
     </div>
   );
 }

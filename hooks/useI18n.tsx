@@ -650,6 +650,15 @@ const ZH_TRANSLATIONS = {
   "No request body": "无请求体",
   "Timeout: {seconds}s": "超时：{seconds} 秒",
   "Timeout (seconds)": "超时（秒）",
+  "Import cURL": "导入 cURL",
+  "Paste a cURL command to populate the request form.": "粘贴 cURL 命令以填充请求表单。",
+  "Replace the current request?": "替换当前请求？",
+  "This will overwrite the current request form (method, URL, headers, body).": "这将覆盖当前请求表单（方法、URL、请求头、请求体）。",
+  "Replace": "替换",
+  "Could not parse cURL command: {message}": "无法解析 cURL 命令：{message}",
+  "Skipped unsupported flags: {list}": "已跳过不支持的 flag：{list}",
+  "Import cURL command is empty.": "cURL 命令为空。",
+  "cURL command is missing a URL.": "cURL 命令缺少 URL。",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
