@@ -2,6 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import type { SessionTreeNode, AgentsFile } from "@/lib/types";
+import { isContentEqual } from "@/lib/shallowEqual";
 
 /**
  * Session-level UI state that is owned by useAgentSession (in ChatWindow) but
@@ -69,27 +70,6 @@ function emit() {
  * to re-render its 522-session tree dozens of times per second. So we
  * compare object/array values by content instead of by reference.
  */
-function isContentEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (a === null || b === null || a === undefined || b === undefined) return false;
-  if (typeof a !== typeof b) return false;
-  if (typeof a !== "object") return false;
-  if (Array.isArray(a) !== Array.isArray(b)) return false;
-  if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (!isContentEqual(a[i], b[i])) return false;
-    }
-    return true;
-  }
-  const ak = Object.keys(a as object);
-  const bk = Object.keys(b as object);
-  if (ak.length !== bk.length) return false;
-  for (const k of ak) {
-    if (!isContentEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])) return false;
-  }
-  return true;
-}
 
 export function setSessionUiState(patch: Partial<SessionUiState>) {
   let changed = false;
