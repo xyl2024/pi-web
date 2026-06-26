@@ -14,6 +14,7 @@ import { TranslatePanel } from "./TranslatePanel";
 import { ToolCallStatsPanel } from "./ToolCallStatsPanel";
 import { HttpPanel } from "./HttpPanel";
 import { JsonPanel } from "./JsonPanel";
+import { CanvasPanel } from "./CanvasPanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 
 const TODO_TAB_ID = "todo:global";
@@ -22,6 +23,7 @@ const TRANSLATE_TAB_ID = "translate:global";
 const TOOL_CALLS_TAB_ID = "toolCalls:global";
 const HTTP_TAB_ID = "http:global";
 const JSON_TAB_ID = "json:global";
+const CANVAS_TAB_ID = "canvas:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -562,6 +564,16 @@ export function AppShell() {
       return [{ kind: "json", id: JSON_TAB_ID, label: t("JSON") }, ...prev];
     });
     setActiveFileTabId(JSON_TAB_ID);
+    setRightPanelState("normal");
+  }, [t]);
+
+  // Open the canvas tab — single global whiteboard, persisted in localStorage.
+  const handleOpenCanvasTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((tab) => tab.kind === "canvas")) return prev;
+      return [{ kind: "canvas", id: CANVAS_TAB_ID, label: t("Canvas") }, ...prev];
+    });
+    setActiveFileTabId(CANVAS_TAB_ID);
     setRightPanelState("normal");
   }, [t]);
 
@@ -1210,6 +1222,8 @@ export function AppShell() {
             <JsonPanel />
           ) : activeFileTab?.kind === "file" ? (
             <FileViewer filePath={activeFileTab.filePath} cwd={activeCwd ?? undefined} />
+          ) : activeFileTab?.kind === "canvas" ? (
+            <CanvasPanel />
           ) : (
             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
               {t("No file open")}
@@ -1265,6 +1279,26 @@ export function AppShell() {
             <polyline points="8 12 11 15 17 9" />
           </svg>
         </button>
+        </Tooltip>
+        {/* Open canvas — single global whiteboard */}
+        <Tooltip content={activeFileTab?.kind === "canvas" ? t("Hide canvas") : t("Open canvas")}>
+          <button
+            onClick={handleOpenCanvasTab}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, padding: 0,
+              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+              color: activeFileTab?.kind === "canvas" ? "var(--text)" : "var(--text-muted)",
+              cursor: "pointer", transition: "color 0.12s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "canvas" ? "var(--text)" : "var(--text-muted)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18.37 2.63a1.75 1.75 0 0 1 2.48 2.48L9 16.96l-4.5 1.04 1.04-4.5Z" />
+              <path d="M14 7l3 3" />
+            </svg>
+          </button>
         </Tooltip>
         {/* Open favorites — always visible */}
         <Tooltip content={t("Open favorites")}>

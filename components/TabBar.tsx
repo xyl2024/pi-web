@@ -12,7 +12,8 @@ export type Tab =
   | { kind: "translate"; id: string; label: string }
   | { kind: "toolCalls"; id: string; label: string }
   | { kind: "http"; id: string; label: string }
-  | { kind: "json"; id: string; label: string };
+  | { kind: "json"; id: string; label: string }
+  | { kind: "canvas"; id: string; label: string };
 
 interface Props {
   tabs: Tab[];
@@ -52,6 +53,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
             <ToolCallsTabIcon />
           ) : tab.kind === "json" ? (
             <JsonTabIcon />
+          ) : tab.kind === "canvas" ? (
+            <CanvasTabIcon />
           ) : (
             getFileIcon(tab.label, 13)
           );
@@ -182,6 +185,16 @@ function JsonTabIcon() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M8 3 H6 a2 2 0 0 0 -2 2 v3 a2 2 0 0 1 -2 2 a2 2 0 0 1 2 2 v3 a2 2 0 0 0 2 2 h2" />
       <path d="M16 3 h2 a2 2 0 0 1 2 2 v3 a2 2 0 0 0 2 2 a2 2 0 0 0 -2 2 v3 a2 2 0 0 1 -2 2 h-2" />
+    </svg>
+  );
+}
+
+function CanvasTabIcon() {
+  // Hand-drawn brush — matches Excalidraw's "draw" affordance.
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18.37 2.63a1.75 1.75 0 0 1 2.48 2.48L9 16.96l-4.5 1.04 1.04-4.5Z" />
+      <path d="M14 7l3 3" />
     </svg>
   );
 }

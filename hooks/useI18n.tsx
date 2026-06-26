@@ -675,6 +675,11 @@ const ZH_TRANSLATIONS = {
   "Ignored prefix: {prefix}": "已忽略前缀：{prefix}",
   "Ignored suffix: {suffix}": "已忽略后缀：{suffix}",
   "Failed to copy": "复制失败",
+  // Canvas (right-panel tab)
+  "Canvas": "画布",
+  "Open canvas": "打开画布",
+  "Hide canvas": "隐藏画布",
+  "Canvas save failed — localStorage may be full": "画布保存失败 — localStorage 可能已满",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
