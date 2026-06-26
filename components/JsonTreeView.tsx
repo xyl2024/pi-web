@@ -13,7 +13,7 @@ const CHEVRON_W = 14;
 const INDENT_PX = 16;
 
 const COLOR_KEY = "var(--accent)";
-const COLOR_STRING = "#000000";
+const COLOR_STRING = "var(--text)";
 const COLOR_NUMBER = "#d19a66";
 const COLOR_BOOLEAN = "#c678dd";
 const COLOR_NULL = "var(--text-dim)";
