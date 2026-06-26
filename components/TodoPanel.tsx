@@ -142,6 +142,95 @@ function parseCreateInput(value: string): { title: string; tags: string[] } {
   return { title: titleTokens.join(" ").trim(), tags };
 }
 
+// Block-level tags that should add line breaks around their content. Mirrors
+// what users see as separate blocks in TodoDescriptionView's markdown-body
+// styling — paragraphs, headings, list items, preformatted blocks, tables.
+const PLAIN_TEXT_BLOCK_TAGS = new Set([
+  "p", "div", "h1", "h2", "h3", "h4", "h5", "h6",
+  "ul", "ol", "li", "pre", "blockquote", "hr", "tr",
+  "section", "article", "header", "footer", "aside",
+]);
+
+/**
+ * Convert a todo description's HTML into clean plain text for clipboard copy.
+ *
+ * - Drops `<img>` (and any other non-text resource) entirely — the requirement
+ *   is to copy text only, not other resources.
+ * - Inserts a single `\n` around block-level elements so paragraphs, list
+ *   items, and headings stay visually separated.
+ * - Collapses runs of spaces/tabs into one, and 3+ newlines into one blank
+ *   line — removes the "useless empty lines and spaces" the user called out.
+ * - Preserves real newlines inside `<pre>` blocks (textContent already keeps
+ *   them as `\n` characters in the source string).
+ */
+function descriptionToPlainText(html: string): string {
+  if (!html || typeof document === "undefined") return "";
+  // Strip <img> up front so any alt text can't leak through. Other resource
+  // tags (iframe, video, audio) carry no text either and are handled by the
+  // walker's element-type check.
+  const stripped = html.replace(/<img\b[^>]*\/?>/gi, "");
+  const container = document.createElement("div");
+  container.innerHTML = stripped;
+
+  const parts: string[] = [];
+
+  const walk = (node: Node): void => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      parts.push(node.nodeValue ?? "");
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as Element;
+    const tag = el.tagName.toLowerCase();
+    if (tag === "img") return;
+
+    const isBlock = PLAIN_TEXT_BLOCK_TAGS.has(tag);
+    if (isBlock && parts.length > 0) {
+      // Trim trailing spaces/tabs on the previous part before adding the
+      // block's leading newline so we don't end up with "  \n".
+      const last = parts[parts.length - 1];
+      parts[parts.length - 1] = last.replace(/[ \t]+$/, "");
+      parts.push("\n");
+    }
+
+    for (const child of Array.from(el.childNodes)) {
+      walk(child);
+    }
+
+    if (isBlock) parts.push("\n");
+  };
+
+  walk(container);
+
+  return parts.join("")
+    .replace(/[ \t]+/g, " ")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * Copy a todo description as rich text — HTML on the clipboard alongside a
+ * plain-text fallback so pasting into another app preserves color spans,
+ * bold/italic, lists, etc.
+ *
+ * The stored HTML was sanitized at save time, so we trust it as-is. The
+ * fallback to `writeText` covers browsers / contexts where `ClipboardItem`
+ * isn't available (older Safari, non-secure origin).
+ */
+async function copyDescriptionAsRichText(html: string): Promise<void> {
+  const plainText = descriptionToPlainText(html);
+  if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+    const item = new ClipboardItem({
+      "text/html": new Blob([html], { type: "text/html" }),
+      "text/plain": new Blob([plainText], { type: "text/plain" }),
+    });
+    await navigator.clipboard.write([item]);
+    return;
+  }
+  await navigator.clipboard.writeText(plainText);
+}
+
 const STATUS_FILTER_OPTIONS: { key: StatusFilter; labelKey: string }[] = [
   { key: "all", labelKey: "All" },
   { key: "active", labelKey: "InProgress" },
@@ -2265,6 +2354,35 @@ function TodoItem({
           onExport().catch((e) =>
             toast.show({ kind: "error", message: t("Export failed") + ": " + String(e) }),
           );
+        },
+      },
+      {
+        key: "copy-as-markdown",
+        label: t("Copy as Markdown"),
+        // Nothing to copy when there's no description body — the result
+        // would be an empty string, which is useless to paste.
+        disabled: !(todo.description && todo.description.trim()),
+        onSelect: async () => {
+          try {
+            const text = descriptionToPlainText(todo.description ?? "");
+            await navigator.clipboard.writeText(text);
+            toast.show({ kind: "success", message: t("Copied") });
+          } catch {
+            toast.show({ kind: "error", message: t("Copy failed") });
+          }
+        },
+      },
+      {
+        key: "copy-rich-text",
+        label: t("Copy rich text"),
+        disabled: !(todo.description && todo.description.trim()),
+        onSelect: async () => {
+          try {
+            await copyDescriptionAsRichText(todo.description ?? "");
+            toast.show({ kind: "success", message: t("Copied") });
+          } catch {
+            toast.show({ kind: "error", message: t("Copy failed") });
+          }
         },
       },
       {

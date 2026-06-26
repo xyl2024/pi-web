@@ -102,6 +102,8 @@ const ZH_TRANSLATIONS = {
   "just now": "刚刚",
   "ago": "前",
   "Copy message": "复制消息",
+  "Copy as Markdown": "复制为 Markdown",
+  "Copy rich text": "复制富文本",
   "Copy": "复制",
   "Copied": "已复制",
   "Agent Plan": "任务计划",
