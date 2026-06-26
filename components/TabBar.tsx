@@ -10,7 +10,8 @@ export type Tab =
   | { kind: "todo"; id: string; label: string }
   | { kind: "favorites"; id: string; label: string }
   | { kind: "translate"; id: string; label: string }
-  | { kind: "toolCalls"; id: string; label: string };
+  | { kind: "toolCalls"; id: string; label: string }
+  | { kind: "http"; id: string; label: string };
 
 interface Props {
   tabs: Tab[];

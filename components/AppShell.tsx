@@ -12,12 +12,14 @@ import { PlaywrightDashboardPanel } from "./PlaywrightDashboardPanel";
 import { CollectionPanel } from "./CollectionPanel";
 import { TranslatePanel } from "./TranslatePanel";
 import { ToolCallStatsPanel } from "./ToolCallStatsPanel";
+import { HttpPanel } from "./HttpPanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 
 const TODO_TAB_ID = "todo:global";
 const FAVORITES_TAB_ID = "favorites:global";
 const TRANSLATE_TAB_ID = "translate:global";
 const TOOL_CALLS_TAB_ID = "toolCalls:global";
+const HTTP_TAB_ID = "http:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -540,6 +542,16 @@ export function AppShell() {
     setActiveFileTabId(TOOL_CALLS_TAB_ID);
     setRightPanelState("normal");
   }, [activeFileTabId, rightPanelState, t]);
+
+  // Open the HTTP debug tab — same pattern as todos / favorites / translate.
+  const handleOpenHttpTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((tab) => tab.kind === "http")) return prev;
+      return [{ kind: "http", id: HTTP_TAB_ID, label: t("HTTP") }, ...prev];
+    });
+    setActiveFileTabId(HTTP_TAB_ID);
+    setRightPanelState("normal");
+  }, [t]);
 
   const handleCloseFileTab = useCallback((tabId: string) => {
     setFileTabs((prev) => {
@@ -1180,6 +1192,8 @@ export function AppShell() {
             <TranslatePanel />
           ) : activeFileTab?.kind === "toolCalls" ? (
             <ToolCallStatsTabBody />
+          ) : activeFileTab?.kind === "http" ? (
+            <HttpPanel />
           ) : activeFileTab?.kind === "file" ? (
             <FileViewer filePath={activeFileTab.filePath} cwd={activeCwd ?? undefined} />
           ) : (
@@ -1283,6 +1297,26 @@ export function AppShell() {
         </Tooltip>
         {/* Open tool calls — always visible; shows running/total badge */}
         <ToolCallsVerticalButton active={activeFileTab?.kind === "toolCalls"} onClick={handleOpenToolCallsTab} />
+        {/* Open HTTP debug panel */}
+        <Tooltip content={t("HTTP")}>
+          <button
+            onClick={handleOpenHttpTab}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, padding: 0,
+              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+              color: activeFileTab?.kind === "http" ? "var(--text)" : "var(--text-muted)",
+              cursor: "pointer", transition: "color 0.12s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "http" ? "var(--text)" : "var(--text-muted)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </Tooltip>
         {/* Expand/collapse — only when panel is open and has tabs */}
         {rightPanelState !== "closed" && fileTabs.length > 0 && (
           <Tooltip content={rightPanelState === "expanded" ? t("Collapse file panel") : t("Expand file panel")}>
