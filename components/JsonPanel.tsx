@@ -5,81 +5,21 @@ import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
 import { Tooltip } from "./Tooltip";
 import { parseJsonTolerant, minifyJson, escapeJsonString } from "@/lib/json-parser";
+import {
+  JsonTreeView,
+  collectAllContainerPaths,
+  collectContainerPathsAtDepth,
+  getAtPath,
+  parsePathKey,
+  pathKey,
+  type JsonPath,
+  type JsonValue,
+} from "./JsonTreeView";
 
 type Mode = "format" | "minify" | "escape";
-type JsonValue = string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue };
-
-/** Path segments carry type so we never confuse "0" (object key) with 0 (array index). */
-type PathSeg = { kind: "key" | "index"; value: string | number };
-type Path = ReadonlyArray<PathSeg>;
 
 const DEFAULT_COLLAPSE_DEPTH = 3;
 const PARSE_DEBOUNCE_MS = 250;
-const PATH_SEP = "";
-const INDENT_PX = 16;
-
-function pathKey(path: Path): string {
-  return path.map((p) => (p.kind === "index" ? `i${p.value}` : `k${p.value}`)).join(PATH_SEP);
-}
-
-function getAtPath(value: unknown, path: Path): { exists: boolean; container: boolean } {
-  let v: unknown = value;
-  for (const seg of path) {
-    if (v == null || typeof v !== "object") return { exists: false, container: false };
-    if (Array.isArray(v)) {
-      if (seg.kind !== "index") return { exists: false, container: false };
-      v = v[seg.value as number];
-    } else {
-      if (seg.kind !== "key") return { exists: false, container: false };
-      v = (v as Record<string, unknown>)[seg.value as string];
-    }
-  }
-  if (v === undefined) return { exists: false, container: false };
-  return { exists: true, container: v !== null && typeof v === "object" };
-}
-
-function collectContainerPathsAtDepth(value: unknown, maxDepth: number): string[] {
-  const out: string[] = [];
-  const walk = (v: unknown, depth: number, path: Path) => {
-    if (v == null || typeof v !== "object") return;
-    if (depth >= maxDepth) {
-      out.push(pathKey(path));
-      return;
-    }
-    if (Array.isArray(v)) {
-      for (let i = 0; i < v.length; i++) walk(v[i], depth + 1, [...path, { kind: "index", value: i }]);
-    } else {
-      for (const k of Object.keys(v)) walk((v as Record<string, unknown>)[k], depth + 1, [...path, { kind: "key", value: k }]);
-    }
-  };
-  walk(value, 0, []);
-  return out;
-}
-
-function collectAllContainerPaths(value: unknown): string[] {
-  const out: string[] = [];
-  const walk = (v: unknown, path: Path) => {
-    if (v == null || typeof v !== "object") return;
-    if (path.length > 0) out.push(pathKey(path));
-    if (Array.isArray(v)) {
-      for (let i = 0; i < v.length; i++) walk(v[i], [...path, { kind: "index", value: i }]);
-    } else {
-      for (const k of Object.keys(v)) walk((v as Record<string, unknown>)[k], [...path, { kind: "key", value: k }]);
-    }
-  };
-  walk(value, []);
-  return out;
-}
-
-function isContainer(v: unknown): v is JsonValue[] | { [k: string]: JsonValue } {
-  return v != null && typeof v === "object";
-}
-
-function parsePathKey(key: string): Path {
-  return key.split(PATH_SEP).map((seg) =>
-    seg.startsWith("i") ? { kind: "index" as const, value: Number(seg.slice(1)) } : { kind: "key" as const, value: seg.slice(1) },
-  );
-}
 
 export function JsonPanel() {
   const { t } = useI18n();
@@ -136,7 +76,7 @@ export function JsonPanel() {
 
   const handleExpandAll = useCallback(() => setCollapsedPaths(new Set()), []);
 
-  const togglePath = useCallback((path: Path) => {
+  const togglePath = useCallback((path: JsonPath) => {
     const key = pathKey(path);
     setCollapsedPaths((prev) => {
       const next = new Set(prev);
@@ -159,10 +99,6 @@ export function JsonPanel() {
   const isFormat = mode === "format";
   const minifiedView = useMemo(() => (parsed ? minifyJson(parsed) : ""), [parsed]);
   const escapedView = useMemo(() => (parsed ? escapeJsonString(parsed) : ""), [parsed]);
-  const treeLines = useMemo(
-    () => (parsed ? flattenTree(parsed, 0, [], collapsedPaths) : []),
-    [parsed, collapsedPaths],
-  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -198,7 +134,7 @@ export function JsonPanel() {
           ) : error && !parsed ? (
             <div style={{ color: "#f87171", whiteSpace: "pre-wrap" }}>{t("Parse error: {error}").replace("{error}", error.message)}</div>
           ) : mode === "format" && parsed ? (
-            <TreeView lines={treeLines} onToggle={togglePath} />
+            <JsonTreeView value={parsed} collapsedPaths={collapsedPaths} onTogglePath={togglePath} />
           ) : mode === "minify" && parsed ? (
             <span>{minifiedView}</span>
           ) : (
@@ -327,189 +263,5 @@ function ErrorBadge({ error, ignoredPrefix, ignoredSuffix }: { error: { message:
         {t("Error")}
       </span>
     </Tooltip>
-  );
-}
-
-// ── Tree view: flat-line rendering ────────────────────────────────────────
-
-const COLOR_KEY = "var(--accent)";
-const COLOR_STRING = "#000000";
-const COLOR_NUMBER = "#d19a66";
-const COLOR_BOOLEAN = "#c678dd";
-const COLOR_NULL = "var(--text-dim)";
-const COLOR_PUNCT = "var(--text-dim)";
-
-const CHEVRON_W = 14;
-
-type TextSeg = { kind: "text"; text: string; color?: string };
-type ChevronSeg = { kind: "chevron"; collapsed: boolean; togglePath: Path };
-type LineSeg = TextSeg | ChevronSeg;
-
-type TreeLine = {
-  depth: number;
-  segs: LineSeg[];
-  togglePath?: Path;
-  collapsed?: boolean;
-};
-
-function flattenTree(value: JsonValue, depth: number, path: Path, collapsed: Set<string>, out: TreeLine[] = []): TreeLine[] {
-  if (!isContainer(value)) {
-    out.push({ depth, segs: primitiveSegs(value) });
-    return out;
-  }
-  const isArray = Array.isArray(value);
-  const open = isArray ? "[" : "{";
-  const close = isArray ? "]" : "}";
-  const entries: Array<[string | number, JsonValue]> = isArray
-    ? (value as JsonValue[]).map((v, i) => [i, v])
-    : Object.entries(value as { [k: string]: JsonValue });
-  const key = pathKey(path);
-  const isRoot = path.length === 0;
-  const parentSeg = path[path.length - 1];
-
-  if (entries.length === 0) {
-    out.push({
-      depth,
-      segs: [
-        ...(isRoot ? [] : keyPrefixSegs(parentSeg, isArray)),
-        ...(isRoot ? [] : [{ kind: "text" as const, text: " ".repeat(CHEVRON_W) }]),
-        { kind: "text" as const, text: open + close, color: COLOR_PUNCT },
-      ],
-    });
-    return out;
-  }
-
-  if (path.length > 0 && collapsed.has(key)) {
-    const label = isArray
-      ? `${entries.length} ${entries.length === 1 ? "item" : "items"}`
-      : `${entries.length} ${entries.length === 1 ? "key" : "keys"}`;
-    out.push({
-      depth,
-      togglePath: path,
-      collapsed: true,
-      segs: [
-        ...keyPrefixSegs(parentSeg, isArray),
-        { kind: "chevron", collapsed: true, togglePath: path },
-        { kind: "text" as const, text: open, color: COLOR_PUNCT },
-        { kind: "text" as const, text: " ... ", color: COLOR_PUNCT },
-        { kind: "text" as const, text: close, color: COLOR_PUNCT },
-        { kind: "text" as const, text: ` ${label}`, color: "var(--text-dim)" },
-      ],
-    });
-    return out;
-  }
-
-  // Open line
-  out.push({
-    depth,
-    segs: [
-      ...(isRoot ? [] : keyPrefixSegs(parentSeg, isArray)),
-      ...(isRoot ? [] : [{ kind: "chevron" as const, collapsed: false, togglePath: path }]),
-      { kind: "text" as const, text: open, color: COLOR_PUNCT },
-    ],
-  });
-
-  // Children
-  for (const [k, v] of entries) {
-    if (isContainer(v)) {
-      flattenTree(v, depth + 1, [...path, typeof k === "number" ? { kind: "index", value: k } : { kind: "key", value: k }], collapsed, out);
-    } else {
-      out.push({
-        depth: depth + 1,
-        segs: [
-          ...(isArray ? [] : keyPrefixSegs(String(k), false)),
-          ...primitiveSegs(v),
-          ...(isArray ? [{ kind: "text" as const, text: ",", color: COLOR_PUNCT }] : []),
-        ],
-      });
-    }
-  }
-
-  // Close line (no extra indent)
-  out.push({ depth, segs: [{ kind: "text" as const, text: close, color: COLOR_PUNCT }] });
-  return out;
-}
-
-function keyPrefixSegs(seg: PathSeg | string, isArrayItem: boolean): LineSeg[] {
-  if (isArrayItem) return [];
-  const keyStr = typeof seg === "string" ? seg : String(seg.value);
-  return [
-    { kind: "text" as const, text: '"', color: COLOR_PUNCT },
-    { kind: "text" as const, text: keyStr, color: COLOR_KEY },
-    { kind: "text" as const, text: '"', color: COLOR_PUNCT },
-    { kind: "text" as const, text: ": ", color: COLOR_PUNCT },
-  ];
-}
-
-function primitiveSegs(v: JsonValue): TextSeg[] {
-  if (v === null) return [{ kind: "text" as const, text: "null", color: COLOR_NULL }];
-  switch (typeof v) {
-    case "string":
-      return [{ kind: "text" as const, text: `"${escapeString(v)}"`, color: COLOR_STRING }];
-    case "number":
-      return [{ kind: "text" as const, text: String(v), color: COLOR_NUMBER }];
-    case "boolean":
-      return [{ kind: "text" as const, text: String(v), color: COLOR_BOOLEAN }];
-    default:
-      return [{ kind: "text" as const, text: String(v) }];
-  }
-}
-
-function escapeString(s: string): string {
-  return s
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "\\r")
-    .replace(/\t/g, "\\t");
-}
-
-function TreeView({ lines, onToggle }: { lines: TreeLine[]; onToggle: (path: Path) => void }) {
-  return (
-    <div>
-      {lines.map((line, i) => (
-        <div
-          key={i}
-          style={{ paddingLeft: line.depth * INDENT_PX, minHeight: "1.55em" }}
-        >
-          {line.segs.map((seg, j) => {
-            if ("kind" in seg && seg.kind === "chevron") {
-              return (
-                <span
-                  key={j}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggle(seg.togglePath);
-                  }}
-                  style={{
-                    display: "inline-block",
-                    width: CHEVRON_W,
-                    textAlign: "center",
-                    color: "var(--text-dim)",
-                    cursor: "pointer",
-                    userSelect: "none",
-                  }}
-                  role="button"
-                  aria-label={seg.collapsed ? "expand" : "collapse"}
-                >
-                  {seg.collapsed ? "▶" : "▼"}
-                </span>
-              );
-            }
-            return (
-              <span
-                key={j}
-                style={{
-                  color: seg.color,
-                  fontWeight: seg.color === COLOR_KEY ? 600 : undefined,
-                }}
-              >
-                {seg.text}
-              </span>
-            );
-          })}
-        </div>
-      ))}
-    </div>
   );
 }
