@@ -33,6 +33,15 @@ import {
   type HttpError,
 } from "@/hooks/httpStore";
 import { parseCurl } from "@/lib/curl-parser";
+import { parseJsonTolerant, minifyJson } from "@/lib/json-parser";
+import {
+  JsonTreeView,
+  collectAllContainerPaths,
+  collectContainerPathsAtDepth,
+  pathKey as jsonPathKey,
+  type JsonPath,
+  type JsonValue,
+} from "./JsonTreeView";
 
 const HTTP_METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const DIVIDER_STORAGE_KEY = "pi-http-divider-height";
@@ -1092,6 +1101,19 @@ function BodyEditor({
   onBodyChange: (b: string) => void;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
+
+  const handleFormatJson = useCallback(() => {
+    try {
+      const parsed = JSON.parse(body);
+      onBodyChange(JSON.stringify(parsed, null, 2));
+    } catch (e) {
+      toast.show({
+        kind: "error",
+        message: t("Invalid JSON: {error}").replace("{error}", e instanceof Error ? e.message : String(e)),
+      });
+    }
+  }, [body, onBodyChange, toast, t]);
 
   return (
     <div>
@@ -1119,7 +1141,26 @@ function BodyEditor({
         ))}
         <div style={{ flex: 1 }} />
         {mode === "json" && body.trim() && (
-          <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{validateJson(body)}</span>
+          <>
+            <button
+              onClick={handleFormatJson}
+              style={{
+                padding: "2px 8px",
+                height: 20,
+                background: "transparent",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                color: "var(--text-muted)",
+                fontSize: 10,
+                fontFamily: "var(--font-mono)",
+                cursor: "pointer",
+              }}
+              title={t("Format JSON (pretty-print with 2-space indent)")}
+            >
+              {t("Format")}
+            </button>
+            <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{validateJson(body)}</span>
+          </>
         )}
       </div>
       {mode === "none" ? (
@@ -1388,20 +1429,7 @@ function ResponseBody({ response }: { response: HttpResponse }) {
 
   // JSON — pretty-print if it parses.
   if (contentType.includes("json") || looksLikeJson(body)) {
-    const parsed = tryParseJson(body);
-    if (parsed.ok) {
-      const pretty = JSON.stringify(parsed.value, null, 2);
-      return <CodeBlock text={pretty} />;
-    }
-    // Fall through to raw text with a note
-    return (
-      <div>
-        <div style={{ padding: "6px 12px", fontSize: 11, color: "#f59e0b", borderBottom: "1px solid var(--border)" }}>
-          {t("Response claims to be JSON but failed to parse")}
-        </div>
-        <CodeBlock text={body} />
-      </div>
-    );
+    return <JsonResponseViewer body={body} />;
   }
 
   // HTML — show as text + link to open in new tab.
@@ -1423,6 +1451,194 @@ function ResponseBody({ response }: { response: HttpResponse }) {
   // Plain text / unknown — just render.
   return <CodeBlock text={body} />;
 }
+
+// ── JSON response viewer (Format / Minify / Collapse / Expand / Copy) ──────
+
+const HTTP_JSON_COLLAPSE_DEPTH = 3;
+type JsonViewMode = "format" | "minify";
+
+function JsonResponseViewer({ body }: { body: string }) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const [mode, setMode] = useState<JsonViewMode>("format");
+  const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(new Set());
+  const [signatures, setSignatures] = useState<{ value: JsonValue; ignoredPrefix: string; ignoredSuffix: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Re-parse when the body changes; reset collapse state to default depth.
+  useEffect(() => {
+    if (body.length === 0) {
+      setSignatures(null);
+      setError(null);
+      setCollapsedPaths(new Set());
+      return;
+    }
+    const result = parseJsonTolerant(body);
+    if (!result.ok) {
+      setSignatures(null);
+      setError(result.error);
+      return;
+    }
+    setError(null);
+    const value = result.value as JsonValue;
+    setSignatures({ value, ignoredPrefix: result.ignoredPrefix, ignoredSuffix: result.ignoredSuffix });
+    setCollapsedPaths(new Set(collectContainerPathsAtDepth(value, HTTP_JSON_COLLAPSE_DEPTH)));
+  }, [body]);
+
+  const handleCollapseAll = useCallback(() => {
+    if (!signatures) return;
+    setCollapsedPaths(new Set(collectAllContainerPaths(signatures.value)));
+  }, [signatures]);
+
+  const handleExpandAll = useCallback(() => setCollapsedPaths(new Set()), []);
+
+  const handleTogglePath = useCallback((path: JsonPath) => {
+    const key = jsonPathKey(path);
+    setCollapsedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    if (!signatures) return;
+    try {
+      await navigator.clipboard.writeText(minifyJson(signatures.value));
+      toast.show({ kind: "success", message: t("Copied") });
+    } catch {
+      toast.show({ kind: "error", message: t("Failed to copy") });
+    }
+  }, [signatures, t, toast]);
+
+  const isFormat = mode === "format";
+  const minifiedView = signatures ? minifyJson(signatures.value) : "";
+
+  const showPrefixSuffixWarning = signatures && (signatures.ignoredPrefix || signatures.ignoredSuffix);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      <div style={jsonViewerToolbarStyle}>
+        <JsonToolbarButton label={t("Format")} active={mode === "format"} onClick={() => setMode("format")} />
+        <JsonToolbarButton label={t("Minify")} active={mode === "minify"} onClick={() => setMode("minify")} />
+        <div style={jsonViewerDividerStyle} />
+        <JsonToolbarButton label={t("Collapse all")} onClick={handleCollapseAll} disabled={!signatures || !isFormat} />
+        <JsonToolbarButton label={t("Expand all")} onClick={handleExpandAll} disabled={!signatures || !isFormat} />
+        <div style={{ flex: 1 }} />
+        {showPrefixSuffixWarning && (
+          <span style={jsonViewerWarnBadgeStyle} title={
+            [
+              signatures.ignoredPrefix && t("Ignored prefix: {prefix}").replace("{prefix}", signatures.ignoredPrefix),
+              signatures.ignoredSuffix && t("Ignored suffix: {suffix}").replace("{suffix}", signatures.ignoredSuffix),
+            ].filter(Boolean).join("\n")
+          }>
+            ⚠ {t("Trimmed")}
+          </span>
+        )}
+        <JsonToolbarButton label={t("Copy")} onClick={handleCopy} disabled={!signatures} />
+      </div>
+      <div style={jsonViewerBodyStyle}>
+        {error && !signatures ? (
+          <>
+            <div style={jsonViewerErrorBannerStyle}>
+              {t("Response claims to be JSON but failed to parse: {error}").replace("{error}", error)}
+            </div>
+            <CodeBlock text={body} />
+          </>
+        ) : signatures && mode === "format" ? (
+          <JsonTreeView value={signatures.value} collapsedPaths={collapsedPaths} onTogglePath={handleTogglePath} />
+        ) : signatures ? (
+          <span>{minifiedView}</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+interface JsonToolbarButtonProps {
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+function JsonToolbarButton({ label, active, onClick, disabled }: JsonToolbarButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        padding: "4px 10px",
+        background: active ? "var(--bg)" : "transparent",
+        color: disabled ? "var(--text-dim)" : active ? "var(--text)" : "var(--text-muted)",
+        border: "1px solid",
+        borderColor: active ? "var(--border)" : "transparent",
+        borderRadius: 4,
+        fontSize: 11,
+        fontWeight: active ? 600 : 400,
+        cursor: disabled ? "default" : "pointer",
+        transition: "background 0.1s, color 0.1s",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+const jsonViewerToolbarStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+  padding: "6px 10px",
+  background: "var(--bg-panel)",
+  borderBottom: "1px solid var(--border)",
+  flexShrink: 0,
+};
+
+const jsonViewerDividerStyle: React.CSSProperties = {
+  width: 1,
+  height: 16,
+  background: "var(--border)",
+  margin: "0 6px",
+};
+
+const jsonViewerWarnBadgeStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  padding: "2px 8px",
+  marginRight: 4,
+  background: "rgba(245, 158, 11, 0.12)",
+  color: "#f59e0b",
+  border: "1px solid rgba(245, 158, 11, 0.3)",
+  borderRadius: 4,
+  fontSize: 11,
+  fontWeight: 500,
+  cursor: "help",
+};
+
+const jsonViewerBodyStyle: React.CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  overflow: "auto",
+  background: "var(--bg)",
+  fontFamily: "var(--font-mono)",
+  fontSize: 12,
+  lineHeight: 1.55,
+  padding: "10px 14px",
+  whiteSpace: "pre",
+  color: "var(--text)",
+};
+
+const jsonViewerErrorBannerStyle: React.CSSProperties = {
+  padding: "6px 12px",
+  fontSize: 11,
+  color: "#f59e0b",
+  borderBottom: "1px solid var(--border)",
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+};
 
 function CodeBlock({ text }: { text: string }) {
   return (
@@ -1466,17 +1682,7 @@ function Spinner() {
 function looksLikeJson(text: string): boolean {
   const trimmed = text.trim();
   return trimmed.startsWith("{") || trimmed.startsWith("[");
-}
-
-function tryParseJson(text: string): { ok: true; value: unknown } | { ok: false } {
-  try {
-    return { ok: true, value: JSON.parse(text) };
-  } catch {
-    return { ok: false };
-  }
-}
-
-function formatBytes(n: number): string {
+}function formatBytes(n: number): string {
   if (n < 1024) return `${n}B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
   return `${(n / (1024 * 1024)).toFixed(2)}MB`;
