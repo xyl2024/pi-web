@@ -659,6 +659,21 @@ const ZH_TRANSLATIONS = {
   "Skipped unsupported flags: {list}": "已跳过不支持的 flag：{list}",
   "Import cURL command is empty.": "cURL 命令为空。",
   "cURL command is missing a URL.": "cURL 命令缺少 URL。",
+  // JSON formatter panel (right-panel tab)
+  "JSON": "JSON",
+  "JSON input": "JSON 输入",
+  "Paste JSON here…": "在此粘贴 JSON…",
+  "Paste JSON above to format": "在上方粘贴 JSON 以格式化",
+  "Format": "格式化",
+  "Minify": "压缩",
+  "Minify & escape": "压缩并转义",
+  "Collapse all": "全部折叠",
+  "Expand all": "全部展开",
+  "Error": "错误",
+  "Parse error: {error}": "解析错误：{error}",
+  "Ignored prefix: {prefix}": "已忽略前缀：{prefix}",
+  "Ignored suffix: {suffix}": "已忽略后缀：{suffix}",
+  "Failed to copy": "复制失败",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);
