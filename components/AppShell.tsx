@@ -26,6 +26,7 @@ import { SettingsModal } from "./SettingsModal";
 import { PayloadsModal } from "./PayloadsModal";
 import { BranchNavigator } from "./BranchNavigator";
 import { CommandPalette } from "./CommandPalette";
+import { CollapsiblePanel } from "./CollapsiblePanel";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
 import { useContextMenu, type ContextMenuItem } from "./ContextMenu";
@@ -945,14 +946,16 @@ export function AppShell() {
             </div>
           )}
           {/* Top panel dropdown — shared, only one active at a time */}
-          {activeTopPanel && topPanelPos && (
-            <div style={{
+          <CollapsiblePanel
+            open={activeTopPanel !== null}
+            style={{
               position: "fixed",
-              top: topPanelPos.top,
-              left: topPanelPos.left,
-              width: topPanelPos.width,
+              top: topPanelPos?.top ?? 0,
+              left: topPanelPos?.left ?? 0,
+              width: topPanelPos?.width ?? "100%",
               zIndex: 500,
-            }}>
+            }}
+          >
               {activeTopPanel === "system" && (
                 <div style={{
                   background: "var(--bg-panel)",
@@ -1085,8 +1088,7 @@ export function AppShell() {
                   <PlaywrightDashboardPanel />
                 </div>
               )}
-            </div>
-          )}
+          </CollapsiblePanel>
 
         </div>
 

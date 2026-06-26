@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import type { SessionEntry, SessionTreeNode } from "@/lib/types";
 import { useI18n } from "@/hooks/useI18n";
+import { CollapsiblePanel } from "./CollapsiblePanel";
 
 interface Props {
   tree: SessionTreeNode[];
@@ -297,16 +298,19 @@ export function BranchNavigator({ tree, activeLeafId, onLeafChange, inline, cont
           {branchIcon}
           <span>{t("Branches")}</span>
         </button>
-        {open && dropdownPos && (
-          <div style={{
-            position: "fixed",
-            top: dropdownPos.top,
-            left: dropdownPos.left,
-            width: dropdownPos.width,
-            background: "var(--bg-panel)",
-            borderBottom: "1px solid var(--border)",
-            zIndex: 500,
-          }}>
+        {open && (
+          <CollapsiblePanel
+            open={open}
+            style={{
+              position: "fixed",
+              top: dropdownPos?.top ?? 0,
+              left: dropdownPos?.left ?? 0,
+              width: dropdownPos?.width ?? "100%",
+              background: "var(--bg-panel)",
+              borderBottom: "1px solid var(--border)",
+              zIndex: 500,
+            }}
+          >
             {hasContent && firstNode ? (
               <div style={{ padding: "4px 12px 8px 12px", maxHeight: 260, overflowY: "auto" }}>
                 {firstNode.children.map((child, idx) => (
@@ -326,7 +330,7 @@ export function BranchNavigator({ tree, activeLeafId, onLeafChange, inline, cont
                 {noBranchReason}
               </div>
             )}
-          </div>
+          </CollapsiblePanel>
         )}
       </div>
     );
