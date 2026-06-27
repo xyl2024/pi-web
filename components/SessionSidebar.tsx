@@ -11,7 +11,6 @@ import { Tooltip } from "./Tooltip";
 interface Props {
   selectedSessionId: string | null;
   onSelectSession: (session: SessionInfo, isRestore?: boolean) => void;
-  onNewSession?: (sessionId: string, cwd: string) => void;
   initialSessionId?: string | null;
   onInitialRestoreDone?: () => void;
   refreshKey?: number;
@@ -203,7 +202,7 @@ function PiAgentTitle() {
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, onOpenScheduledSession, favoriteIds = [], onToggleFavorite }: Props) {
+export function SessionSidebar({ selectedSessionId, onSelectSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, onOpenScheduledSession, favoriteIds = [], onToggleFavorite }: Props) {
   const { t } = useI18n();
   const toast = useToast();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
@@ -440,16 +439,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleNewSession = useCallback(() => {
-    if (!selectedCwd) return;
-    // Generate a temporary UUID client-side — no backend call needed.
-    // Pi will be spawned lazily when the user sends the first message.
-    const tempId = typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-    onNewSession?.(tempId, selectedCwd);
-  }, [selectedCwd, onNewSession]);
-
   const recentCwds = getRecentCwds(allSessions);
   const pinnedSet = new Set(pinnedCwds);
   const unpinnedRecentCwds = recentCwds.filter((c) => !pinnedSet.has(c));
@@ -486,45 +475,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <PiAgentTitle />
           <div style={{ display: "flex", gap: 6 }}>
-            <Tooltip content={selectedCwd ? `${t("New session")} ${selectedCwd}` : t("Select a project first")}>
-            <button
-              onClick={handleNewSession}
-              disabled={!selectedCwd}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-                background: "var(--bg-hover)",
-                border: "1px solid var(--border)",
-                color: selectedCwd ? "var(--text-muted)" : "var(--text-dim)",
-                cursor: selectedCwd ? "pointer" : "not-allowed",
-                height: 32,
-                paddingLeft: 10,
-                paddingRight: 12,
-                borderRadius: 7,
-                fontSize: 12,
-                fontWeight: 500,
-                letterSpacing: "-0.01em",
-                flexShrink: 0,
-                transition: "background 0.12s, color 0.12s, border-color 0.12s",
-              }}
-              onMouseEnter={(e) => {
-                if (!selectedCwd) return;
-                e.currentTarget.style.background = "var(--bg-selected)";
-                e.currentTarget.style.color = "var(--accent)";
-                e.currentTarget.style.borderColor = "rgba(37,99,235,0.35)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "var(--bg-hover)";
-                e.currentTarget.style.color = selectedCwd ? "var(--text-muted)" : "var(--text-dim)";
-                e.currentTarget.style.borderColor = "var(--border)";
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <line x1="6" y1="1" x2="6" y2="11" />
-                <line x1="1" y1="6" x2="11" y2="6" />
-              </svg>
-              {t("New")}
-            </button>
-            </Tooltip>
             <Tooltip content={t("Refresh")}>
             <button
               onClick={() => loadSessions(false)}

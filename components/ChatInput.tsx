@@ -55,6 +55,7 @@ interface Props {
   slashResourceKey?: string;
   onSlashAction?: (action: string) => void;
   contextUsage?: { percent: number | null; contextWindow: number; tokens: number | null } | null;
+  onNewSession?: () => void;
 }
 
 export interface ChatInputHandle {
@@ -170,6 +171,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   slashResources = [], slashResourceKey,
   onSlashAction,
   contextUsage,
+  onNewSession,
 }: Props, ref) {
   const { t } = useI18n();
   const [value, setValue] = useState("");
@@ -1385,6 +1387,39 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   </svg>
                 )}
               </button>
+            )}
+
+            {onNewSession && (
+              <Tooltip content={t("New session")}>
+                <button
+                  onClick={onNewSession}
+                  aria-label={t("New session")}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 32, height: 32, padding: 0,
+                    background: "none",
+                    border: "none",
+                    borderRadius: 9,
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                    transition: "background 0.12s, color 0.12s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                    e.currentTarget.style.color = "var(--text)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "none";
+                    e.currentTarget.style.color = "var(--text-muted)";
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="6" y1="1.5" x2="6" y2="10.5" />
+                    <line x1="1.5" y1="6" x2="10.5" y2="6" />
+                  </svg>
+                </button>
+              </Tooltip>
             )}
           </div>
 

@@ -678,7 +678,6 @@ export function AppShell() {
       <SessionSidebar
         selectedSessionId={selectedSession?.id ?? null}
         onSelectSession={handleSelectSession}
-        onNewSession={handleNewSession}
         initialSessionId={initialSessionId}
         onInitialRestoreDone={handleInitialRestoreDone}
         refreshKey={refreshKey}
