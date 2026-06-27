@@ -193,7 +193,7 @@ function PiAgentTitle() {
       onClick={handleClick}
       style={{
         background: "none", border: "none", padding: 0, cursor: "default",
-        fontWeight: 700, fontSize: 24,
+        fontWeight: 700, fontSize: 24, marginTop: -7,
         color: showVersion ? "var(--accent)" : "var(--text)",
         minWidth: "3ch",
       }}
