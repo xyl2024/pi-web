@@ -682,6 +682,7 @@ const ZH_TRANSLATIONS = {
   "Open canvas": "打开画布",
   "Hide canvas": "隐藏画布",
   "Canvas save failed — localStorage may be full": "画布保存失败 — localStorage 可能已满",
+  "Canvas image save failed — recent images may not reload": "画布图片保存失败 — 最近粘贴的图片可能无法在重新加载后显示",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

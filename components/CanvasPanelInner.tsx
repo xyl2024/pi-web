@@ -1,19 +1,32 @@
 "use client";
 
-// Canvas panel — single global Excalidraw whiteboard, persisted in
-// browser localStorage. Wired into the right-panel as the "画布" /
-// "Canvas" tab.
+// Canvas panel — single global Excalidraw whiteboard. Elements and
+// appState are persisted in browser localStorage; pasted/dropped image
+// dataURLs are persisted in IndexedDB (see `lib/canvas-files-store.ts`).
+// The split mirrors the official Excalidraw app: localStorage has the
+// small/textual state, IDB holds the bulky binary blobs.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Excalidraw } from "@excalidraw/excalidraw";
-import type { ExcalidrawInitialDataState } from "@excalidraw/excalidraw/types";
+import type {
+  ExcalidrawInitialDataState,
+  ExcalidrawProps,
+} from "@excalidraw/excalidraw/types";
 import { useI18n } from "@/hooks/useI18n";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/components/Toast";
+import {
+  loadAllFiles,
+  saveFiles,
+  type BinaryFiles,
+} from "@/lib/canvas-files-store";
 
-// Namespaced localStorage key + schema version (K3+V2).
-const STORAGE_KEY = "pi-web:canvas:v1";
-const STORAGE_VERSION = 1;
+// Namespaced localStorage key + schema version. Bumped to v2 in tandem with
+// the IndexedDB image storage change — v1 image elements stored `fileId`
+// references without ever persisting the dataURL, so those images are
+// unrecoverable on reload. New keys cleanly orphan the v1 entry.
+const STORAGE_KEY = "pi-web:canvas:v2";
+const STORAGE_VERSION = 2;
 const DEBOUNCE_MS = 300;
 
 // Fields that either break JSON serialization (Map, browser API) or are
@@ -121,19 +134,34 @@ export function CanvasPanelInner() {
   const { isDark } = useTheme();
   const toast = useToast();
 
-  // Loaded synchronously on first render — client-only module via dynamic,
-  // so window/localStorage is always available here.
-  const [initialData] = useState<ExcalidrawInitialDataState | null>(() => loadCanvasState());
+  // `initialData` is the function form (`() => MaybePromise<...>` per
+  // ExcalidrawProps). Excalidraw awaits it on mount, so our IDB load races
+  // safely with first paint — no useState/useEffect plumbing required, no
+  // window where Excalidraw is mounted with an empty `files` map.
+  const [initialData] = useState<ExcalidrawProps["initialData"]>(() => async () => {
+    const local = loadCanvasState();
+    const files = await loadAllFiles();
+    return {
+      elements: local?.elements ?? [],
+      appState: local?.appState ?? null,
+      files,
+    };
+  });
 
-  // Hold latest elements/appState in refs so flush listeners (which run
-  // outside React's render cycle, e.g. inside `beforeunload`) always read
-  // the freshest values.
+  // Hold latest elements/appState/files in refs so flush listeners (which
+  // run outside React's render cycle, e.g. inside `beforeunload`) always
+  // read the freshest values.
   const pendingRef = useRef<{
     elements: ExcalidrawInitialDataState["elements"];
     appState: ExcalidrawInitialDataState["appState"];
+    files: BinaryFiles;
   } | null>(null);
+  // fileIds we've successfully written to IDB in this session — used to
+  // avoid re-writing the same dataURL on every keystroke.
+  const savedFileIdsRef = useRef<Set<string>>(new Set());
   const hasUserEditedRef = useRef(false);
   const saveFailureShownRef = useRef(false);
+  const idbFailureShownRef = useRef(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flushNow = useRef<() => void>(() => {});
@@ -144,6 +172,8 @@ export function CanvasPanelInner() {
     }
     const pending = pendingRef.current;
     if (!pending) return;
+
+    // 1. localStorage — sync, fast, small payload.
     const ok = saveCanvasState(pending.elements, pending.appState);
     if (!ok && !saveFailureShownRef.current) {
       saveFailureShownRef.current = true;
@@ -152,6 +182,33 @@ export function CanvasPanelInner() {
         message: t("Canvas save failed — localStorage may be full"),
       });
     }
+
+    // 2. IndexedDB — async, holds the bulky image dataURLs. Only write
+    //    fileIds we haven't already persisted in this session.
+    const toWrite: BinaryFiles = {};
+    for (const [id, file] of Object.entries(pending.files)) {
+      if (!savedFileIdsRef.current.has(id)) toWrite[id] = file;
+    }
+    if (Object.keys(toWrite).length === 0) return;
+
+    saveFiles(toWrite).then(
+      (writtenIds) => {
+        for (const id of writtenIds) savedFileIdsRef.current.add(id);
+      },
+      (err) => {
+        // Don't update savedFileIdsRef on failure — next flush will retry.
+        console.error("[canvas-panel] IDB save failed", err);
+        if (!idbFailureShownRef.current) {
+          idbFailureShownRef.current = true;
+          toast.show({
+            kind: "error",
+            message: t(
+              "Canvas image save failed — recent images may not reload",
+            ),
+          });
+        }
+      },
+    );
   };
 
   // Flush before tab close / browser navigation / page hide.
@@ -184,9 +241,10 @@ export function CanvasPanelInner() {
   const handleChange = (
     elements: ExcalidrawInitialDataState["elements"],
     appState: ExcalidrawInitialDataState["appState"],
+    files: BinaryFiles,
   ) => {
     hasUserEditedRef.current = true;
-    pendingRef.current = { elements, appState };
+    pendingRef.current = { elements, appState, files };
     if (debounceTimerRef.current !== null) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => {
       debounceTimerRef.current = null;
