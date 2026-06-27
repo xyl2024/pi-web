@@ -523,7 +523,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       )}
 
       {isEmptyNew ? (
-        <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-8">
+        <div className="flex flex-1 flex-col items-center justify-center overflow-hidden px-4 py-8">
           <div className="w-full max-w-[820px]">
             {newSessionCwd && (
               githubUsername
