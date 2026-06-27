@@ -1117,15 +1117,14 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   onClick={() => !isStreaming && setThinkingDropdownOpen((v) => !v)}
                   disabled={isStreaming}
                   style={{
-                    display: "flex", alignItems: "center", gap: 5,
-                    padding: "8px 12px",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    padding: "0 10px",
                     height: 32,
                     background: thinkingDropdownOpen ? "var(--bg-hover)" : "none",
                     border: "none",
                     borderRadius: 9,
                     color: "var(--text-muted)",
                     cursor: isStreaming ? "not-allowed" : "pointer",
-                    fontSize: 12,
                     opacity: isStreaming ? 0.5 : 1,
                     transition: "background 0.12s, color 0.12s",
                   }}
@@ -1144,12 +1143,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     <line x1="7" y1="18" x2="12" y2="18" />
                     <line x1="8" y1="21" x2="11" y2="21" />
                   </svg>
-                  <span>{(() => {
-                    const lvl = thinkingLevel ?? "auto";
-                    if (lvl === "auto" || !thinkingLevelMap) return lvl;
-                    const mapped = thinkingLevelMap[lvl];
-                    return mapped != null ? mapped : lvl;
-                  })()}</span>
                 </button>
                 </Tooltip>
                 {thinkingDropdownOpen && (
@@ -1208,15 +1201,14 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   onClick={() => !isStreaming && setToolDropdownOpen((v) => !v)}
                   disabled={isStreaming}
                   style={{
-                    display: "flex", alignItems: "center", gap: 5,
-                    padding: "8px 12px",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    padding: "0 10px",
                     height: 32,
                     background: toolDropdownOpen ? "var(--bg-hover)" : "none",
                     border: "none",
                     borderRadius: 9,
                     color: "var(--text-muted)",
                     cursor: isStreaming ? "not-allowed" : "pointer",
-                    fontSize: 12,
                     opacity: isStreaming ? 0.5 : 1,
                     transition: "background 0.12s, color 0.12s",
                   }}
@@ -1233,7 +1225,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
                   </svg>
-                  <span>{Object.entries(TOOL_PRESET_MAP).find(([, v]) => v === toolPreset)?.[0] ?? "off"}</span>
                 </button>
                 </Tooltip>
                 {toolDropdownOpen && (
@@ -1290,19 +1281,20 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     {compactError}
                   </div>
                 )}
+                <Tooltip content={isCompacting ? t("Stop compaction") : t("Compact context")}>
                 <button
                   onClick={isCompacting ? onAbortCompaction : onCompact}
                   disabled={isStreaming && !isCompacting}
                   style={{
-                    display: "flex", alignItems: "center", gap: 5,
-                    padding: "8px 12px",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    padding: "0 10px",
                     height: 32,
                     background: isCompacting ? "rgba(239,68,68,0.08)" : "none",
                     border: "none",
                     borderRadius: 9,
                     color: isCompacting ? "#ef4444" : "var(--text-muted)",
                     cursor: (isStreaming && !isCompacting) ? "not-allowed" : "pointer",
-                    fontSize: 12, opacity: (isStreaming && !isCompacting) ? 0.5 : 1,
+                    opacity: (isStreaming && !isCompacting) ? 0.5 : 1,
                     transition: "background 0.12s, color 0.12s",
                   }}
                   onMouseEnter={(e) => {
@@ -1316,14 +1308,15 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   }}
                 >
                   {isCompacting ? (
-                    <><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="2" y="2" width="6" height="6" rx="1" fill="currentColor" /></svg>{t("Compacting...")}</>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="2" y="2" width="6" height="6" rx="1" fill="currentColor" /></svg>
                   ) : (
-                    <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" />
                       <line x1="10" y1="14" x2="3" y2="21" /><line x1="21" y1="3" x2="14" y2="10" />
-                    </svg>{t("Compact")}</>
+                    </svg>
                   )}
                 </button>
+                </Tooltip>
               </div>
             )}
 
