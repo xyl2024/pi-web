@@ -84,6 +84,16 @@ export function AppShell() {
   const [payloadsOpen, setPayloadsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Focus mode — hides the left sidebar and forces the right panel into a
+  // 1:2 (center : right) split. Toggled by the focus button at the bottom of
+  // the right-side button bar.
+  const [focused, setFocused] = useState(false);
+  const toggleFocus = useCallback(() => {
+    setFocused((v) => {
+      if (v) setSidebarOpen(true);
+      return !v;
+    });
+  }, []);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
 
@@ -779,7 +789,7 @@ export function AppShell() {
 
       {/* Left sidebar */}
       <div
-        className={`sidebar-container${sidebarOpen ? "" : " sidebar-closed"}`}
+        className={`sidebar-container${(sidebarOpen && !focused) ? "" : " sidebar-closed"}`}
         style={{
           background: "var(--bg-panel)",
           borderRight: "1px solid var(--border)",
@@ -787,8 +797,8 @@ export function AppShell() {
           flexDirection: "column",
           flexShrink: 0,
           zIndex: 200,
-          width: sidebarOpen ? leftWidth : 0,
-          minWidth: sidebarOpen ? leftWidth : 0,
+          width: (sidebarOpen && !focused) ? leftWidth : 0,
+          minWidth: (sidebarOpen && !focused) ? leftWidth : 0,
           transition: isDraggingLeft ? "none" : undefined,
         }}
       >
@@ -796,7 +806,7 @@ export function AppShell() {
       </div>
 
       {/* Drag handle: left ↔ center. Only visible when sidebar is open. */}
-      {sidebarOpen && (
+      {sidebarOpen && !focused && (
         <div
           className={`resize-handle${isDraggingLeft ? " dragging" : ""}`}
           onMouseDown={startDragLeft}
@@ -805,7 +815,7 @@ export function AppShell() {
       )}
 
       {/* Center: chat */}
-      <div style={{ flex: 1, display: rightPanelState === "expanded" ? "none" : "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+      <div style={{ flex: 1, display: (rightPanelState === "expanded" && !focused) ? "none" : "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
         {/* Top bar with sidebar toggle */}
         <div ref={topBarRef} style={{ display: "flex", alignItems: "center", flexShrink: 0, borderBottom: "1px solid var(--border)", height: 36, background: "var(--bg-panel)", overflow: "visible", zIndex: 45 }}>
           <Tooltip content={sidebarOpen ? t("Hide sidebar") : t("Show sidebar")}>
@@ -1168,7 +1178,7 @@ export function AppShell() {
       </div>
 
       {/* Drag handle: center ↔ right. Only when right panel is in `normal`. */}
-      {rightPanelState === "normal" && (
+      {rightPanelState === "normal" && !focused && (
         <div
           className={`resize-handle${isDraggingRight ? " dragging" : ""}`}
           onMouseDown={startDragRight}
@@ -1178,14 +1188,15 @@ export function AppShell() {
 
       {/* Right panel: file viewer — always mounted, width animated via CSS */}
       <div
-        className={`right-panel-container right-panel-${rightPanelState}`}
+        className={`right-panel-container right-panel-${focused ? "expanded" : rightPanelState}`}
         style={{
           display: "flex",
           flexDirection: "column",
           borderLeft: "1px solid var(--border)",
           background: "var(--bg)",
-          width: rightPanelState === "normal" ? rightWidth : undefined,
-          minWidth: rightPanelState === "normal" ? rightWidth : undefined,
+          width: !focused && rightPanelState === "normal" ? rightWidth : undefined,
+          minWidth: !focused && rightPanelState === "normal" ? rightWidth : undefined,
+          flex: focused ? 2 : undefined,
           transition: isDraggingRight ? "none" : undefined,
         }}
       >
@@ -1413,6 +1424,32 @@ export function AppShell() {
           </button>
           </Tooltip>
         )}
+        {/* Focus mode toggle — pushed to the bottom of the button bar */}
+        <div style={{ marginTop: "auto" }}>
+          <Tooltip content={focused ? t("Exit focus") : t("Focus")}>
+            <button
+              onClick={toggleFocus}
+              aria-label={focused ? t("Exit focus") : t("Focus")}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 36, height: 36, padding: 0,
+                background: focused ? "var(--bg-selected)" : "transparent",
+                border: "none",
+                color: focused ? "var(--text)" : "var(--text-muted)",
+                cursor: "pointer", transition: "color 0.12s, background 0.12s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = focused ? "var(--text)" : "var(--text-muted)"; }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9" />
+                <polyline points="9 21 3 21 3 15" />
+                <line x1="21" y1="3" x2="14" y2="10" />
+                <line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+            </button>
+          </Tooltip>
+        </div>
       </div>
     </div>
     {modelsConfigOpen && <ModelsConfig onClose={() => { setModelsConfigOpen(false); setModelsRefreshKey((k) => k + 1); }} />}
