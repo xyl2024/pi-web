@@ -117,7 +117,7 @@ function saveCanvasState(
 }
 
 export function CanvasPanelInner() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { isDark } = useTheme();
   const toast = useToast();
 
@@ -196,15 +196,26 @@ export function CanvasPanelInner() {
 
   const theme = isDark ? "dark" as const : "light" as const;
 
+  // Map pi-web's "en" | "zh" locale to Excalidraw's BCP-47 language code.
+  // Excalidraw internally calls `setLanguage(langCode)` inside
+  // `InitializeApp` on every change (see packages/excalidraw/components/
+  // InitializeApp.tsx), which dynamically imports the matching
+  // `./locales/<code>.json` and re-renders translated strings. The canvas
+  // content (elements + appState) is persisted in pi-web's own localStorage
+  // and survives the brief remount during a language switch.
+  const langCode = locale === "zh" ? "zh-CN" : "en";
+
   // useMemo keeps the props object stable across renders — important so
-  // Excalidraw doesn't re-initialize every render.
+  // Excalidraw doesn't re-initialize every render. `langCode` is listed so
+  // a locale toggle propagates through.
   const excalidrawProps = useMemo(
     () => ({
       initialData: initialData ?? undefined,
       onChange: handleChange,
       theme,
+      langCode,
     }),
-    [initialData, theme],
+    [initialData, theme, langCode],
   );
 
   return (
