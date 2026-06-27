@@ -19,7 +19,7 @@ const wenkaiSans = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Pi Agent Web",
+  title: "Pi Work",
   description: "Pi Coding Agent Web Interface",
 };
 
