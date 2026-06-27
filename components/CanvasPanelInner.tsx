@@ -16,7 +16,8 @@ import { useI18n } from "@/hooks/useI18n";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/components/Toast";
 import {
-  loadAllFiles,
+  deleteOrphanFiles,
+  loadAndTouchFiles,
   saveFiles,
   type BinaryFiles,
 } from "@/lib/canvas-files-store";
@@ -84,6 +85,33 @@ type PersistedCanvas = {
   savedAt: number;
 };
 
+/**
+ * Collect fileIds from non-deleted image elements. Drives the IndexedDB
+ * GC sweep: a file is "in use" iff at least one non-deleted image
+ * element points at it. Deleted image elements don't keep their blobs
+ * alive — once a delete has stood for 24h, the blob is reaped.
+ *
+ * Matches the official Excalidraw app's effective behavior, where
+ * `localStorage` only stores `getNonDeletedElements(elements)` and the
+ * `fileIds` passed to `clearObsoleteFiles` therefore excludes deleted
+ * image fileIds by construction.
+ */
+function collectReferencedFileIds(
+  elements: ExcalidrawInitialDataState["elements"],
+): Set<string> {
+  const ids = new Set<string>();
+  if (!Array.isArray(elements)) return ids;
+  for (const el of elements) {
+    if (!el || typeof el !== "object") continue;
+    const e = el as { type?: unknown; isDeleted?: unknown; fileId?: unknown };
+    if (e.type !== "image") continue;
+    if (e.isDeleted === true) continue;
+    if (typeof e.fileId !== "string" || e.fileId.length === 0) continue;
+    ids.add(e.fileId);
+  }
+  return ids;
+}
+
 function loadCanvasState(): ExcalidrawInitialDataState | null {
   if (typeof window === "undefined") return null;
   try {
@@ -140,7 +168,15 @@ export function CanvasPanelInner() {
   // window where Excalidraw is mounted with an empty `files` map.
   const [initialData] = useState<ExcalidrawProps["initialData"]>(() => async () => {
     const local = loadCanvasState();
-    const files = await loadAllFiles();
+    // The set of fileIds we just loaded from localStorage is the same
+    // set the canvas is about to render — exactly what `loadAndTouchFiles`
+    // needs to refresh and what `deleteOrphanFiles` needs to protect.
+    const referenced = collectReferencedFileIds(local?.elements);
+    const files = await loadAndTouchFiles(referenced);
+    // Fire-and-forget GC: a failed sweep is logged inside the store and
+    // never blocks the canvas. Mirrors official Excalidraw's
+    // `clearObsoleteFiles` placement after the initial scene resolves.
+    void deleteOrphanFiles(referenced);
     return {
       elements: local?.elements ?? [],
       appState: local?.appState ?? null,
