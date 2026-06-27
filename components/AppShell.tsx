@@ -519,6 +519,14 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [t]);
 
+  // Default-open the Todos tab on initial mount. Covers both first entry
+  // and refresh (a refresh tears down and remounts the tree, so this
+  // runs again). After mount, the user's open/close choices take over.
+  useEffect(() => {
+    handleOpenTodoTab();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Open the favorites tab — same pattern as todos / file tabs.
   const handleOpenFavoritesTab = useCallback(() => {
     setFileTabs((prev) => {
