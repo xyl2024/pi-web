@@ -1318,25 +1318,6 @@ export function AppShell() {
             </svg>
           </button>
         </Tooltip>
-        {/* Open favorites — always visible */}
-        <Tooltip content={t("Open favorites")}>
-        <button
-          onClick={handleOpenFavoritesTab}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            width: 36, height: 36, padding: 0,
-            background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-            color: activeFileTab?.kind === "favorites" ? "var(--text)" : "var(--text-muted)",
-            cursor: "pointer", transition: "color 0.12s",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "favorites" ? "var(--text)" : "var(--text-muted)"; }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill={activeFileTab?.kind === "favorites" ? "var(--accent)" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-          </svg>
-        </button>
-        </Tooltip>
         {/* Open translate — always visible */}
         <Tooltip content={t("Open translate")}>
         <button
@@ -1361,8 +1342,6 @@ export function AppShell() {
           </svg>
         </button>
         </Tooltip>
-        {/* Open tool calls — always visible; shows running/total badge */}
-        <ToolCallsVerticalButton active={activeFileTab?.kind === "toolCalls"} onClick={handleOpenToolCallsTab} />
         {/* Open HTTP debug panel */}
         <Tooltip content={t("HTTP")}>
           <button
@@ -1431,8 +1410,30 @@ export function AppShell() {
           </button>
           </Tooltip>
         )}
-        {/* Focus mode toggle — pushed to the bottom of the button bar */}
+        {/* Favorites + Tool Calls + Focus — grouped at the bottom of the button bar */}
         <div style={{ marginTop: "auto" }}>
+          {/* Open favorites — always visible */}
+          <Tooltip content={t("Open favorites")}>
+          <button
+            onClick={handleOpenFavoritesTab}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, padding: 0,
+              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+              color: activeFileTab?.kind === "favorites" ? "var(--text)" : "var(--text-muted)",
+              cursor: "pointer", transition: "color 0.12s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "favorites" ? "var(--text)" : "var(--text-muted)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill={activeFileTab?.kind === "favorites" ? "var(--accent)" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          </button>
+          </Tooltip>
+          {/* Open tool calls — always visible; shows running/total badge */}
+          <ToolCallsVerticalButton active={activeFileTab?.kind === "toolCalls"} onClick={handleOpenToolCallsTab} />
+          {/* Focus mode toggle */}
           <Tooltip content={focused ? t("Exit focus") : t("Focus")}>
             <button
               onClick={toggleFocus}
