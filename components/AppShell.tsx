@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSessionUiState, useSessionLeafChange, resetSessionUi } from "@/hooks/sessionUiStore";
 import { SessionSidebar } from "./SessionSidebar";
@@ -34,11 +34,14 @@ import { BranchNavigator } from "./BranchNavigator";
 import { CommandPalette } from "./CommandPalette";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 import { useI18n } from "@/hooks/useI18n";
+import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "./Toast";
 import { useContextMenu, type ContextMenuItem } from "./ContextMenu";
 import type { SessionInfo, SessionSearchResult } from "@/lib/types";
 import type { ChatInputHandle } from "./ChatInput";
 import { sendAgentCommand } from "@/lib/agent-client";
+import { buildCommands, type Command, type CommandContext } from "@/lib/commands";
+import { useAgentControls } from "@/hooks/sessionUiStore";
 
 interface ToolInfo {
   name: string;
@@ -66,7 +69,8 @@ const defaultRightWidth = (): number => {
 export function AppShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useI18n();
+  const { t, setLocale } = useI18n();
+  const theme = useTheme();
   const toast = useToast();
   const cm = useContextMenu();
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
@@ -96,6 +100,36 @@ export function AppShell() {
   }, []);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
+
+  // ── Command palette: models + agent controls bridge ──
+  // The palette builds its command list from these two inputs. Models come
+  // from /api/models once on mount; agent controls come from ChatWindow via
+  // the sessionUiStore (null when no session is mounted).
+  const [models, setModels] = useState<Array<{ id: string; name: string; provider: string }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/models")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: { modelList?: Array<{ id: string; name: string; provider: string }> } | null) => {
+        if (cancelled || !d) return;
+        setModels(d.modelList ?? []);
+      })
+      .catch(() => { /* leave empty — palette hides model commands via when() */ });
+    return () => { cancelled = true; };
+  }, []);
+  const agentControls = useAgentControls();
+
+  const openPalette = useCallback(() => {
+    // The palette is the top-level modal — opening it closes every other
+    // modal so the screen never stacks. Sidebar button + ⌘K both route here.
+    setModelsConfigOpen(false);
+    setSkillsConfigOpen(false);
+    setPromptsConfigOpen(false);
+    setSettingsConfigOpen(false);
+    setPayloadsOpen(false);
+    setActiveTopPanel(null);
+    setPaletteOpen(true);
+  }, []);
 
   // Session-level UI state (branch tree, system prompt, agents files, session
   // stats, context usage) is owned by useAgentSession in ChatWindow and
@@ -168,7 +202,11 @@ export function AppShell() {
       if (mod && e.key === "k") {
         if (!isEditable) {
           e.preventDefault();
-          setPaletteOpen((v) => !v);
+          if (paletteOpen) {
+            setPaletteOpen(false);
+          } else {
+            openPalette();
+          }
         }
         return;
       }
@@ -187,7 +225,7 @@ export function AppShell() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [paletteOpen]);
+  }, [paletteOpen, openPalette]);
 
   useEffect(() => {
     if (!activeTopPanel || !topBarRef.current) return;
@@ -681,6 +719,45 @@ export function AppShell() {
 
   const activeFileTab = fileTabs.find((t) => t.id === activeFileTabId) ?? null;
 
+  // ── Command palette context + command list ──
+  // Re-built whenever any input changes (cheap; buildCommands is O(N) where
+  // N is the number of declared commands). AppShell is the only place that
+  // knows about every handler the palette may call.
+  const commandContext = useMemo<CommandContext>(() => ({
+    setTheme: theme.setPreset,
+    setLocale,
+    newSession: handleSlashNew,
+    openSettings: () => setSettingsConfigOpen(true),
+    openModels: () => setModelsConfigOpen(true),
+    openSkills: () => setSkillsConfigOpen(true),
+    openPrompts: () => setPromptsConfigOpen(true),
+    openPayloads: () => { if (selectedSession?.id) setPayloadsOpen(true); },
+    openTodosTab: handleOpenTodoTab,
+    openFavoritesTab: handleOpenFavoritesTab,
+    openCanvasTab: handleOpenCanvasTab,
+    openTranslateTab: handleOpenTranslateTab,
+    openToolCallsTab: handleOpenToolCallsTab,
+    openHttpTab: handleOpenHttpTab,
+    openJsonTab: handleOpenJsonTab,
+    toggleSidebar: () => setSidebarOpen((v) => !v),
+    toggleRightPanel: () => setRightPanelState((v) => v === "closed" ? "normal" : "closed"),
+    toggleFocus,
+    agentControls,
+    hasSession: selectedSession !== null || newSessionCwd !== null,
+    hasCwd: !!(activeCwd ?? selectedSession?.cwd ?? newSessionCwd),
+  }), [
+    theme.setPreset, setLocale, handleSlashNew,
+    handleOpenTodoTab, handleOpenFavoritesTab, handleOpenCanvasTab,
+    handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenHttpTab, handleOpenJsonTab,
+    toggleFocus, agentControls,
+    selectedSession, newSessionCwd, activeCwd,
+  ]);
+
+  const commands = useMemo<Command[]>(
+    () => buildCommands(commandContext, { t, models }),
+    [commandContext, t, models],
+  );
+
   const sidebarContent = (
     <>
       <SessionSidebar
@@ -695,7 +772,7 @@ export function AppShell() {
         onOpenFile={handleOpenFile}
         explorerRefreshKey={explorerRefreshKey}
         onAtMention={handleAtMention}
-        onOpenSearch={() => setPaletteOpen(true)}
+        onOpenSearch={openPalette}
         onFileDeleted={handleFileDeleted}
         onOpenScheduledSession={handleOpenScheduledSession}
         favoriteIds={favoriteIds}
@@ -1476,6 +1553,7 @@ export function AppShell() {
       onClose={() => setPaletteOpen(false)}
       cwd={activeCwd ?? selectedSession?.cwd ?? newSessionCwd ?? null}
       onSelectSession={handleSelectSearchResult}
+      commands={commands}
       t={t}
     />
     </>

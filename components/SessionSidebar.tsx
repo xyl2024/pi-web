@@ -516,7 +516,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
             </button>
             </Tooltip>
             {onOpenSearch && (
-              <Tooltip content={`${t("Search sessions")} (⌘K)`}>
+              <Tooltip content={`${t("Command palette")} (⌘K)`}>
               <button
                 onClick={onOpenSearch}
                 style={{
