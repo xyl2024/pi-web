@@ -17,6 +17,7 @@ import type { SlashResource } from "./ChatInput";
 import { ToolCallStatsProvider, useToolCallStatsEmit } from "@/hooks/ToolCallStatsContext";
 import { useToolCallStats } from "@/hooks/useToolCallStats";
 import { setToolCallStatsScrollCallback, setToolCallStatsState } from "@/hooks/toolCallStatsStore";
+import { setAgentControls } from "@/hooks/sessionUiStore";
 import { SessionSearch } from "./SessionSearch";
 
 interface Props {
@@ -167,6 +168,27 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       .catch(() => { /* ignore — heatmap hides itself if username is empty */ });
     return () => { cancelled = true; };
   }, []);
+
+  // ── Register agent controls with the palette store ──
+  // The ⌘K command palette in AppShell reads these via useAgentControls().
+  // Each entry is a stable callback owned by useAgentSession — including
+  // them in the dep list would churn the ref every render, so we register
+  // once on mount and update isStreaming/isCompacting imperatively.
+  useEffect(() => {
+    setAgentControls({
+      switchModel: handleModelChange,
+      switchThinkingLevel: handleThinkingLevelChange,
+      switchToolPreset: handleToolPresetChange,
+      compact: handleCompact,
+      abortStreaming: handleAbort,
+      abortCompaction: handleAbortCompaction,
+      isStreaming: agentRunning,
+      isCompacting,
+    });
+    return () => setAgentControls(null);
+    // Handlers come from useAgentSession (stable useCallback refs); only
+    // re-register when the bits that drive `when()` predicates change.
+  }, [agentRunning, isCompacting]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Running summary for the vertical toolbar badge
   const runningSummary = agentPhase?.kind === "running_tools" && agentPhase.tools.length > 0

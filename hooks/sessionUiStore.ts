@@ -2,6 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import type { SessionTreeNode, AgentsFile } from "@/lib/types";
+import type { AgentControls } from "@/lib/commands";
 import { isContentEqual } from "@/lib/shallowEqual";
 
 /**
@@ -128,4 +129,34 @@ export function useSessionLeafChange(): (leafId: string | null) => void {
   return useCallback((leafId: string | null) => {
     leafChangeHandlerRef?.(leafId);
   }, []);
+}
+
+// ── Agent controls (palette bridge) ─────────────────────────────────────
+// Imperative handlers owned by useAgentSession inside ChatWindow, exposed
+// here so AppShell can wire them into the command palette. ChatWindow
+// registers the controls on mount and clears them on unmount. The store
+// notifies subscribers when the reference changes (mount / unmount), but
+// individual functions inside `controls` are stable across re-renders —
+// they are recreated by useCallback in useAgentSession only when their
+// own deps change, which the palette doesn't need to track.
+
+let agentControlsRef: AgentControls | null = null;
+const agentControlsListeners = new Set<() => void>();
+
+export function setAgentControls(c: AgentControls | null) {
+  agentControlsRef = c;
+  for (const l of agentControlsListeners) l();
+}
+
+export function useAgentControls(): AgentControls | null {
+  return useSyncExternalStore(
+    (cb) => {
+      agentControlsListeners.add(cb);
+      return () => {
+        agentControlsListeners.delete(cb);
+      };
+    },
+    () => agentControlsRef,
+    () => null,
+  );
 }
