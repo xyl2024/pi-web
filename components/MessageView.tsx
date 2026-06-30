@@ -380,10 +380,15 @@ function AssistantMessageView({
     .join("\n");
 
   const copyContent = () => {
-    copyText(textContent).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    copyText(textContent)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {
+        // Silent — UI just doesn't flip to "Copied".
+        console.warn("clipboard write failed");
+      });
   };
 
   useEffect(() => {
