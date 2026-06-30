@@ -21,6 +21,7 @@ type View = "textarea" | "tree";
 
 const DEFAULT_COLLAPSE_DEPTH = 3;
 const PARSE_DEBOUNCE_MS = 250;
+const STORAGE_KEY = "pi-json-panel-content";
 
 const ICON_PROPS = {
   width: 14,
@@ -85,6 +86,16 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
     </svg>
   ),
+  // Clear (trash)
+  clear: (
+    <svg {...ICON_PROPS}>
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+      <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+    </svg>
+  ),
 };
 
 export function JsonPanel() {
@@ -97,10 +108,31 @@ export function JsonPanel() {
   const [parsed, setParsed] = useState<JsonValue | null>(null);
   const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(new Set());
   const initializedRef = useRef(false);
+  // Gates the first persist run so the initial empty state doesn't overwrite
+  // the data we are about to rehydrate from localStorage.
+  const persistInitializedRef = useRef(false);
+
+  // Restore the last-edited JSON from localStorage on mount.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (typeof saved === "string") setContent(saved);
+    } catch { /* localStorage unavailable — keep default */ }
+  }, []);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedContent(content), PARSE_DEBOUNCE_MS);
     return () => clearTimeout(id);
+  }, [content]);
+
+  useEffect(() => {
+    if (!persistInitializedRef.current) {
+      persistInitializedRef.current = true;
+      return;
+    }
+    try {
+      localStorage.setItem(STORAGE_KEY, content);
+    } catch { /* quota exceeded / unavailable — ignore */ }
   }, [content]);
 
   useEffect(() => {
@@ -196,6 +228,11 @@ export function JsonPanel() {
     }
   }, [content, t, toast]);
 
+  const handleClear = useCallback(() => {
+    setContent("");
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+  }, []);
+
   const isTreeView = view === "tree";
   const disableTransform = parsed === null;
 
@@ -219,6 +256,7 @@ export function JsonPanel() {
         )}
         <div style={{ flex: 1 }} />
         <ErrorBadge error={error} ignoredPrefix={error?.ignoredPrefix} ignoredSuffix={error?.ignoredSuffix} />
+        <IconButton label={t("Clear")} icon={ICONS.clear} onClick={handleClear} disabled={content.length === 0} />
         <IconButton label={t("Copy")} icon={ICONS.copy} onClick={handleCopy} disabled={content.length === 0} />
       </div>
 
