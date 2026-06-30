@@ -664,9 +664,7 @@ const ZH_TRANSLATIONS = {
   "cURL command is missing a URL.": "cURL 命令缺少 URL。",
   // JSON formatter panel (right-panel tab)
   "JSON": "JSON",
-  "JSON input": "JSON 输入",
   "Paste JSON here…": "在此粘贴 JSON…",
-  "Paste JSON above to format": "在上方粘贴 JSON 以格式化",
   "Format": "格式化",
   "Minify": "压缩",
   "Minify & escape": "压缩并转义",

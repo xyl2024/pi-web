@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
 import { Tooltip } from "./Tooltip";
@@ -16,7 +16,7 @@ import {
   type JsonValue,
 } from "./JsonTreeView";
 
-type Mode = "format" | "minify" | "escape";
+type View = "textarea" | "tree";
 
 const DEFAULT_COLLAPSE_DEPTH = 3;
 const PARSE_DEBOUNCE_MS = 250;
@@ -24,27 +24,29 @@ const PARSE_DEBOUNCE_MS = 250;
 export function JsonPanel() {
   const { t } = useI18n();
   const toast = useToast();
-  const [input, setInput] = useState("");
-  const [mode, setMode] = useState<Mode>("format");
-  const [debouncedInput, setDebouncedInput] = useState("");
+  const [content, setContent] = useState("");
+  const [view, setView] = useState<View>("textarea");
+  const [debouncedContent, setDebouncedContent] = useState("");
   const [error, setError] = useState<{ message: string; ignoredPrefix?: string; ignoredSuffix?: string } | null>(null);
   const [parsed, setParsed] = useState<JsonValue | null>(null);
   const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(new Set());
   const initializedRef = useRef(false);
 
   useEffect(() => {
-    const id = setTimeout(() => setDebouncedInput(input), PARSE_DEBOUNCE_MS);
+    const id = setTimeout(() => setDebouncedContent(content), PARSE_DEBOUNCE_MS);
     return () => clearTimeout(id);
-  }, [input]);
+  }, [content]);
 
   useEffect(() => {
-    if (debouncedInput.length === 0) {
+    if (debouncedContent.length === 0) {
       setError(null);
+      setParsed(null);
       return;
     }
-    const result = parseJsonTolerant(debouncedInput);
+    const result = parseJsonTolerant(debouncedContent);
     if (!result.ok) {
       setError({ message: result.error });
+      setParsed(null);
       return;
     }
     setError(
@@ -67,7 +69,30 @@ export function JsonPanel() {
         return next;
       });
     }
-  }, [debouncedInput]);
+  }, [debouncedContent]);
+
+  const handleFormat = useCallback(() => {
+    if (parsed === null) return;
+    setContent(JSON.stringify(parsed, null, 2));
+    setView("textarea");
+  }, [parsed]);
+
+  const handleMinify = useCallback(() => {
+    if (parsed === null) return;
+    setContent(JSON.stringify(parsed));
+    setView("textarea");
+  }, [parsed]);
+
+  const handleEscape = useCallback(() => {
+    if (parsed === null) return;
+    setContent(escapeJsonString(parsed));
+    setView("textarea");
+  }, [parsed]);
+
+  const handleToggleTree = useCallback(() => {
+    if (parsed === null) return;
+    setView((v) => (v === "tree" ? "textarea" : "tree"));
+  }, [parsed]);
 
   const handleCollapseAll = useCallback(() => {
     if (!parsed) return;
@@ -96,68 +121,56 @@ export function JsonPanel() {
     }
   }, [parsed, t, toast]);
 
-  const isFormat = mode === "format";
-  const minifiedView = useMemo(() => (parsed ? minifyJson(parsed) : ""), [parsed]);
-  const escapedView = useMemo(() => (parsed ? escapeJsonString(parsed) : ""), [parsed]);
+  const isTreeView = view === "tree";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <div style={{ flex: "0 0 14.2857%", minHeight: 0, display: "flex", flexDirection: "column", borderBottom: "1px solid var(--border)" }}>
-        <div style={inputHeaderStyle}>
-          {t("JSON input")}
-        </div>
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={t("Paste JSON here…")}
-          spellCheck={false}
-          style={textareaStyle}
-        />
+      <div style={toolbarStyle}>
+        {!isTreeView && (
+          <>
+            <ToolbarButton label={t("Format")} onClick={handleFormat} disabled={parsed === null} />
+            <ToolbarButton label={t("Minify")} onClick={handleMinify} disabled={parsed === null} />
+            <ToolbarButton label={t("Minify & escape")} onClick={handleEscape} disabled={parsed === null} />
+            <div style={toolbarDividerStyle} />
+          </>
+        )}
+        <ToolbarButton label={t("Tree view")} active={isTreeView} onClick={handleToggleTree} disabled={parsed === null} />
+        {isTreeView && (
+          <>
+            <div style={toolbarDividerStyle} />
+            <ToolbarButton label={t("Collapse all")} onClick={handleCollapseAll} disabled={!parsed || !isTreeView} />
+            <ToolbarButton label={t("Expand all")} onClick={handleExpandAll} disabled={!parsed || !isTreeView} />
+          </>
+        )}
+        <div style={{ flex: 1 }} />
+        <ErrorBadge error={error} ignoredPrefix={error?.ignoredPrefix} ignoredSuffix={error?.ignoredSuffix} />
+        <ToolbarButton label={t("Copy")} onClick={handleCopy} disabled={!parsed} />
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        <div style={toolbarStyle}>
-          <ToolbarButton label={t("Format")} active={mode === "format"} onClick={() => setMode("format")} />
-          <ToolbarButton label={t("Minify")} active={mode === "minify"} onClick={() => setMode("minify")} />
-          <ToolbarButton label={t("Minify & escape")} active={mode === "escape"} onClick={() => setMode("escape")} />
-          <div style={toolbarDividerStyle} />
-          <ToolbarButton label={t("Collapse all")} onClick={handleCollapseAll} disabled={!parsed || !isFormat} />
-          <ToolbarButton label={t("Expand all")} onClick={handleExpandAll} disabled={!parsed || !isFormat} />
-          <div style={{ flex: 1 }} />
-          <ErrorBadge error={error} ignoredPrefix={error?.ignoredPrefix} ignoredSuffix={error?.ignoredSuffix} />
-          <ToolbarButton label={t("Copy")} onClick={handleCopy} disabled={!parsed} />
-        </div>
-
+      {isTreeView ? (
         <div style={viewerStyle}>
-          {!parsed && !error ? (
-            <div style={{ color: "var(--text-dim)", fontStyle: "italic", whiteSpace: "normal" }}>{t("Paste JSON above to format")}</div>
-          ) : error && !parsed ? (
-            <div style={{ color: "#f87171", whiteSpace: "pre-wrap" }}>{t("Parse error: {error}").replace("{error}", error.message)}</div>
-          ) : mode === "format" && parsed ? (
+          {parsed ? (
             <JsonTreeView value={parsed} collapsedPaths={collapsedPaths} onTogglePath={togglePath} />
-          ) : mode === "minify" && parsed ? (
-            <span>{minifiedView}</span>
           ) : (
-            <span>{escapedView}</span>
+            <div style={{ color: "#f87171", whiteSpace: "pre-wrap" }}>
+              {error ? t("Parse error: {error}").replace("{error}", error.message) : t("Paste JSON here…")}
+            </div>
           )}
         </div>
-      </div>
+      ) : (
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder={t("Paste JSON here…")}
+          spellCheck={false}
+          style={contentAreaStyle}
+        />
+      )}
     </div>
   );
 }
 
-const inputHeaderStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  padding: "6px 12px",
-  fontSize: 11,
-  color: "var(--text-dim)",
-  background: "var(--bg-panel)",
-  borderBottom: "1px solid var(--border)",
-  flexShrink: 0,
-};
-
-const textareaStyle: React.CSSProperties = {
+const contentAreaStyle: React.CSSProperties = {
   flex: 1,
   minHeight: 0,
   background: "var(--bg)",
