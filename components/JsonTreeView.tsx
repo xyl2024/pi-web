@@ -110,7 +110,7 @@ function flattenTree(value: JsonValue, depth: number, path: JsonPath, collapsed:
     out.push({
       depth,
       segs: [
-        ...(isRoot ? [] : keyPrefixSegs(parentSeg, isArray)),
+        ...(isRoot ? [] : keyPrefixSegs(parentSeg)),
         ...(isRoot ? [] : [{ kind: "text" as const, text: " ".repeat(CHEVRON_W) }]),
         { kind: "text" as const, text: open + close, color: COLOR_PUNCT },
       ],
@@ -125,7 +125,7 @@ function flattenTree(value: JsonValue, depth: number, path: JsonPath, collapsed:
     out.push({
       depth,
       segs: [
-        ...keyPrefixSegs(parentSeg, isArray),
+        ...keyPrefixSegs(parentSeg),
         { kind: "chevron", collapsed: true, path },
         { kind: "text" as const, text: open, color: COLOR_PUNCT },
         { kind: "text" as const, text: " ... ", color: COLOR_PUNCT },
@@ -140,7 +140,7 @@ function flattenTree(value: JsonValue, depth: number, path: JsonPath, collapsed:
   out.push({
     depth,
     segs: [
-      ...(isRoot ? [] : keyPrefixSegs(parentSeg, isArray)),
+      ...(isRoot ? [] : keyPrefixSegs(parentSeg)),
       ...(isRoot ? [] : [{ kind: "chevron" as const, collapsed: false, path }]),
       { kind: "text" as const, text: open, color: COLOR_PUNCT },
     ],
@@ -154,7 +154,7 @@ function flattenTree(value: JsonValue, depth: number, path: JsonPath, collapsed:
       out.push({
         depth: depth + 1,
         segs: [
-          ...(isArray ? [] : keyPrefixSegs(String(k), false)),
+          ...(isArray ? [] : keyPrefixSegs(String(k))),
           ...primitiveSegs(v),
           ...(isArray ? [{ kind: "text" as const, text: ",", color: COLOR_PUNCT }] : []),
         ],
@@ -167,8 +167,9 @@ function flattenTree(value: JsonValue, depth: number, path: JsonPath, collapsed:
   return out;
 }
 
-function keyPrefixSegs(seg: JsonPathSeg | string, isArrayItem: boolean): LineSeg[] {
-  if (isArrayItem) return [];
+function keyPrefixSegs(seg: JsonPathSeg | string): LineSeg[] {
+  // Array indices have no key prefix — only string object keys do.
+  if (typeof seg !== "string" && seg.kind === "index") return [];
   const keyStr = typeof seg === "string" ? seg : String(seg.value);
   return [
     { kind: "text" as const, text: '"', color: COLOR_PUNCT },
