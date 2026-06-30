@@ -668,6 +668,7 @@ const ZH_TRANSLATIONS = {
   "Format": "格式化",
   "Minify": "压缩",
   "Minify & escape": "压缩并转义",
+  "Tree view": "树形视图",
   "Collapse all": "全部折叠",
   "Expand all": "全部展开",
   "Error": "错误",

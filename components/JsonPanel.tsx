@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
 import { Tooltip } from "./Tooltip";
-import { parseJsonTolerant, minifyJson, escapeJsonString } from "@/lib/json-parser";
+import { parseJsonTolerant, escapeJsonString } from "@/lib/json-parser";
 import {
   JsonTreeView,
   collectAllContainerPaths,
@@ -20,6 +21,71 @@ type View = "textarea" | "tree";
 
 const DEFAULT_COLLAPSE_DEPTH = 3;
 const PARSE_DEBOUNCE_MS = 250;
+
+const ICON_PROPS = {
+  width: 14,
+  height: 14,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+// Lucide-derived icons (24x24, stroke=currentColor, strokeWidth=1.8).
+// Each one is paired with its tooltip label below.
+const ICONS: Record<string, ReactNode> = {
+  // Minify (diagonal arrows compressing)
+  minify: (
+    <svg {...ICON_PROPS}>
+      <polyline points="4 14 10 14 10 20" />
+      <polyline points="20 10 14 10 14 4" />
+      <line x1="14" y1="10" x2="21" y2="3" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  ),
+  // Minify & escape (scroll with text lines = JSON-as-string)
+  escape: (
+    <svg {...ICON_PROPS}>
+      <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+      <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+      <line x1="11" y1="11" x2="14" y2="11" />
+      <line x1="11" y1="15" x2="14" y2="15" />
+      <line x1="11" y1="19" x2="14" y2="19" />
+    </svg>
+  ),
+  // Tree view (git-branch)
+  tree: (
+    <svg {...ICON_PROPS}>
+      <line x1="6" y1="3" x2="6" y2="15" />
+      <circle cx="18" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <path d="M18 9a9 9 0 0 1-9 9" />
+    </svg>
+  ),
+  // Collapse all (chevrons-up)
+  collapseAll: (
+    <svg {...ICON_PROPS}>
+      <polyline points="17 11 12 6 7 11" />
+      <polyline points="17 18 12 13 7 18" />
+    </svg>
+  ),
+  // Expand all (chevrons-down)
+  expandAll: (
+    <svg {...ICON_PROPS}>
+      <polyline points="7 13 12 18 17 13" />
+      <polyline points="7 6 12 11 17 6" />
+    </svg>
+  ),
+  // Copy (two overlapping rectangles)
+  copy: (
+    <svg {...ICON_PROPS}>
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  ),
+};
 
 export function JsonPanel() {
   const { t } = useI18n();
@@ -71,11 +137,20 @@ export function JsonPanel() {
     }
   }, [debouncedContent]);
 
-  const handleFormat = useCallback(() => {
-    if (parsed === null) return;
-    setContent(JSON.stringify(parsed, null, 2));
-    setView("textarea");
-  }, [parsed]);
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = e.clipboardData.getData("text/plain");
+    if (pasted.length === 0) {
+      // Nothing to read — fall back to whatever the browser pasted (e.g. dropped file content).
+      return;
+    }
+    e.preventDefault();
+    const result = parseJsonTolerant(pasted);
+    if (result.ok) {
+      setContent(JSON.stringify(result.value as JsonValue, null, 2));
+    } else {
+      setContent(pasted);
+    }
+  }, []);
 
   const handleMinify = useCallback(() => {
     if (parsed === null) return;
@@ -95,7 +170,7 @@ export function JsonPanel() {
   }, [parsed]);
 
   const handleCollapseAll = useCallback(() => {
-    if (!parsed) return;
+    if (parsed === null) return;
     setCollapsedPaths(new Set(collectAllContainerPaths(parsed)));
   }, [parsed]);
 
@@ -112,39 +187,39 @@ export function JsonPanel() {
   }, []);
 
   const handleCopy = useCallback(async () => {
-    if (!parsed) return;
+    if (content.length === 0) return;
     try {
-      await navigator.clipboard.writeText(minifyJson(parsed));
+      await navigator.clipboard.writeText(content);
       toast.show({ kind: "success", message: t("Copied") });
     } catch {
       toast.show({ kind: "error", message: t("Failed to copy") });
     }
-  }, [parsed, t, toast]);
+  }, [content, t, toast]);
 
   const isTreeView = view === "tree";
+  const disableTransform = parsed === null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <div style={toolbarStyle}>
         {!isTreeView && (
           <>
-            <ToolbarButton label={t("Format")} onClick={handleFormat} disabled={parsed === null} />
-            <ToolbarButton label={t("Minify")} onClick={handleMinify} disabled={parsed === null} />
-            <ToolbarButton label={t("Minify & escape")} onClick={handleEscape} disabled={parsed === null} />
+            <IconButton label={t("Minify")} icon={ICONS.minify} onClick={handleMinify} disabled={disableTransform} />
+            <IconButton label={t("Minify & escape")} icon={ICONS.escape} onClick={handleEscape} disabled={disableTransform} />
             <div style={toolbarDividerStyle} />
           </>
         )}
-        <ToolbarButton label={t("Tree view")} active={isTreeView} onClick={handleToggleTree} disabled={parsed === null} />
+        <IconButton label={t("Tree view")} icon={ICONS.tree} active={isTreeView} onClick={handleToggleTree} disabled={disableTransform} />
         {isTreeView && (
           <>
             <div style={toolbarDividerStyle} />
-            <ToolbarButton label={t("Collapse all")} onClick={handleCollapseAll} disabled={!parsed || !isTreeView} />
-            <ToolbarButton label={t("Expand all")} onClick={handleExpandAll} disabled={!parsed || !isTreeView} />
+            <IconButton label={t("Collapse all")} icon={ICONS.collapseAll} onClick={handleCollapseAll} disabled={disableTransform} />
+            <IconButton label={t("Expand all")} icon={ICONS.expandAll} onClick={handleExpandAll} disabled={disableTransform} />
           </>
         )}
         <div style={{ flex: 1 }} />
         <ErrorBadge error={error} ignoredPrefix={error?.ignoredPrefix} ignoredSuffix={error?.ignoredSuffix} />
-        <ToolbarButton label={t("Copy")} onClick={handleCopy} disabled={!parsed} />
+        <IconButton label={t("Copy")} icon={ICONS.copy} onClick={handleCopy} disabled={content.length === 0} />
       </div>
 
       {isTreeView ? (
@@ -161,6 +236,7 @@ export function JsonPanel() {
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
+          onPaste={handlePaste}
           placeholder={t("Paste JSON here…")}
           spellCheck={false}
           style={contentAreaStyle}
@@ -215,26 +291,46 @@ const viewerStyle: React.CSSProperties = {
   color: "var(--text)",
 };
 
-function ToolbarButton({ label, active, onClick, disabled }: { label: string; active?: boolean; onClick: () => void; disabled?: boolean }) {
+function IconButton({ label, icon, active, onClick, disabled }: { label: string; icon: ReactNode; active?: boolean; onClick: () => void; disabled?: boolean }) {
+  const baseColor = disabled ? "var(--text-dim)" : active ? "var(--text)" : "var(--text-muted)";
+  const baseBg = active ? "var(--bg-selected)" : "transparent";
+  const hoverBg = active ? "var(--bg-selected)" : "var(--bg-hover)";
+  const hoverColor = disabled ? "var(--text-dim)" : "var(--text)";
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        padding: "4px 10px",
-        background: active ? "var(--bg)" : "transparent",
-        color: disabled ? "var(--text-dim)" : active ? "var(--text)" : "var(--text-muted)",
-        border: "1px solid",
-        borderColor: active ? "var(--border)" : "transparent",
-        borderRadius: 4,
-        fontSize: 12,
-        fontWeight: active ? 600 : 400,
-        cursor: disabled ? "default" : "pointer",
-        transition: "background 0.1s, color 0.1s",
-      }}
-    >
-      {label}
-    </button>
+    <Tooltip content={label}>
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label}
+        style={{
+          width: 28,
+          height: 28,
+          padding: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: baseBg,
+          color: baseColor,
+          border: "1px solid",
+          borderColor: active ? "var(--border)" : "transparent",
+          borderRadius: 6,
+          cursor: disabled ? "default" : "pointer",
+          transition: "background 0.12s, color 0.12s, border-color 0.12s",
+        }}
+        onMouseEnter={(e) => {
+          if (disabled) return;
+          e.currentTarget.style.background = hoverBg;
+          e.currentTarget.style.color = hoverColor;
+        }}
+        onMouseLeave={(e) => {
+          if (disabled) return;
+          e.currentTarget.style.background = baseBg;
+          e.currentTarget.style.color = baseColor;
+        }}
+      >
+        {icon}
+      </button>
+    </Tooltip>
   );
 }
 
