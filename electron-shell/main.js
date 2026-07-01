@@ -60,7 +60,7 @@ function createWindow() {
     height: 800,
     minWidth: 600,
     minHeight: 400,
-    title: "Pi Agent",
+    title: "Pi Work",
     autoHideMenuBar: true,
     show: !startHidden,
     icon: iconPath,
@@ -130,7 +130,7 @@ function createWindow() {
 function createTray() {
   const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
   tray = new Tray(trayIcon);
-  tray.setToolTip("Pi Agent");
+  tray.setToolTip("Pi Work");
 
   const contextMenu = Menu.buildFromTemplate([
     {
