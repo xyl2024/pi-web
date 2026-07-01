@@ -35,6 +35,8 @@ export interface HttpDraft {
   headers: KVRow[];
   bodyMode: BodyMode;
   body: string;
+  /** When mode === "json" and body parses, overlay the textarea with Prism-highlighted JSON. */
+  bodyHighlight: boolean;
   options: { timeoutMs: number };
 }
 
@@ -96,6 +98,7 @@ const INITIAL_DRAFT: HttpDraft = {
   headers: [],
   bodyMode: "none",
   body: "",
+  bodyHighlight: true,
   options: { timeoutMs: 30_000 },
 };
 
@@ -225,6 +228,10 @@ export function setHttpBody(body: string) {
   setHttpDraft({ body });
 }
 
+export function setHttpBodyHighlight(bodyHighlight: boolean) {
+  setHttpDraft({ bodyHighlight });
+}
+
 export function setHttpTimeoutMs(timeoutMs: number) {
   setHttpDraft({ options: { ...state.draft.options, timeoutMs } });
 }
@@ -313,6 +320,7 @@ export function loadHttpDraftFromItem(item: {
       headers,
       bodyMode: item.bodyMode,
       body: item.body,
+      bodyHighlight: state.draft.bodyHighlight,
       options: { timeoutMs: item.timeoutMs ?? 30_000 },
     },
     isDirty: false,

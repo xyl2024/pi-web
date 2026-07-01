@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
 import { useConfirm } from "./ConfirmDialog";
 import { Tooltip } from "./Tooltip";
+import { JsonHighlight } from "./JsonHighlight";
 import {
   useHttpState,
   setHttpMethod,
@@ -12,6 +13,7 @@ import {
   setHttpHeaders,
   setHttpBodyMode,
   setHttpBody,
+  setHttpBodyHighlight,
   setHttpTimeoutMs,
   addKvRow,
   removeKvRow,
@@ -665,6 +667,7 @@ export function HttpPanel() {
           draft={state.draft}
           onBodyModeChange={setHttpBodyMode}
           onBodyChange={setHttpBody}
+          onBodyHighlightChange={setHttpBodyHighlight}
           onAddKv={addKvRow}
           onRemoveKv={removeKvRow}
           onUpdateKv={updateKvRow}
@@ -1340,6 +1343,7 @@ function RequestTabs({
   draft,
   onBodyModeChange,
   onBodyChange,
+  onBodyHighlightChange,
   onAddKv,
   onRemoveKv,
   onUpdateKv,
@@ -1350,6 +1354,7 @@ function RequestTabs({
   draft: HttpDraft;
   onBodyModeChange: (m: BodyMode) => void;
   onBodyChange: (body: string) => void;
+  onBodyHighlightChange: (v: boolean) => void;
   onAddKv: (target: "params" | "headers") => void;
   onRemoveKv: (target: "params" | "headers", id: string) => void;
   onUpdateKv: (target: "params" | "headers", id: string, patch: Partial<KVRow>) => void;
@@ -1406,7 +1411,14 @@ function RequestTabs({
           />
         )}
         {tab === "body" && (
-          <BodyEditor mode={draft.bodyMode} body={draft.body} onModeChange={onBodyModeChange} onBodyChange={onBodyChange} />
+          <BodyEditor
+            mode={draft.bodyMode}
+            body={draft.body}
+            highlight={draft.bodyHighlight}
+            onModeChange={onBodyModeChange}
+            onBodyChange={onBodyChange}
+            onHighlightChange={onBodyHighlightChange}
+          />
         )}
       </div>
     </div>
@@ -1730,13 +1742,17 @@ function KvRow({
 function BodyEditor({
   mode,
   body,
+  highlight,
   onModeChange,
   onBodyChange,
+  onHighlightChange,
 }: {
   mode: BodyMode;
   body: string;
+  highlight: boolean;
   onModeChange: (m: BodyMode) => void;
   onBodyChange: (b: string) => void;
+  onHighlightChange: (v: boolean) => void;
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -1752,6 +1768,18 @@ function BodyEditor({
       });
     }
   }, [body, onBodyChange, toast, t]);
+
+  const jsonValid = useMemo(() => {
+    if (!body.trim()) return false;
+    try {
+      JSON.parse(body);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [body]);
+
+  const showOverlay = mode === "json" && highlight && jsonValid;
 
   return (
     <div>
@@ -1797,6 +1825,23 @@ function BodyEditor({
             >
               {t("Format")}
             </button>
+            <button
+              onClick={() => onHighlightChange(!highlight)}
+              title={t("Toggle JSON syntax highlighting")}
+              style={{
+                padding: "2px 8px",
+                height: 20,
+                background: "transparent",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                color: highlight ? "var(--text)" : "var(--text-muted)",
+                fontSize: 10,
+                fontFamily: "var(--font-mono)",
+                cursor: "pointer",
+              }}
+            >
+              {highlight ? t("Highlighted") : t("Plain")}
+            </button>
             <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{validateJson(body)}</span>
           </>
         )}
@@ -1805,6 +1850,8 @@ function BodyEditor({
         <div style={{ padding: "10px 12px", fontSize: 11, color: "var(--text-dim)", fontStyle: "italic" }}>
           {t("No request body")}
         </div>
+      ) : showOverlay ? (
+        <JsonOverlayEditor body={body} onBodyChange={onBodyChange} />
       ) : (
         <textarea
           value={body}
@@ -1828,6 +1875,93 @@ function BodyEditor({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Visual stack for syntax-highlighted JSON editing:
+ *   [highlight layer (Prism)]   ← pointer-events: none, owns the visible colors
+ *   [transparent textarea]      ← on top, receives all input; caret stays visible
+ *                                  via caretColor, text shows through
+ *
+ * Both layers share identical font/padding/box-sizing/tab-size so glyphs line
+ * up. Scroll is mirrored one-way from textarea → highlight; the highlight
+ * layer never scrolls from input. After a programmatic value change (e.g.
+ * Format button pretty-printing the body), reset the scroll position so the
+ * reformatted top lines stay in view.
+ */
+const OVERLAY_BASE_STYLE: React.CSSProperties = {
+  width: "100%",
+  minHeight: 120,
+  maxHeight: 220,
+  padding: "8px 12px",
+  margin: 0,
+  boxSizing: "border-box",
+  fontFamily: "var(--font-mono)",
+  fontSize: 12,
+  lineHeight: 1.5,
+  whiteSpace: "pre",
+  tabSize: 2,
+  background: "var(--bg)",
+  overflow: "auto",
+  border: 0,
+  outline: "none",
+  boxShadow: "none",
+};
+
+function JsonOverlayEditor({ body, onBodyChange }: { body: string; onBodyChange: (b: string) => void }) {
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const preRef = useRef<HTMLDivElement>(null);
+
+  const syncScroll = useCallback(() => {
+    if (!taRef.current || !preRef.current) return;
+    preRef.current.scrollTop = taRef.current.scrollTop;
+    preRef.current.scrollLeft = taRef.current.scrollLeft;
+  }, []);
+
+  // Re-align scroll after a programmatic body change (Format, brace auto-pairs
+  // elsewhere, etc.) — Prism re-renders synchronously but on first mount the
+  // inner <pre> sizes async, so defer one frame before reading scrollTop.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      if (!taRef.current || !preRef.current) return;
+      preRef.current.scrollTop = taRef.current.scrollTop;
+      preRef.current.scrollLeft = taRef.current.scrollLeft;
+    });
+    return () => cancelAnimationFrame(id);
+  }, [body]);
+
+  return (
+    <div style={{ position: "relative", width: "100%" }}>
+      <div
+        ref={preRef}
+        aria-hidden
+        style={{
+          ...OVERLAY_BASE_STYLE,
+          pointerEvents: "none",
+        }}
+      >
+        <JsonHighlight code={body} />
+      </div>
+      <textarea
+        ref={taRef}
+        value={body}
+        onChange={(e) => onBodyChange(e.target.value)}
+        onScroll={syncScroll}
+        spellCheck={false}
+        style={{
+          ...OVERLAY_BASE_STYLE,
+          position: "absolute",
+          inset: 0,
+          color: "transparent",
+          caretColor: "var(--text)",
+          background: "transparent",
+          border: "none",
+          outline: "none",
+          resize: "none",
+        }}
+      />
     </div>
   );
 }
