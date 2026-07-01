@@ -676,6 +676,7 @@ const ZH_TRANSLATIONS = {
   "Ignored prefix: {prefix}": "已忽略前缀：{prefix}",
   "Ignored suffix: {suffix}": "已忽略后缀：{suffix}",
   "Failed to copy": "复制失败",
+  "Match {n} of {total}": "第 {n} 个，共 {total} 个",
   // Canvas (right-panel tab)
   "Canvas": "画布",
   "Open canvas": "打开画布",

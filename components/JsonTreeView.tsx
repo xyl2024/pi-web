@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import React, { useMemo } from "react";
+import type { ReactNode } from "react";
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue };
 
@@ -91,10 +92,16 @@ export type JsonTreeLine = {
   segs: LineSeg[];
 };
 
-function flattenTree(value: JsonValue, depth: number, path: JsonPath, collapsed: Set<string>, out: JsonTreeLine[] = []): JsonTreeLine[] {
+function walkLines(
+  value: JsonValue,
+  depth: number,
+  path: JsonPath,
+  collapsed: Set<string>,
+  emit: (line: JsonTreeLine, path: JsonPath) => void,
+): void {
   if (!isContainer(value)) {
-    out.push({ depth, segs: primitiveSegs(value) });
-    return out;
+    emit({ depth, segs: primitiveSegs(value) }, path);
+    return;
   }
   const isArray = Array.isArray(value);
   const open = isArray ? "[" : "{";
@@ -107,22 +114,22 @@ function flattenTree(value: JsonValue, depth: number, path: JsonPath, collapsed:
   const parentSeg = path[path.length - 1];
 
   if (entries.length === 0) {
-    out.push({
+    emit({
       depth,
       segs: [
         ...(isRoot ? [] : keyPrefixSegs(parentSeg)),
         ...(isRoot ? [] : [{ kind: "text" as const, text: " ".repeat(CHEVRON_W) }]),
         { kind: "text" as const, text: open + close, color: COLOR_PUNCT },
       ],
-    });
-    return out;
+    }, path);
+    return;
   }
 
   if (path.length > 0 && collapsed.has(key)) {
     const label = isArray
       ? `${entries.length} ${entries.length === 1 ? "item" : "items"}`
       : `${entries.length} ${entries.length === 1 ? "key" : "keys"}`;
-    out.push({
+    emit({
       depth,
       segs: [
         ...keyPrefixSegs(parentSeg),
@@ -132,38 +139,42 @@ function flattenTree(value: JsonValue, depth: number, path: JsonPath, collapsed:
         { kind: "text" as const, text: close, color: COLOR_PUNCT },
         { kind: "text" as const, text: ` ${label}`, color: "var(--text-dim)" },
       ],
-    });
-    return out;
+    }, path);
+    return;
   }
 
   // Open line
-  out.push({
+  emit({
     depth,
     segs: [
       ...(isRoot ? [] : keyPrefixSegs(parentSeg)),
       ...(isRoot ? [] : [{ kind: "chevron" as const, collapsed: false, path }]),
       { kind: "text" as const, text: open, color: COLOR_PUNCT },
     ],
-  });
+  }, path);
 
   // Children
   for (const [k, v] of entries) {
     if (isContainer(v)) {
-      flattenTree(v, depth + 1, [...path, typeof k === "number" ? { kind: "index", value: k } : { kind: "key", value: k }], collapsed, out);
+      walkLines(v, depth + 1, [...path, typeof k === "number" ? { kind: "index", value: k } : { kind: "key", value: k }], collapsed, emit);
     } else {
-      out.push({
+      emit({
         depth: depth + 1,
         segs: [
           ...(isArray ? [] : keyPrefixSegs(String(k))),
           ...primitiveSegs(v),
           ...(isArray ? [{ kind: "text" as const, text: ",", color: COLOR_PUNCT }] : []),
         ],
-      });
+      }, [...path, typeof k === "number" ? { kind: "index", value: k } : { kind: "key", value: k }]);
     }
   }
 
   // Close line (no extra indent)
-  out.push({ depth, segs: [{ kind: "text" as const, text: close, color: COLOR_PUNCT }] });
+  emit({ depth, segs: [{ kind: "text" as const, text: close, color: COLOR_PUNCT }] }, path);
+}
+
+function flattenTree(value: JsonValue, depth: number, path: JsonPath, collapsed: Set<string>, out: JsonTreeLine[] = []): JsonTreeLine[] {
+  walkLines(value, depth, path, collapsed, (line) => out.push(line));
   return out;
 }
 
@@ -202,59 +213,176 @@ function escapeString(s: string): string {
     .replace(/\t/g, "\\t");
 }
 
+export type SearchMatch = {
+  path: JsonPath;
+  lineIndex: number;
+  range: [number, number];
+};
+
+export function lineText(segs: LineSeg[]): { text: string; segOffsets: number[] } {
+  const segOffsets: number[] = [];
+  let text = "";
+  for (let j = 0; j < segs.length; j++) {
+    segOffsets.push(text.length);
+    const seg = segs[j];
+    if (seg.kind === "text") text += seg.text;
+  }
+  segOffsets.push(text.length);
+  return { text, segOffsets };
+}
+
+/** Case-insensitive, non-overlapping substring matches. Empty query → null.
+ *  Uses literal `indexOf` — query is NEVER treated as a regex. */
+export function findMatchesInLine(text: string, query: string): Array<[number, number]> | null {
+  if (query.length === 0) return null;
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  const out: Array<[number, number]> = [];
+  let from = 0;
+  while (from <= t.length - q.length) {
+    const i = t.indexOf(q, from);
+    if (i < 0) break;
+    out.push([i, i + q.length]);
+    from = i + q.length;
+  }
+  return out.length === 0 ? null : out;
+}
+
+/** Walks the tree ignoring collapsed state (search sees everything) and returns
+ *  one SearchMatch per occurrence. lineIndex matches the renderer's line loop. */
+export function findMatches(value: JsonValue, query: string): SearchMatch[] {
+  if (query.length === 0) return [];
+  const out: SearchMatch[] = [];
+  let lineIndex = 0;
+  walkLines(value, 0, [], new Set<string>(), (line, path) => {
+    const { text } = lineText(line.segs);
+    const ranges = findMatchesInLine(text, query);
+    if (ranges) {
+      for (const [s, e] of ranges) out.push({ path, lineIndex, range: [s, e] });
+    }
+    lineIndex++;
+  });
+  return out;
+}
+
 interface JsonTreeViewProps {
   value: JsonValue;
   collapsedPaths: Set<string>;
   onTogglePath: (path: JsonPath) => void;
+  search?: {
+    query: string;
+    activeLineIndex: number;
+    onLineRef?: (lineIndex: number, el: HTMLDivElement | null) => void;
+  };
 }
 
-export function JsonTreeView({ value, collapsedPaths, onTogglePath }: JsonTreeViewProps) {
+export function JsonTreeView({ value, collapsedPaths, onTogglePath, search }: JsonTreeViewProps) {
   const lines = useMemo(() => flattenTree(value, 0, [], collapsedPaths), [value, collapsedPaths]);
   return (
     <div>
-      {lines.map((line, i) => (
-        <div
-          key={i}
-          style={{ paddingLeft: line.depth * INDENT_PX, minHeight: "1.55em" }}
-        >
-          {line.segs.map((seg, j) => {
-            if ("kind" in seg && seg.kind === "chevron") {
-              return (
-                <span
-                  key={j}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTogglePath(seg.path);
-                  }}
-                  style={{
-                    display: "inline-block",
-                    width: CHEVRON_W,
-                    textAlign: "center",
-                    color: "var(--text-dim)",
-                    cursor: "pointer",
-                    userSelect: "none",
-                  }}
-                  role="button"
-                  aria-label={seg.collapsed ? "expand" : "collapse"}
-                >
-                  {seg.collapsed ? "▶" : "▼"}
-                </span>
-              );
-            }
-            return (
-              <span
-                key={j}
-                style={{
-                  color: seg.color,
-                  fontWeight: seg.color === COLOR_KEY ? 600 : undefined,
-                }}
-              >
-                {seg.text}
-              </span>
-            );
-          })}
-        </div>
-      ))}
+      {lines.map((line, i) => {
+        let text = "";
+        let segOffsets: number[] = [];
+        let ranges: Array<[number, number]> | null = null;
+        if (search) {
+          const lt = lineText(line.segs);
+          text = lt.text;
+          segOffsets = lt.segOffsets;
+          ranges = findMatchesInLine(text, search.query);
+        }
+        const isActiveLine = search?.activeLineIndex === i && ranges !== null;
+        const hasMatch = ranges !== null;
+        return (
+          <div
+            key={i}
+            ref={(el) => search?.onLineRef?.(i, el)}
+            style={{
+              paddingLeft: line.depth * INDENT_PX,
+              minHeight: "1.55em",
+              backgroundColor: isActiveLine ? "rgba(255, 213, 79, 0.08)" : undefined,
+            }}
+          >
+            {line.segs.map((seg, j) => {
+              if (seg.kind === "chevron") {
+                return (
+                  <span
+                    key={j}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTogglePath(seg.path);
+                    }}
+                    style={{
+                      display: "inline-block",
+                      width: CHEVRON_W,
+                      textAlign: "center",
+                      color: "var(--text-dim)",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    role="button"
+                    aria-label={seg.collapsed ? "expand" : "collapse"}
+                  >
+                    {seg.collapsed ? "▶" : "▼"}
+                  </span>
+                );
+              }
+              if (!hasMatch) {
+                return (
+                  <span
+                    key={j}
+                    style={{
+                      color: seg.color,
+                      fontWeight: seg.color === COLOR_KEY ? 600 : undefined,
+                    }}
+                  >
+                    {seg.text}
+                  </span>
+                );
+              }
+              // Split this text seg at match-range boundaries.
+              const segStart = segOffsets[j];
+              const segEnd = segOffsets[j + 1];
+              const segText = seg.text;
+              const pieces: ReactNode[] = [];
+              let cursor = segStart;
+              for (const [m0, m1] of ranges!) {
+                const lo = Math.max(m0, segStart);
+                const hi = Math.min(m1, segEnd);
+                if (lo >= hi) continue;
+                if (lo > cursor) {
+                  pieces.push(
+                    <span key={`p${j}-${cursor}`} style={{ color: seg.color, fontWeight: seg.color === COLOR_KEY ? 600 : undefined }}>
+                      {segText.slice(cursor - segStart, lo - segStart)}
+                    </span>,
+                  );
+                }
+                pieces.push(
+                  <span
+                    key={`h${j}-${lo}`}
+                    style={{
+                      color: seg.color,
+                      fontWeight: seg.color === COLOR_KEY ? 600 : undefined,
+                      backgroundColor: isActiveLine ? "rgba(255, 213, 79, 0.55)" : "rgba(255, 213, 79, 0.35)",
+                      borderRadius: 2,
+                    }}
+                  >
+                    {segText.slice(lo - segStart, hi - segStart)}
+                  </span>,
+                );
+                cursor = hi;
+              }
+              if (cursor < segEnd) {
+                pieces.push(
+                  <span key={`p${j}-${cursor}`} style={{ color: seg.color, fontWeight: seg.color === COLOR_KEY ? 600 : undefined }}>
+                    {segText.slice(cursor - segStart)}
+                  </span>,
+                );
+              }
+              return <React.Fragment key={j}>{pieces}</React.Fragment>;
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
@@ -10,11 +10,13 @@ import {
   JsonTreeView,
   collectAllContainerPaths,
   collectContainerPathsAtDepth,
+  findMatches,
   getAtPath,
   parsePathKey,
   pathKey,
   type JsonPath,
   type JsonValue,
+  type SearchMatch,
 } from "./JsonTreeView";
 
 type View = "textarea" | "tree";
@@ -96,6 +98,32 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
     </svg>
   ),
+  // Search (magnifying glass)
+  search: (
+    <svg {...ICON_PROPS}>
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  ),
+  // Chevron up (previous match)
+  chevronUp: (
+    <svg {...ICON_PROPS}>
+      <polyline points="18 15 12 9 6 15" />
+    </svg>
+  ),
+  // Chevron down (next match)
+  chevronDown: (
+    <svg {...ICON_PROPS}>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  ),
+  // Close / clear search (X)
+  close: (
+    <svg {...ICON_PROPS}>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  ),
 };
 
 export function JsonPanel() {
@@ -111,6 +139,19 @@ export function JsonPanel() {
   // Gates the first persist run so the initial empty state doesn't overwrite
   // the data we are about to rehydrate from localStorage.
   const persistInitializedRef = useRef(false);
+
+  // --- Search state ---
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const lineRefsRef = useRef<Map<number, HTMLDivElement>>(new Map());
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const trimmedQuery = searchQuery.trim();
+  const matches = useMemo<SearchMatch[]>(() => {
+    if (!parsed || trimmedQuery.length === 0) return [];
+    return findMatches(parsed, trimmedQuery);
+  }, [parsed, trimmedQuery]);
 
   // Restore the last-edited JSON from localStorage on mount.
   useEffect(() => {
@@ -168,6 +209,82 @@ export function JsonPanel() {
       });
     }
   }, [debouncedContent]);
+
+  // --- Search effects ---
+
+  // Clamp currentMatchIndex whenever the match list shrinks to avoid stale paths.
+  useEffect(() => {
+    if (matches.length === 0) { setCurrentMatchIndex(0); return; }
+    setCurrentMatchIndex((idx) => Math.min(Math.max(idx, 0), matches.length - 1));
+  }, [matches]);
+
+  // Auto-expand every ancestor of the active match so it becomes visible.
+  useEffect(() => {
+    if (!parsed || matches.length === 0) return;
+    const idx = Math.min(currentMatchIndex, matches.length - 1);
+    const path = matches[idx].path;
+    if (path.length === 0) return;
+    setCollapsedPaths((prev) => {
+      let next: Set<string> | null = null;
+      for (let i = 1; i < path.length; i++) {
+        const k = pathKey(path.slice(0, i));
+        if (prev.has(k)) { next ??= new Set(prev); next.delete(k); }
+      }
+      return next ?? prev;
+    });
+  }, [currentMatchIndex, matches, parsed]);
+
+  // Scroll the active line into view. Depends on collapsedPaths so we retry after
+  // the auto-expand above propagates and renders the previously-hidden line.
+  useLayoutEffect(() => {
+    if (matches.length === 0) return;
+    const idx = Math.min(currentMatchIndex, matches.length - 1);
+    const lineIndex = matches[idx].lineIndex;
+    const el = lineRefsRef.current.get(lineIndex);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [currentMatchIndex, matches, collapsedPaths]);
+
+  // Cmd/Ctrl+F focuses the search input (only when focus is NOT inside this panel
+  // and we are in tree view with a parsed value).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "f") return;
+      if (view !== "tree" || !parsed) return;
+      // If focus is already inside the panel, leave the browser's native find alone.
+      if (panelRef.current?.contains(document.activeElement)) return;
+      e.preventDefault();
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [view, parsed]);
+
+  const goNext = useCallback(() => {
+    if (matches.length === 0) return;
+    setCurrentMatchIndex((i) => (i + 1) % matches.length);
+  }, [matches.length]);
+
+  const goPrev = useCallback(() => {
+    if (matches.length === 0) return;
+    setCurrentMatchIndex((i) => (i - 1 + matches.length) % matches.length);
+  }, [matches.length]);
+
+  const clearSearch = useCallback(() => {
+    setSearchQuery("");
+    setCurrentMatchIndex(0);
+  }, []);
+
+  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (e.shiftKey) goPrev(); else goNext();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      clearSearch();
+      e.currentTarget.blur();
+    }
+  }, [goNext, goPrev, clearSearch]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const pasted = e.clipboardData.getData("text/plain");
@@ -235,9 +352,12 @@ export function JsonPanel() {
 
   const isTreeView = view === "tree";
   const disableTransform = parsed === null;
+  const activeLineIndex = matches.length > 0
+    ? matches[Math.min(currentMatchIndex, matches.length - 1)].lineIndex
+    : -1;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+    <div ref={panelRef} style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <div style={toolbarStyle}>
         {!isTreeView && (
           <>
@@ -260,10 +380,70 @@ export function JsonPanel() {
         <IconButton label={t("Copy")} icon={ICONS.copy} onClick={handleCopy} disabled={content.length === 0} />
       </div>
 
+      {isTreeView && (
+        <div style={searchRowStyle}>
+          <span style={searchIconStyle}>{ICONS.search}</span>
+          <input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            placeholder={t("Search")}
+            spellCheck={false}
+            style={searchInputStyle}
+            aria-label={t("Search")}
+          />
+          {trimmedQuery.length > 0 && (
+            <>
+              <span style={matchCounterStyle}>
+                {matches.length === 0
+                  ? t("No matches")
+                  : t("Match {n} of {total}")
+                      .replace("{n}", String(Math.min(currentMatchIndex, matches.length - 1) + 1))
+                      .replace("{total}", String(matches.length))}
+              </span>
+              <IconButton
+                label={t("Previous match")}
+                icon={ICONS.chevronUp}
+                onClick={goPrev}
+                disabled={matches.length === 0}
+              />
+              <IconButton
+                label={t("Next match")}
+                icon={ICONS.chevronDown}
+                onClick={goNext}
+                disabled={matches.length === 0}
+              />
+              <IconButton
+                label={t("Clear search")}
+                icon={ICONS.close}
+                onClick={clearSearch}
+              />
+            </>
+          )}
+        </div>
+      )}
+
       {isTreeView ? (
         <div style={viewerStyle}>
           {parsed ? (
-            <JsonTreeView value={parsed} collapsedPaths={collapsedPaths} onTogglePath={togglePath} />
+            <JsonTreeView
+              value={parsed}
+              collapsedPaths={collapsedPaths}
+              onTogglePath={togglePath}
+              search={
+                trimmedQuery.length === 0
+                  ? undefined
+                  : {
+                      query: trimmedQuery,
+                      activeLineIndex,
+                      onLineRef: (i, el) => {
+                        if (el) lineRefsRef.current.set(i, el);
+                        else lineRefsRef.current.delete(i);
+                      },
+                    }
+              }
+            />
           ) : (
             <div style={{ color: "#f87171", whiteSpace: "pre-wrap" }}>
               {error ? t("Parse error: {error}").replace("{error}", error.message) : t("Paste JSON here…")}
@@ -314,6 +494,43 @@ const toolbarDividerStyle: React.CSSProperties = {
   height: 16,
   background: "var(--border)",
   margin: "0 6px",
+};
+
+const searchRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "6px 10px",
+  background: "var(--bg-panel)",
+  borderBottom: "1px solid var(--border)",
+  flexShrink: 0,
+};
+
+const searchIconStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  color: "var(--text-muted)",
+};
+
+const searchInputStyle: React.CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  background: "var(--bg)",
+  color: "var(--text)",
+  border: "1px solid var(--border)",
+  borderRadius: 4,
+  padding: "4px 8px",
+  fontSize: 12,
+  fontFamily: "var(--font-mono)",
+  outline: "none",
+};
+
+const matchCounterStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--text-muted)",
+  minWidth: 72,
+  textAlign: "right",
+  fontVariantNumeric: "tabular-nums",
 };
 
 const viewerStyle: React.CSSProperties = {
