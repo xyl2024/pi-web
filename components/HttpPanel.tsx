@@ -39,6 +39,7 @@ import {
   HttpPanelSaveItemModal,
   type SaveItemModalInitialValues,
 } from "./HttpPanelSaveItemModal";
+import { HttpPanelEditCollectionModal } from "./HttpPanelEditCollectionModal";
 import type {
   Collection,
   HttpItem,
@@ -110,6 +111,9 @@ export function HttpPanel() {
   const [editingItemCollectionIds, setEditingItemCollectionIds] = useState<
     string[] | null
   >(null);
+  const [editingCollection, setEditingCollection] = useState<Collection | null>(
+    null,
+  );
   const [replaceModalOpen, setReplaceModalOpen] = useState(false);
   const [replaceItem, setReplaceItem] = useState<HttpItem | null>(null);
   // If set, the save modal flow will also load this item on success
@@ -528,22 +532,10 @@ export function HttpPanel() {
   );
 
   const handleEditCollection = useCallback(
-    async (collection: Collection) => {
-      const next = window.prompt(t("New collection name"), collection.name);
-      if (next === null) return;
-      const trimmed = next.trim();
-      if (trimmed.length === 0 || trimmed === collection.name) return;
-      try {
-        await collectionsApi.updateCollection(collection.id, { name: trimmed });
-        toast.show({ kind: "success", message: t("Collection updated") });
-      } catch (e) {
-        toast.show({
-          kind: "error",
-          message: e instanceof Error ? e.message : t("Failed to update collection"),
-        });
-      }
+    (collection: Collection) => {
+      setEditingCollection(collection);
     },
-    [collectionsApi, toast, t],
+    [],
   );
 
   const handleDeleteCollection = useCallback(
@@ -718,6 +710,27 @@ export function HttpPanel() {
           }}
           onCreateCollection={handleCreateCollectionInModal}
           onClose={handleSaveModalClose}
+        />
+      )}
+      {editingCollection && (
+        <HttpPanelEditCollectionModal
+          collection={editingCollection}
+          onUpdate={async (id, patch) => {
+            try {
+              await collectionsApi.updateCollection(id, patch);
+              toast.show({ kind: "success", message: t("Collection updated") });
+            } catch (e) {
+              toast.show({
+                kind: "error",
+                message:
+                  e instanceof Error
+                    ? e.message
+                    : t("Failed to update collection"),
+              });
+              throw e;
+            }
+          }}
+          onClose={() => setEditingCollection(null)}
         />
       )}
       {replaceModalOpen && replaceItem && (
