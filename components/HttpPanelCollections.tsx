@@ -176,7 +176,7 @@ export function HttpPanelCollections({
       style={{
         width: 240,
         height: "100%",
-        background: "var(--bg-panel)",
+        background: "var(--bg)",
         borderRight: "1px solid var(--border)",
         display: "flex",
         flexDirection: "column",

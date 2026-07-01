@@ -1041,7 +1041,7 @@ function PanelHeader({
         height: 32,
         padding: "0 8px 0 4px",
         borderBottom: "1px solid var(--border)",
-        background: "var(--bg-panel)",
+        background: "var(--bg)",
         flexShrink: 0,
       }}
     >
@@ -1242,7 +1242,7 @@ function RequestLine({
         style={{
           height: 32,
           padding: "0 8px",
-          background: "var(--bg-panel)",
+          background: "var(--bg)",
           border: "1px solid var(--border)",
           borderRadius: 6,
           color: methodColor,
@@ -1271,7 +1271,7 @@ function RequestLine({
           flex: 1,
           height: 32,
           padding: "0 10px",
-          background: "var(--bg-panel)",
+          background: "var(--bg)",
           border: "1px solid var(--border)",
           borderRadius: 6,
           color: "var(--text)",
@@ -1356,7 +1356,7 @@ function RequestTabs({
           gap: 2,
           padding: "6px 12px 0",
           borderBottom: "1px solid var(--border)",
-          background: "var(--bg-panel)",
+          background: "var(--bg)",
         }}
       >
         <TabButton label={t("Params")} count={draft.params.filter((p) => p.enabled && p.key).length} active={tab === "params"} onClick={() => setTab("params")} />
@@ -1658,7 +1658,7 @@ function KvRow({
           minWidth: 0,
           height: 24,
           padding: "0 6px",
-          background: "var(--bg-panel)",
+          background: "var(--bg)",
           border: "1px solid var(--border)",
           borderRadius: 4,
           color: "var(--text)",
@@ -1678,7 +1678,7 @@ function KvRow({
           minWidth: 0,
           height: 24,
           padding: "0 6px",
-          background: "var(--bg-panel)",
+          background: "var(--bg)",
           border: "1px solid var(--border)",
           borderRadius: 4,
           color: "var(--text)",
@@ -1804,7 +1804,7 @@ function BodyEditor({
             minHeight: 120,
             maxHeight: 220,
             padding: "8px 12px",
-            background: "var(--bg-panel)",
+            background: "var(--bg)",
             border: "none",
             color: "var(--text)",
             fontSize: 12,
@@ -1909,7 +1909,7 @@ function ResponseSection({
           gap: 10,
           padding: "8px 12px",
           borderBottom: "1px solid var(--border)",
-          background: "var(--bg-panel)",
+          background: "var(--bg)",
           flexShrink: 0,
         }}
       >
@@ -2216,7 +2216,7 @@ const jsonViewerToolbarStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 4,
   padding: "6px 10px",
-  background: "var(--bg-panel)",
+  background: "var(--bg)",
   borderBottom: "1px solid var(--border)",
   flexShrink: 0,
 };
