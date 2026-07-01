@@ -1835,7 +1835,7 @@ function DragDivider({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => vo
     <div
       onMouseDown={onMouseDown}
       style={{
-        height: 4,
+        height: 1,
         background: "var(--border)",
         cursor: "row-resize",
         flexShrink: 0,
