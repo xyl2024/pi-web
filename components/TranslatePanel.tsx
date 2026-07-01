@@ -5,9 +5,14 @@ import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
 import { Tooltip } from "./Tooltip";
 import { ProviderIcon } from "./ProviderIcon";
-import { DEFAULT_TRANSLATE_PROMPT, MAX_TRANSLATE_PROMPT_CHARS } from "@/lib/translate";
+import {
+  DEFAULT_TARGET_LANGUAGE,
+  SUPPORTED_LANGUAGES,
+  TRANSLATE_PROMPTS,
+  isLanguageCode,
+  type LanguageCode,
+} from "@/lib/translate";
 
-const PROMPT_STORAGE_KEY = "pi-translate-prompt";
 const STATE_STORAGE_KEY = "pi-translate-state";
 
 interface ModelInfo {
@@ -32,6 +37,7 @@ interface PersistedState {
   input?: string;
   output?: string;
   model?: { provider: string; modelId: string };
+  target?: LanguageCode;
 }
 
 const DEBOUNCE_MS = 400;
@@ -46,6 +52,14 @@ export function TranslatePanel() {
   const [modelDropdownRect, setModelDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+
+  const [targetDropdownOpen, setTargetDropdownOpen] = useState(false);
+  const [targetDropdownRect, setTargetDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const targetDropdownRef = useRef<HTMLDivElement | null>(null);
+  const targetPanelRef = useRef<HTMLDivElement | null>(null);
+
+  const [target, setTarget] = useState<LanguageCode>(DEFAULT_TARGET_LANGUAGE);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
@@ -63,29 +77,15 @@ export function TranslatePanel() {
   const savedModelRef = useRef<{ provider: string; modelId: string } | null>(null);
   // `userInteractedRef` is false until the user types or clicks something in
   // this panel. The auto-translate effect bails out while it's false, so
-  // rehydrating input/model from localStorage doesn't trigger a redundant
-  // API call against the already-restored output.
+  // rehydrating input/model/target from localStorage doesn't trigger a
+  // redundant API call against the already-restored output.
   const userInteractedRef = useRef(false);
   // `initializedRef` gates the save effect so the very first run (with
   // pre-restore default values) doesn't clobber the data we're about to
   // rehydrate.
   const initializedRef = useRef(false);
 
-  // Custom translator prompt (null = use built-in default).
-  const [customPrompt, setCustomPrompt] = useState<string | null>(null);
-  const [promptOpen, setPromptOpen] = useState(false);
-  const [promptDraft, setPromptDraft] = useState(DEFAULT_TRANSLATE_PROMPT);
-  const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  // Load custom prompt from localStorage on mount.
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(PROMPT_STORAGE_KEY);
-      if (saved && saved.trim()) setCustomPrompt(saved);
-    } catch { /* localStorage unavailable — keep default */ }
-  }, []);
-
-  // Restore input/output/model from localStorage so switching tabs (or
+  // Restore input/output/model/target from localStorage so switching tabs (or
   // closing/reopening the translate tab) preserves the last translation.
   // The auto-translate effect respects `userInteractedRef` and won't fire
   // a re-translation against the just-restored output.
@@ -99,38 +99,26 @@ export function TranslatePanel() {
       if (data?.model && typeof data.model.provider === "string" && typeof data.model.modelId === "string") {
         savedModelRef.current = { provider: data.model.provider, modelId: data.model.modelId };
       }
+      if (isLanguageCode(data?.target)) {
+        setTarget(data.target);
+      }
     } catch { /* malformed JSON or localStorage unavailable — ignore */ }
   }, []);
 
-  // Persist input/output/model to localStorage on every change. The first
-  // run is skipped so the initial empty state doesn't overwrite the data we
-  // are about to rehydrate above.
+  // Persist input/output/model/target to localStorage on every change. The
+  // first run is skipped so the initial empty state doesn't overwrite the
+  // data we are about to rehydrate above.
   useEffect(() => {
     if (!initializedRef.current) {
       initializedRef.current = true;
       return;
     }
     try {
-      const payload: PersistedState = { input, output };
+      const payload: PersistedState = { input, output, target };
       if (model) payload.model = model;
       localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(payload));
     } catch { /* quota exceeded or localStorage unavailable — ignore */ }
-  }, [input, output, model]);
-
-  // When the editor opens, sync draft to the active prompt (custom or default).
-  useEffect(() => {
-    if (promptOpen) {
-      setPromptDraft(customPrompt ?? DEFAULT_TRANSLATE_PROMPT);
-      // Focus + auto-resize the textarea after the panel renders.
-      requestAnimationFrame(() => {
-        const ta = promptTextareaRef.current;
-        if (!ta) return;
-        ta.focus();
-        ta.style.height = "auto";
-        ta.style.height = `${Math.min(ta.scrollHeight, 280)}px`;
-      });
-    }
-  }, [promptOpen, customPrompt]);
+  }, [input, output, model, target]);
 
   // Load models on mount, pre-select the default.
   useEffect(() => {
@@ -160,18 +148,25 @@ export function TranslatePanel() {
     return () => { cancelled = true; };
   }, [toast, t]);
 
-  // Close model dropdown on outside click.
+  // Close model / target dropdowns on outside click.
   useEffect(() => {
-    if (!modelDropdownOpen) return;
+    if (!modelDropdownOpen && !targetDropdownOpen) return;
     const handler = (e: MouseEvent) => {
       const tgt = e.target as Node;
-      if (dropdownRef.current?.contains(tgt)) return;
-      if (panelRef.current?.contains(tgt)) return;
-      setModelDropdownOpen(false);
+      if (modelDropdownOpen) {
+        if (dropdownRef.current?.contains(tgt)) return;
+        if (panelRef.current?.contains(tgt)) return;
+        setModelDropdownOpen(false);
+      }
+      if (targetDropdownOpen) {
+        if (targetDropdownRef.current?.contains(tgt)) return;
+        if (targetPanelRef.current?.contains(tgt)) return;
+        setTargetDropdownOpen(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [modelDropdownOpen]);
+  }, [modelDropdownOpen, targetDropdownOpen]);
 
   // No auto-resize needed: the input wrapper is `flex: 1`, so the textarea
   // fills half the panel vertically (matching the output area 1:1) and
@@ -200,20 +195,16 @@ export function TranslatePanel() {
     setError(null);
     setIsStreaming(true);
 
-    // Send the custom prompt only if the user has saved one — otherwise the
-    // server falls back to the built-in default, keeping payloads small.
-    const body: { text: string; provider: string; modelId: string; systemPrompt?: string } = {
-      text,
-      provider: model.provider,
-      modelId: model.modelId,
-    };
-    if (customPrompt) body.systemPrompt = customPrompt;
-
     try {
       const res = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          text,
+          provider: model.provider,
+          modelId: model.modelId,
+          target,
+        }),
         signal: ctrl.signal,
       });
       if (!res.ok || !res.body) {
@@ -257,13 +248,13 @@ export function TranslatePanel() {
         setIsStreaming(false);
       }
     }
-  }, [model, customPrompt, toast, t]);
+  }, [model, target, toast, t]);
 
-  // Auto-translate: 400ms after the user stops typing (or model changes),
-  // fire a translation. Empty input aborts any in-flight and clears output.
-  // Skipped entirely until the user actually drives a state change, so that
-  // rehydrating input/model from localStorage doesn't re-run the translation
-  // against the output we just restored.
+  // Auto-translate: 400ms after the user stops typing (or model/target
+  // changes), fire a translation. Empty input aborts any in-flight and
+  // clears output. Skipped entirely until the user actually drives a state
+  // change, so that rehydrating input/model/target from localStorage
+  // doesn't re-run the translation against the output we just restored.
   useEffect(() => {
     if (!userInteractedRef.current) return;
     const trimmed = input.trim();
@@ -310,46 +301,6 @@ export function TranslatePanel() {
     }
   }, [output, toast, t]);
 
-  const handlePromptSave = useCallback(() => {
-    const trimmed = promptDraft.trim();
-    if (!trimmed) {
-      toast.show({ kind: "error", message: t("Translation failed") });
-      return;
-    }
-    if (trimmed.length > MAX_TRANSLATE_PROMPT_CHARS) {
-      toast.show({ kind: "error", message: t("Translation failed") });
-      return;
-    }
-    try {
-      localStorage.setItem(PROMPT_STORAGE_KEY, trimmed);
-      setCustomPrompt(trimmed);
-      setPromptOpen(false);
-    } catch {
-      toast.show({ kind: "error", message: t("Translation failed") });
-    }
-  }, [promptDraft, toast, t]);
-
-  const handlePromptReset = useCallback(() => {
-    try { localStorage.removeItem(PROMPT_STORAGE_KEY); } catch { /* ignore */ }
-    setCustomPrompt(null);
-    setPromptDraft(DEFAULT_TRANSLATE_PROMPT);
-    setPromptOpen(false);
-  }, []);
-
-  const handlePromptCancel = useCallback(() => {
-    setPromptDraft(customPrompt ?? DEFAULT_TRANSLATE_PROMPT);
-    setPromptOpen(false);
-  }, [customPrompt]);
-
-  // Auto-resize the prompt editor textarea as the user types.
-  useEffect(() => {
-    if (!promptOpen) return;
-    const ta = promptTextareaRef.current;
-    if (!ta) return;
-    ta.style.height = "auto";
-    ta.style.height = `${Math.min(ta.scrollHeight, 280)}px`;
-  }, [promptDraft, promptOpen]);
-
   const modelOptions: ModelOption[] = useMemo(
     () => modelList.map((m) => ({ provider: m.provider, modelId: m.id, name: m.name })),
     [modelList],
@@ -375,7 +326,7 @@ export function TranslatePanel() {
       display: "flex", flexDirection: "column", height: "100%",
       background: "var(--bg)",
     }}>
-      {/* Top bar: model selector + copy + clear */}
+      {/* Top bar: model selector + target selector + copy + clear */}
       <div style={{
         display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
         borderBottom: "1px solid var(--border)", flexShrink: 0, position: "relative",
@@ -392,10 +343,10 @@ export function TranslatePanel() {
               display: "flex", alignItems: "center", gap: 6,
               padding: "6px 10px", height: 28,
               maxWidth: 240, overflow: "hidden",
-              background: modelDropdownOpen ? "var(--bg-hover)" : "var(--bg-panel)",
+              background: modelDropdownOpen ? "var(--bg-hover)" : "var(--bg)",
               border: "1px solid var(--border)",
               borderRadius: 6,
-              color: "var(--text-muted)",
+              color: "var(--text)",
               cursor: isStreaming ? "not-allowed" : "pointer",
               fontSize: 12,
               opacity: isStreaming ? 0.5 : 1,
@@ -469,19 +420,104 @@ export function TranslatePanel() {
             </div>
           )}
         </div>
+        <Tooltip content={t("Target language")}>
+          <div ref={targetDropdownRef} style={{ position: "relative" }}>
+            <button
+              onClick={(e) => {
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setTargetDropdownRect({ top: rect.top, left: rect.left, width: rect.width });
+                setTargetDropdownOpen((v) => !v);
+              }}
+              disabled={isStreaming}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "0 10px", height: 28,
+                maxWidth: 140,
+                background: targetDropdownOpen ? "var(--bg-hover)" : "var(--bg)",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                color: "var(--text)",
+                cursor: isStreaming ? "not-allowed" : "pointer",
+                fontSize: 12,
+                opacity: isStreaming ? 0.5 : 1,
+              }}
+            >
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "left" }}>
+                {t(SUPPORTED_LANGUAGES.find((l) => l.code === target)?.i18nKey ?? "")}
+              </span>
+              <svg
+                width="10" height="10" viewBox="0 0 10 10" fill="none"
+                stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+                style={{ flexShrink: 0, color: "var(--text-dim)" }}
+              >
+                <polyline points="2 4 5 7 8 4" />
+              </svg>
+            </button>
+            {targetDropdownOpen && targetDropdownRect && (
+              <div ref={targetPanelRef} style={{
+                position: "fixed",
+                top: targetDropdownRect.top + 32,
+                left: targetDropdownRect.left,
+                zIndex: 500,
+                background: "var(--bg)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+                width: "max-content",
+                minWidth: targetDropdownRect.width,
+                maxHeight: Math.max(120, Math.min(window.innerHeight - targetDropdownRect.top - 40, 360)),
+                overflowY: "auto",
+              }}>
+                {SUPPORTED_LANGUAGES.map((opt) => {
+                  const isActive = opt.code === target;
+                  return (
+                    <button
+                      key={opt.code}
+                      onClick={() => {
+                        setTargetDropdownOpen(false);
+                        if (!isActive) {
+                          // Mark as interaction so the auto-translate effect
+                          // fires a re-translation in the new target.
+                          userInteractedRef.current = true;
+                          setTarget(opt.code);
+                          setPreviewOpen(false);
+                        }
+                      }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        width: "100%", padding: "7px 12px",
+                        background: isActive ? "var(--bg-selected)" : "none",
+                        border: "none",
+                        color: isActive ? "var(--text)" : "var(--text-muted)",
+                        cursor: "pointer", fontSize: 12, textAlign: "left",
+                        fontWeight: isActive ? 600 : 400, whiteSpace: "nowrap",
+                      }}
+                      onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = isActive ? "var(--bg-selected)" : "none"; }}
+                    >
+                      {isActive
+                        ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="1.5 5 4 7.5 8.5 2.5" /></svg>
+                        : <span style={{ width: 10, flexShrink: 0 }} />}
+                      {t(opt.i18nKey)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Tooltip>
         <div style={{ flex: 1 }} />
-        <Tooltip content={t("Translator prompt")}>
+        <Tooltip content={t("Prompt preview")}>
           <button
-            onClick={() => setPromptOpen((v) => !v)}
-            aria-pressed={promptOpen}
+            onClick={() => setPreviewOpen((v) => !v)}
+            aria-pressed={previewOpen}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               gap: 4, padding: "0 10px", height: 28,
-              background: promptOpen ? "var(--bg-hover)" : (customPrompt ? "var(--bg-selected)" : "var(--bg-panel)"),
-              color: promptOpen ? "var(--text)" : (customPrompt ? "var(--text)" : "var(--text-muted)"),
+              background: previewOpen ? "var(--bg-hover)" : "var(--bg)",
+              color: "var(--text)",
               border: "1px solid var(--border)", borderRadius: 6,
               cursor: "pointer", fontSize: 12,
-              fontWeight: customPrompt ? 600 : 400,
             }}
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -500,7 +536,7 @@ export function TranslatePanel() {
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               gap: 4, padding: "0 10px", height: 28,
-              background: "var(--bg-panel)", color: "var(--text-muted)",
+              background: "var(--bg)", color: "var(--text)",
               border: "1px solid var(--border)", borderRadius: 6,
               cursor: !output ? "not-allowed" : "pointer", fontSize: 12,
               opacity: !output ? 0.5 : 1,
@@ -519,7 +555,7 @@ export function TranslatePanel() {
           style={{
             display: "flex", alignItems: "center", justifyContent: "center",
             gap: 4, padding: "0 10px", height: 28,
-            background: "var(--bg-panel)", color: "var(--text-muted)",
+            background: "var(--bg)", color: "var(--text)",
             border: "1px solid var(--border)", borderRadius: 6,
             cursor: (!input && !output) ? "not-allowed" : "pointer", fontSize: 12,
             opacity: (!input && !output) ? 0.5 : 1,
@@ -529,87 +565,63 @@ export function TranslatePanel() {
         </button>
       </div>
 
-      {/* Prompt editor — expands inline below the top bar when the Prompts button is active. */}
-      {promptOpen && (
+      {/* Prompt preview pane — read-only view of the active target's prompt.
+          Updates live when target changes (no state sync needed). */}
+      {previewOpen && (
         <div style={{
           padding: "8px 12px",
           borderBottom: "1px solid var(--border)",
-          background: "var(--bg-panel)",
+          background: "var(--bg)",
           flexShrink: 0,
           display: "flex", flexDirection: "column", gap: 6,
+          maxHeight: 220,
         }}>
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
-            fontSize: 11, color: "var(--text-dim)",
+            fontSize: 11, color: "var(--text)",
           }}>
-            <span>{t("Translator prompt")}</span>
-            <span style={{ color: promptDraft.length > MAX_TRANSLATE_PROMPT_CHARS ? "#ef4444" : "var(--text-dim)" }}>
-              {promptDraft.length} / {MAX_TRANSLATE_PROMPT_CHARS}
+            <span>
+              {t("Prompt preview")}
+              {" · "}
+              {t(SUPPORTED_LANGUAGES.find((l) => l.code === target)?.i18nKey ?? "")}
             </span>
+            <Tooltip content={t("Close")}>
+              <button
+                onClick={() => setPreviewOpen(false)}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 20, height: 20, padding: 0,
+                  background: "transparent",
+                  color: "var(--text-dim)",
+                  border: "none", borderRadius: 4,
+                  cursor: "pointer",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <line x1="2" y1="2" x2="8" y2="8" />
+                  <line x1="8" y1="2" x2="2" y2="8" />
+                </svg>
+              </button>
+            </Tooltip>
           </div>
-          <textarea
-            ref={promptTextareaRef}
-            value={promptDraft}
-            onChange={(e) => setPromptDraft(e.target.value)}
-            placeholder={DEFAULT_TRANSLATE_PROMPT}
-            rows={4}
-            style={{
-              width: "100%", minHeight: 80, maxHeight: 280, resize: "none",
-              padding: "8px 10px",
-              background: "var(--bg)",
-              color: "var(--text)",
-              border: `1px solid ${promptDraft.length > MAX_TRANSLATE_PROMPT_CHARS ? "#ef4444" : "var(--border)"}`,
-              borderRadius: 6,
-              fontFamily: "var(--font-mono)",
-              fontSize: 12,
-              lineHeight: 1.5,
-              outline: "none",
-              boxSizing: "border-box",
-            }}
-          />
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button
-              onClick={handlePromptReset}
-              style={{
-                padding: "0 10px", height: 26,
-                background: "transparent", color: "var(--text-muted)",
-                border: "1px solid var(--border)", borderRadius: 6,
-                cursor: "pointer", fontSize: 11,
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
-            >
-              {t("Reset to default")}
-            </button>
-            <div style={{ flex: 1 }} />
-            <button
-              onClick={handlePromptCancel}
-              style={{
-                padding: "0 12px", height: 26,
-                background: "transparent", color: "var(--text-muted)",
-                border: "1px solid var(--border)", borderRadius: 6,
-                cursor: "pointer", fontSize: 11,
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
-            >
-              {t("Cancel")}
-            </button>
-            <button
-              onClick={handlePromptSave}
-              disabled={!promptDraft.trim() || promptDraft.length > MAX_TRANSLATE_PROMPT_CHARS}
-              style={{
-                padding: "0 14px", height: 26,
-                background: (!promptDraft.trim() || promptDraft.length > MAX_TRANSLATE_PROMPT_CHARS) ? "var(--bg-panel)" : "var(--accent)",
-                color: (!promptDraft.trim() || promptDraft.length > MAX_TRANSLATE_PROMPT_CHARS) ? "var(--text-dim)" : "var(--bg)",
-                border: "1px solid var(--border)", borderRadius: 6,
-                cursor: (!promptDraft.trim() || promptDraft.length > MAX_TRANSLATE_PROMPT_CHARS) ? "not-allowed" : "pointer",
-                fontSize: 11, fontWeight: 600,
-              }}
-            >
-              {t("Save")}
-            </button>
-          </div>
+          <pre style={{
+            margin: 0,
+            padding: "8px 10px",
+            background: "var(--bg)",
+            color: "var(--text)",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+            lineHeight: 1.5,
+            overflowY: "auto",
+            flex: 1, minHeight: 0,
+            whiteSpace: "pre-wrap", wordBreak: "break-word",
+          }}>
+            {TRANSLATE_PROMPTS[target]}
+          </pre>
         </div>
       )}
 
@@ -629,7 +641,7 @@ export function TranslatePanel() {
           style={{
             width: "100%", flex: 1, minHeight: 0, resize: "none",
             padding: "8px 10px",
-            background: "var(--bg-panel)",
+            background: "var(--bg)",
             color: "var(--text)",
             border: "1px solid var(--border)",
             borderRadius: 6,
@@ -683,7 +695,7 @@ export function TranslatePanel() {
           style={{
             flex: 1, minHeight: 0, overflowY: "auto",
             padding: "10px 12px",
-            background: "var(--bg-panel)",
+            background: "var(--bg)",
             color: error ? "#ef4444" : "var(--text)",
             border: "1px solid var(--border)",
             borderRadius: 6,

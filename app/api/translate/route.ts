@@ -9,7 +9,13 @@ import {
   type ResourceLoader,
 } from "@earendil-works/pi-coding-agent";
 import { createLogger, elapsedMs } from "@/lib/logger";
-import { DEFAULT_TRANSLATE_PROMPT, MAX_TRANSLATE_PROMPT_CHARS } from "@/lib/translate";
+import {
+  DEFAULT_TARGET_LANGUAGE,
+  MAX_TRANSLATE_PROMPT_CHARS,
+  TRANSLATE_PROMPTS,
+  isLanguageCode,
+  type LanguageCode,
+} from "@/lib/translate";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +45,7 @@ interface TranslateRequestBody {
   text?: unknown;
   provider?: unknown;
   modelId?: unknown;
-  systemPrompt?: unknown;
+  target?: unknown;
 }
 
 export async function POST(req: Request) {
@@ -66,19 +72,21 @@ export async function POST(req: Request) {
   const requestedProvider = typeof body.provider === "string" ? body.provider : null;
   const requestedModelId = typeof body.modelId === "string" ? body.modelId : null;
 
-  // systemPrompt is optional. Empty / missing → use the built-in default.
-  let systemPrompt: string = DEFAULT_TRANSLATE_PROMPT;
-  if (typeof body.systemPrompt === "string") {
-    const trimmedPrompt = body.systemPrompt.trim();
-    if (trimmedPrompt.length > 0) {
-      if (trimmedPrompt.length > MAX_TRANSLATE_PROMPT_CHARS) {
-        return Response.json(
-          { error: `systemPrompt exceeds ${MAX_TRANSLATE_PROMPT_CHARS} characters` },
-          { status: 400 },
-        );
-      }
-      systemPrompt = trimmedPrompt;
-    }
+  // Resolve the system prompt from the requested target language. Invalid or
+  // missing values fall back to the default target — the client never gets to
+  // choose an arbitrary prompt string.
+  const target: LanguageCode = isLanguageCode(body.target)
+    ? body.target
+    : DEFAULT_TARGET_LANGUAGE;
+  const systemPrompt = TRANSLATE_PROMPTS[target];
+  if (systemPrompt.length > MAX_TRANSLATE_PROMPT_CHARS) {
+    // Defensive — TRANSLATE_PROMPTS is static and curated well below this
+    // limit, but a stale build / accidental edit should fail loudly rather
+    // than silently ship a giant prompt.
+    return Response.json(
+      { error: `server prompt for target ${target} exceeds ${MAX_TRANSLATE_PROMPT_CHARS} characters` },
+      { status: 500 },
+    );
   }
 
   // Resolve model. Mirror app/api/models/route.ts: use defaults from a separate
@@ -175,7 +183,7 @@ export async function POST(req: Request) {
         session = created;
         log.info("translate session created", {
           model: { provider: model.provider, id: model.id },
-          promptSource: systemPrompt === DEFAULT_TRANSLATE_PROMPT ? "default" : "custom",
+          target,
           durationMs: elapsedMs(startedAt),
         });
 
