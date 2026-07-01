@@ -376,6 +376,7 @@ export function HttpPanelCollections({
                 {/* Collection header */}
                 <div
                   style={{
+                    position: "relative",
                     display: "flex",
                     alignItems: "center",
                     padding: "6px 8px",
