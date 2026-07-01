@@ -45,6 +45,7 @@ import type {
 } from "@/lib/http-collections-schema";
 import { parseCurl } from "@/lib/curl-parser";
 import { parseJsonTolerant, minifyJson } from "@/lib/json-parser";
+import { copyText } from "./CodeBlock";
 import {
   JsonTreeView,
   collectAllContainerPaths,
@@ -2129,7 +2130,7 @@ function JsonResponseViewer({ body }: { body: string }) {
   const handleCopy = useCallback(async () => {
     if (!signatures) return;
     try {
-      await navigator.clipboard.writeText(minifyJson(signatures.value));
+      await copyText(minifyJson(signatures.value));
       toast.show({ kind: "success", message: t("Copied") });
     } catch {
       toast.show({ kind: "error", message: t("Failed to copy") });
