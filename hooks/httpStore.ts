@@ -70,6 +70,13 @@ export interface HttpState {
   inFlight: { id: string; startedAt: number } | null;
   error: HttpError | null;
   lastEdited: "url" | "params";
+  /**
+   * True if the draft has been modified since the last "load" (load an item
+   * from a collection, send a request, or clear the panel). Used by the
+   * Collections drawer to decide whether to prompt before replacing the
+   * current draft. Auto-maintained by the patcher; see `setHttpState`.
+   */
+  isDirty: boolean;
 }
 
 let kvIdCounter = 0;
@@ -99,6 +106,7 @@ const INITIAL: HttpState = {
   inFlight: null,
   error: null,
   lastEdited: "url",
+  isDirty: false,
 };
 
 let state: HttpState = INITIAL;
@@ -109,17 +117,29 @@ function emit() {
 }
 
 export function setHttpState(patch: Partial<HttpState>) {
+  // Iterate every key so we can detect a draft change specifically (used to
+  // auto-mark isDirty). The early-break optimization from before is gone
+  // because the cost of a handful of isContentEqual() calls on a 7-key state
+  // is negligible compared to the cost of an out-of-sync isDirty.
   let changed = false;
+  let draftChanged = false;
   for (const k in patch) {
     const next = patch[k as keyof HttpState];
     const cur = state[k as keyof HttpState];
     if (!isContentEqual(next, cur)) {
       changed = true;
-      break;
+      if (k === "draft") draftChanged = true;
     }
   }
   if (!changed) return;
-  state = { ...state, ...patch };
+  const finalPatch: Partial<HttpState> = { ...patch };
+  // Auto-mark dirty when the draft changes, unless the caller pinned isDirty
+  // explicitly (e.g. setHttpLastAttempt / clearHttpPanel / loadHttpDraftFromItem
+  // all want isDirty=false after a successful Send / reset / load).
+  if (draftChanged && patch.isDirty === undefined) {
+    finalPatch.isDirty = true;
+  }
+  state = { ...state, ...finalPatch };
   emit();
 }
 
@@ -236,7 +256,8 @@ export function setHttpLastResponse(resp: HttpResponse | null) {
 }
 
 export function setHttpLastAttempt(attempt: HttpDraft | null) {
-  setHttpState({ lastAttempt: attempt });
+  // After a Send the draft equals the last attempt, so it's no longer dirty.
+  setHttpState({ lastAttempt: attempt, isDirty: false });
 }
 
 export function setHttpError(err: HttpError | null) {
@@ -251,6 +272,50 @@ export function clearHttpPanel() {
     error: null,
     // Keep inFlight alone — caller is responsible for cancelling first.
     lastEdited: "url",
+    isDirty: false,
+  });
+}
+
+/**
+ * Replace the current draft with the contents of a saved collection item.
+ * Regenerates KVRow ids so React keys don't collide with previously-mounted
+ * rows. Resets isDirty because the loaded state is canonical.
+ *
+ * Note: does NOT touch `lastAttempt` — that's a snapshot of what was
+ * actually sent over the wire, not what the draft is.
+ */
+export function loadHttpDraftFromItem(item: {
+  method: HttpMethod;
+  url: string;
+  params: Array<{ key: string; value: string; enabled: boolean }>;
+  headers: Array<{ key: string; value: string; enabled: boolean }>;
+  bodyMode: BodyMode;
+  body: string;
+  timeoutMs: number | null;
+}) {
+  const params: KVRow[] = item.params.map((p) => ({
+    id: newKvId(),
+    key: p.key,
+    value: p.value,
+    enabled: p.enabled,
+  }));
+  const headers: KVRow[] = item.headers.map((h) => ({
+    id: newKvId(),
+    key: h.key,
+    value: h.value,
+    enabled: h.enabled,
+  }));
+  setHttpState({
+    draft: {
+      method: item.method,
+      url: item.url,
+      params,
+      headers,
+      bodyMode: item.bodyMode,
+      body: item.body,
+      options: { timeoutMs: item.timeoutMs ?? 30_000 },
+    },
+    isDirty: false,
   });
 }
 

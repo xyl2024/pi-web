@@ -21,6 +21,7 @@ import {
   setHttpError,
   setHttpLastAttempt,
   clearHttpPanel,
+  loadHttpDraftFromItem,
   kvRowsToObject,
   buildFinalUrl,
   deriveContentType,
@@ -32,6 +33,16 @@ import {
   type HttpResponse,
   type HttpError,
 } from "@/hooks/httpStore";
+import { useHttpCollections } from "@/hooks/useHttpCollections";
+import { HttpPanelCollections } from "./HttpPanelCollections";
+import {
+  HttpPanelSaveItemModal,
+  type SaveItemModalInitialValues,
+} from "./HttpPanelSaveItemModal";
+import type {
+  Collection,
+  HttpItem,
+} from "@/lib/http-collections-schema";
 import { parseCurl } from "@/lib/curl-parser";
 import { parseJsonTolerant, minifyJson } from "@/lib/json-parser";
 import {
@@ -46,6 +57,28 @@ import {
 const HTTP_METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const DIVIDER_STORAGE_KEY = "pi-http-divider-height";
 const DEFAULT_DIVIDER_HEIGHT = 240;
+const DRAWER_OPEN_STORAGE_KEY = "pi-http-collections-drawer-open";
+const DRAWER_WIDTH = 240;
+
+/** Last path segment of a URL, or the full URL if no path. Used as the
+ *  default name when saving the current draft to a collection. */
+function defaultItemNameFromUrl(url: string): string {
+  const trimmed = url.trim();
+  if (trimmed.length === 0) return "";
+  // Strip query string / hash before reading the path
+  const qIdx = trimmed.indexOf("?");
+  const hIdx = trimmed.indexOf("#");
+  const cut = [qIdx, hIdx].filter((i) => i >= 0).sort((a, b) => a - b)[0] ?? -1;
+  const withoutQ = cut >= 0 ? trimmed.slice(0, cut) : trimmed;
+  // Drop origin if present
+  const slashIdx = withoutQ.indexOf("//");
+  const afterScheme = slashIdx >= 0 ? withoutQ.slice(slashIdx + 2) : withoutQ;
+  const pathStart = afterScheme.indexOf("/");
+  const pathOnly = pathStart >= 0 ? afterScheme.slice(pathStart + 1) : "";
+  const lastSlash = pathOnly.lastIndexOf("/");
+  const lastSeg = lastSlash >= 0 ? pathOnly.slice(lastSlash + 1) : pathOnly;
+  return lastSeg.length > 0 ? lastSeg : trimmed;
+}
 
 export function HttpPanel() {
   const { t } = useI18n();
@@ -62,6 +95,38 @@ export function HttpPanel() {
   });
   const containerRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef<{ startY: number; startHeight: number } | null>(null);
+
+  // Collections drawer + save / replace modal state
+  const collectionsApi = useHttpCollections();
+  const [drawerOpen, setDrawerOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const stored = window.localStorage.getItem(DRAWER_OPEN_STORAGE_KEY);
+    if (stored === null) return true; // W3: default expanded on first use
+    return stored === "1";
+  });
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<HttpItem | null>(null);
+  const [editingItemCollectionIds, setEditingItemCollectionIds] = useState<
+    string[] | null
+  >(null);
+  const [replaceModalOpen, setReplaceModalOpen] = useState(false);
+  const [replaceItem, setReplaceItem] = useState<HttpItem | null>(null);
+  // If set, the save modal flow will also load this item on success
+  // (the "Save & replace" 3-way path).
+  const [pendingLoadAfterSave, setPendingLoadAfterSave] = useState<
+    HttpItem | null
+  >(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        DRAWER_OPEN_STORAGE_KEY,
+        drawerOpen ? "1" : "0",
+      );
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, [drawerOpen]);
 
   useEffect(() => {
     try {
@@ -283,49 +348,386 @@ export function HttpPanel() {
     }
   }, [importCurlText, state.draft, confirm, toast, t]);
 
+  // ── Collections handlers ──────────────────────────────────────────────
+
+  const buildItemCollectionIds = useCallback(
+    (itemId: string): string[] => {
+      return collectionsApi.joinRows
+        .filter((j) => j.itemId === itemId)
+        .map((j) => j.collectionId);
+    },
+    [collectionsApi.joinRows],
+  );
+
+  const handleSaveClick = useCallback(() => {
+    if (state.inFlight) {
+      toast.show({ kind: "error", message: t("Cannot clear while a request is in flight") });
+      return;
+    }
+    if (!state.draft.url.trim()) {
+      toast.show({ kind: "error", message: t("URL is required") });
+      return;
+    }
+    setEditingItem(null);
+    setEditingItemCollectionIds(null);
+    setPendingLoadAfterSave(null);
+    setSaveModalOpen(true);
+  }, [state.inFlight, state.draft, toast, t]);
+
+  const handleSaveSubmit = useCallback(
+    async (input: import("@/lib/http-collections-schema").CreateItemInput): Promise<HttpItem> => {
+      const item = await collectionsApi.createItem(input);
+      toast.show({ kind: "success", message: t("Item saved") });
+      return item;
+    },
+    [collectionsApi, toast, t],
+  );
+
+  const handleUpdateSubmit = useCallback(
+    async (id: string, patch: import("@/lib/http-collections-schema").UpdateItemInput): Promise<HttpItem> => {
+      const item = await collectionsApi.updateItem(id, patch);
+      toast.show({ kind: "success", message: t("Item updated") });
+      return item;
+    },
+    [collectionsApi, toast, t],
+  );
+
+  const handleCreateCollectionInModal = useCallback(
+    async (input: { name: string; description?: string }): Promise<Collection> => {
+      const c = await collectionsApi.createCollection(input);
+      toast.show({ kind: "success", message: t("Collection created") });
+      return c;
+    },
+    [collectionsApi, toast, t],
+  );
+
+  const doLoadItem = useCallback(
+    (item: HttpItem) => {
+      loadHttpDraftFromItem({
+        method: item.method,
+        url: item.url,
+        params: item.params,
+        headers: item.headers,
+        bodyMode: item.bodyMode,
+        body: item.body,
+        timeoutMs: item.timeoutMs,
+      });
+      toast.show({
+        kind: "success",
+        message: t("Loaded {name}").replace("{name}", item.name),
+      });
+      setDrawerOpen(false);
+    },
+    [toast, t],
+  );
+
+  const handleLoadItem = useCallback(
+    (item: HttpItem) => {
+      if (state.isDirty) {
+        // Open the 3-way modal
+        setReplaceItem(item);
+        setReplaceModalOpen(true);
+        return;
+      }
+      doLoadItem(item);
+    },
+    [state.isDirty, doLoadItem],
+  );
+
+  const handleReplace = useCallback(() => {
+    const item = replaceItem;
+    setReplaceModalOpen(false);
+    setReplaceItem(null);
+    if (item) doLoadItem(item);
+  }, [replaceItem, doLoadItem]);
+
+  const handleSaveAndReplace = useCallback(() => {
+    const item = replaceItem;
+    setReplaceModalOpen(false);
+    setReplaceItem(null);
+    if (!item) return;
+    if (state.inFlight) {
+      toast.show({ kind: "error", message: t("Cannot clear while a request is in flight") });
+      return;
+    }
+    if (!state.draft.url.trim()) {
+      toast.show({ kind: "error", message: t("URL is required") });
+      return;
+    }
+    setPendingLoadAfterSave(item);
+    setEditingItem(null);
+    setEditingItemCollectionIds(null);
+    setSaveModalOpen(true);
+  }, [replaceItem, state.inFlight, state.draft, toast, t]);
+
+  const handleSaveModalClose = useCallback(() => {
+    setSaveModalOpen(false);
+    setEditingItem(null);
+    setEditingItemCollectionIds(null);
+    // Don't clear pendingLoadAfterSave yet — the onSubmit handler reads it
+    // and clears it after the load completes (or the user cancels).
+  }, []);
+
+  const handleEditItem = useCallback(
+    (item: HttpItem) => {
+      setEditingItem(item);
+      setEditingItemCollectionIds(buildItemCollectionIds(item.id));
+      setPendingLoadAfterSave(null);
+      setSaveModalOpen(true);
+    },
+    [buildItemCollectionIds],
+  );
+
+  const handleDeleteItem = useCallback(
+    async (item: HttpItem) => {
+      const unlinked = buildItemCollectionIds(item.id).length;
+      const others = Math.max(0, unlinked - 1); // the "currently focused" collection is hidden
+      const description =
+        others === 0
+          ? t("Delete this item?")
+          : t("This will unlink the item from {n} other collection.").replace(
+              "{n}",
+              String(others),
+            );
+      const ok = await confirm({
+        title: t("Delete item?"),
+        description,
+        confirmLabel: t("Delete"),
+        destructive: true,
+      });
+      if (!ok) return;
+      try {
+        await collectionsApi.deleteItem(item.id);
+        toast.show({ kind: "success", message: t("Item deleted") });
+      } catch (e) {
+        toast.show({
+          kind: "error",
+          message: e instanceof Error ? e.message : t("Failed to delete item"),
+        });
+      }
+    },
+    [buildItemCollectionIds, collectionsApi, confirm, toast, t],
+  );
+
+  const handleCreateCollectionInDrawer = useCallback(
+    async (name: string): Promise<Collection | null> => {
+      try {
+        const c = await collectionsApi.createCollection({ name });
+        toast.show({ kind: "success", message: t("Collection created") });
+        return c;
+      } catch (e) {
+        toast.show({
+          kind: "error",
+          message: e instanceof Error ? e.message : t("Failed to save collection"),
+        });
+        return null;
+      }
+    },
+    [collectionsApi, toast, t],
+  );
+
+  const handleEditCollection = useCallback(
+    async (collection: Collection) => {
+      const next = window.prompt(t("New collection name"), collection.name);
+      if (next === null) return;
+      const trimmed = next.trim();
+      if (trimmed.length === 0 || trimmed === collection.name) return;
+      try {
+        await collectionsApi.updateCollection(collection.id, { name: trimmed });
+        toast.show({ kind: "success", message: t("Collection updated") });
+      } catch (e) {
+        toast.show({
+          kind: "error",
+          message: e instanceof Error ? e.message : t("Failed to update collection"),
+        });
+      }
+    },
+    [collectionsApi, toast, t],
+  );
+
+  const handleDeleteCollection = useCallback(
+    async (collection: Collection, itemCount: number) => {
+      const description = t(
+        "Delete this collection? {n} items will be unlinked from this collection but remain in others.",
+      ).replace("{n}", String(itemCount));
+      const ok = await confirm({
+        title: t("Delete collection?"),
+        description,
+        confirmLabel: t("Delete"),
+        destructive: true,
+      });
+      if (!ok) return;
+      try {
+        const result = await collectionsApi.deleteCollection(collection.id);
+        toast.show({ kind: "success", message: t("Collection deleted") });
+        // result.unlinkedFrom intentionally not surfaced — the description
+        // already previewed the count, and the user has acknowledged it.
+        void result;
+      } catch (e) {
+        toast.show({
+          kind: "error",
+          message: e instanceof Error ? e.message : t("Failed to delete collection"),
+        });
+      }
+    },
+    [collectionsApi, confirm, toast, t],
+  );
+
+  // When the save modal completes successfully, if a load is pending, do it.
+  // The `_item` arg is the just-created/updated item — we don't need it
+  // here (we already have pendingLoadAfterSave) but the parent wires it
+  // through for type symmetry.
+  const handleSaveItemResolved = useCallback(
+    async (item: HttpItem) => {
+      void item;
+      const pending = pendingLoadAfterSave;
+      setPendingLoadAfterSave(null);
+      if (pending) {
+        doLoadItem(pending);
+        // Override the "Item saved" toast with a combined message
+        toast.show({
+          kind: "success",
+          message: t("Saved and loaded {name}").replace("{name}", pending.name),
+        });
+      }
+      // Close the modal now that the create/edit succeeded.
+      setSaveModalOpen(false);
+      setEditingItem(null);
+      setEditingItemCollectionIds(null);
+    },
+    [pendingLoadAfterSave, doLoadItem, toast, t],
+  );
+
   const inFlight = !!state.inFlight;
+
+  const saveModalInitialValues: SaveItemModalInitialValues | undefined = saveModalOpen
+    ? {
+        name: defaultItemNameFromUrl(state.draft.url),
+        description: "",
+        method: state.draft.method,
+        url: state.draft.url,
+        params: state.draft.params,
+        headers: state.draft.headers,
+        bodyMode: state.draft.bodyMode,
+        body: state.draft.body,
+        timeoutMs: state.draft.options.timeoutMs,
+        tags: [],
+      }
+    : undefined;
 
   return (
     <div
       ref={containerRef}
-      style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg)", overflow: "hidden" }}
+      style={{ display: "flex", flexDirection: "row", height: "100%", background: "var(--bg)", overflow: "hidden" }}
     >
-      <PanelHeader onClear={handleClear} onImport={handleImportClick} />
-      <RequestLine
-        draft={state.draft}
-        inFlight={inFlight}
-        onMethodChange={setHttpMethod}
-        onUrlChange={setHttpUrl}
-        onSend={handleSend}
-        onCancel={handleCancel}
-      />
-      <RequestTabs
-        draft={state.draft}
-        onBodyModeChange={setHttpBodyMode}
-        onBodyChange={setHttpBody}
-        onAddKv={addKvRow}
-        onRemoveKv={removeKvRow}
-        onUpdateKv={updateKvRow}
-        onQuickAddBearer={handleQuickAddBearer}
-        onQuickAddContentType={handleQuickAddContentType}
-        onTimeoutChange={setHttpTimeoutMs}
-      />
-      <DragDivider onMouseDown={handleDividerMouseDown} />
-      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-        <ResponseSection
-          response={state.lastResponse}
-          error={state.error}
-          inFlight={state.inFlight}
-          onResend={handleSend}
-        />
+      <div
+        style={{
+          width: drawerOpen ? DRAWER_WIDTH : 0,
+          overflow: "hidden",
+          transition: "width 0.18s ease",
+          flexShrink: 0,
+        }}
+        aria-hidden={!drawerOpen}
+      >
+        {drawerOpen && (
+          <HttpPanelCollections
+            collections={collectionsApi.collections}
+            items={collectionsApi.items}
+            joinRows={collectionsApi.joinRows}
+            onLoadItem={handleLoadItem}
+            onEditItem={handleEditItem}
+            onDeleteItem={handleDeleteItem}
+            onCreateCollection={handleCreateCollectionInDrawer}
+            onEditCollection={handleEditCollection}
+            onDeleteCollection={handleDeleteCollection}
+          />
+        )}
       </div>
-      {importCurlOpen && (
-        <ImportCurlModal
-          value={importCurlText}
-          error={importCurlError}
-          onChange={setImportCurlText}
-          onClose={handleImportClose}
-          onConfirm={handleImportConfirm}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          minWidth: 0,
+          height: "100%",
+          overflow: "hidden",
+        }}
+      >
+        <PanelHeader
+          onClear={handleClear}
+          onImport={handleImportClick}
+          onSave={handleSaveClick}
+          drawerOpen={drawerOpen}
+          onDrawerToggle={() => setDrawerOpen((v) => !v)}
+        />
+        <RequestLine
+          draft={state.draft}
+          inFlight={inFlight}
+          onMethodChange={setHttpMethod}
+          onUrlChange={setHttpUrl}
+          onSend={handleSend}
+          onCancel={handleCancel}
+        />
+        <RequestTabs
+          draft={state.draft}
+          onBodyModeChange={setHttpBodyMode}
+          onBodyChange={setHttpBody}
+          onAddKv={addKvRow}
+          onRemoveKv={removeKvRow}
+          onUpdateKv={updateKvRow}
+          onQuickAddBearer={handleQuickAddBearer}
+          onQuickAddContentType={handleQuickAddContentType}
+          onTimeoutChange={setHttpTimeoutMs}
+        />
+        <DragDivider onMouseDown={handleDividerMouseDown} />
+        <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+          <ResponseSection
+            response={state.lastResponse}
+            error={state.error}
+            inFlight={state.inFlight}
+            onResend={handleSend}
+          />
+        </div>
+        {importCurlOpen && (
+          <ImportCurlModal
+            value={importCurlText}
+            error={importCurlError}
+            onChange={setImportCurlText}
+            onClose={handleImportClose}
+            onConfirm={handleImportConfirm}
+          />
+        )}
+      </div>
+      {saveModalOpen && (
+        <HttpPanelSaveItemModal
+          mode={editingItem ? "edit" : "create"}
+          initialValues={editingItem ? undefined : saveModalInitialValues}
+          item={editingItem ?? undefined}
+          itemCollectionIds={editingItemCollectionIds ?? undefined}
+          collections={collectionsApi.collections}
+          onCreate={async (input) => {
+            const item = await handleSaveSubmit(input);
+            await handleSaveItemResolved(item);
+            return item;
+          }}
+          onUpdate={async (id, patch) => {
+            const item = await handleUpdateSubmit(id, patch);
+            await handleSaveItemResolved(item);
+            return item;
+          }}
+          onCreateCollection={handleCreateCollectionInModal}
+          onClose={handleSaveModalClose}
+        />
+      )}
+      {replaceModalOpen && replaceItem && (
+        <ReplaceDraftModal
+          itemName={replaceItem.name}
+          onReplace={handleReplace}
+          onSaveAndReplace={handleSaveAndReplace}
+          onCancel={() => {
+            setReplaceModalOpen(false);
+            setReplaceItem(null);
+          }}
         />
       )}
     </div>
@@ -470,9 +872,164 @@ function ImportCurlModal({
   );
 }
 
+// ── Replace draft modal (3-way: Replace / Save & replace / Cancel) ───────
+// useConfirm only supports 2 buttons, so this is a bespoke modal that
+// mirrors ImportCurlModal's visual style. Default focus is on the middle
+// option (Save & replace) to make it the safest default if the user
+// hammers Enter.
+
+function ReplaceDraftModal({
+  itemName,
+  onReplace,
+  onSaveAndReplace,
+  onCancel,
+}: {
+  itemName: string;
+  onReplace: () => void;
+  onSaveAndReplace: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onCancel]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 10001,
+        background: "rgba(0,0,0,0.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          background: "var(--bg-panel)",
+          border: "1px solid var(--border)",
+          borderRadius: 8,
+          padding: 20,
+          minWidth: 360,
+          maxWidth: 480,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: "var(--text)" }}>
+          {t("Replace the current request?")}
+        </h2>
+        <p style={{ margin: 0, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
+          {t("Your draft has unsent changes. They will be lost.")}
+        </p>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 8,
+            borderTop: "1px solid var(--border)",
+            paddingTop: 10,
+            marginTop: 4,
+          }}
+        >
+          <button
+            ref={cancelRef}
+            type="button"
+            onClick={onCancel}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--border)",
+              color: "var(--text-muted)",
+              borderRadius: 4,
+              padding: "6px 14px",
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            {t("Cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={onReplace}
+            style={{
+              background: "transparent",
+              border: "1px solid #ef4444",
+              color: "#ef4444",
+              borderRadius: 4,
+              padding: "6px 14px",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {t("Replace")}
+          </button>
+          <button
+            type="button"
+            onClick={onSaveAndReplace}
+            autoFocus
+            style={{
+              background: "var(--accent)",
+              color: "var(--bg)",
+              border: "none",
+              borderRadius: 4,
+              padding: "6px 14px",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {t("Save & replace")}
+          </button>
+        </div>
+        <div
+          aria-hidden
+          style={{
+            fontSize: 11,
+            color: "var(--text-dim)",
+            textAlign: "right",
+          }}
+        >
+          {itemName}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Panel header ──────────────────────────────────────────────────────────
 
-function PanelHeader({ onClear, onImport }: { onClear: () => void; onImport: () => void }) {
+function PanelHeader({
+  onClear,
+  onImport,
+  onSave,
+  drawerOpen,
+  onDrawerToggle,
+}: {
+  onClear: () => void;
+  onImport: () => void;
+  onSave: () => void;
+  drawerOpen: boolean;
+  onDrawerToggle: () => void;
+}) {
   const { t } = useI18n();
   return (
     <div
@@ -481,16 +1038,83 @@ function PanelHeader({ onClear, onImport }: { onClear: () => void; onImport: () 
         alignItems: "center",
         justifyContent: "space-between",
         height: 32,
-        padding: "0 12px",
+        padding: "0 8px 0 4px",
         borderBottom: "1px solid var(--border)",
         background: "var(--bg-panel)",
         flexShrink: 0,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{t("HTTP")}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <Tooltip content={drawerOpen ? t("Hide collections") : t("Show collections")}>
+          <button
+            onClick={onDrawerToggle}
+            aria-label={drawerOpen ? t("Hide collections") : t("Show collections")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 26,
+              height: 26,
+              padding: 0,
+              background: drawerOpen ? "var(--bg-hover)" : "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              color: drawerOpen ? "var(--accent)" : "var(--text-muted)",
+              cursor: "pointer",
+              transition: "color 0.12s, background 0.12s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "var(--accent)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = drawerOpen
+                ? "var(--accent)"
+                : "var(--text-muted)";
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <line x1="9" y1="4" x2="9" y2="20" />
+            </svg>
+          </button>
+        </Tooltip>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginLeft: 4 }}>{t("HTTP")}</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <Tooltip content={t("Save")}>
+          <button
+            onClick={onSave}
+            aria-label={t("Save")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 26,
+              height: 26,
+              padding: 0,
+              background: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              transition: "color 0.12s, background 0.12s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "var(--accent)";
+              e.currentTarget.style.background = "var(--bg-hover)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = "var(--text-muted)";
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg>
+          </button>
+        </Tooltip>
         <Tooltip content={t("Import cURL")}>
           <button
             onClick={onImport}
