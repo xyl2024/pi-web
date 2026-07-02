@@ -40,8 +40,6 @@ interface PersistedState {
   target?: LanguageCode;
 }
 
-const DEBOUNCE_MS = 400;
-
 export function TranslatePanel() {
   const { t } = useI18n();
   const toast = useToast();
@@ -66,7 +64,6 @@ export function TranslatePanel() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const outputRef = useRef<HTMLDivElement | null>(null);
 
@@ -75,11 +72,6 @@ export function TranslatePanel() {
   // fetch effect consults it once the model list is available so we restore
   // the same model instead of falling back to the default.
   const savedModelRef = useRef<{ provider: string; modelId: string } | null>(null);
-  // `userInteractedRef` is false until the user types or clicks something in
-  // this panel. The auto-translate effect bails out while it's false, so
-  // rehydrating input/model/target from localStorage doesn't trigger a
-  // redundant API call against the already-restored output.
-  const userInteractedRef = useRef(false);
   // `initializedRef` gates the save effect so the very first run (with
   // pre-restore default values) doesn't clobber the data we're about to
   // rehydrate.
@@ -87,8 +79,8 @@ export function TranslatePanel() {
 
   // Restore input/output/model/target from localStorage so switching tabs (or
   // closing/reopening the translate tab) preserves the last translation.
-  // The auto-translate effect respects `userInteractedRef` and won't fire
-  // a re-translation against the just-restored output.
+  // Translation now fires only when the user clicks the Translate button, so
+  // rehydrating these values doesn't kick off a request on its own.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STATE_STORAGE_KEY);
@@ -179,9 +171,8 @@ export function TranslatePanel() {
     el.scrollTop = el.scrollHeight;
   }, [output]);
 
-  // Abort any in-flight request + clear any pending debounce on unmount.
+  // Abort any in-flight request on unmount.
   useEffect(() => () => {
-    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     abortRef.current?.abort();
   }, []);
 
@@ -250,45 +241,29 @@ export function TranslatePanel() {
     }
   }, [model, target, toast, t]);
 
-  // Auto-translate: 400ms after the user stops typing (or model/target
-  // changes), fire a translation. Empty input aborts any in-flight and
-  // clears output. Skipped entirely until the user actually drives a state
-  // change, so that rehydrating input/model/target from localStorage
-  // doesn't re-run the translation against the output we just restored.
-  useEffect(() => {
-    if (!userInteractedRef.current) return;
-    const trimmed = input.trim();
-    if (!trimmed) {
-      if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+  // Translation fires only when the user clicks the Translate button (or hits
+  // Cmd/Ctrl+Enter). handleTranslate doubles as Stop while a request is
+  // in-flight so the same button covers both states.
+
+  const handleTranslate = useCallback(() => {
+    if (isStreaming) {
       abortRef.current?.abort();
-      setOutput("");
-      setError(null);
       return;
     }
-    if (!model) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    abortRef.current?.abort();
-    debounceRef.current = setTimeout(() => {
-      debounceRef.current = null;
-      void runTranslation(trimmed);
-    }, DEBOUNCE_MS);
-    return () => {
-      if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
-    };
-  }, [input, model, runTranslation]);
+    const trimmed = input.trim();
+    if (!trimmed || !model) return;
+    void runTranslation(trimmed);
+  }, [input, isStreaming, model, runTranslation]);
 
   const handleStop = useCallback(() => {
-    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     abortRef.current?.abort();
   }, []);
 
   const handleClear = useCallback(() => {
-    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     abortRef.current?.abort();
     setInput("");
     setOutput("");
     setError(null);
-    userInteractedRef.current = true;
   }, []);
 
   const handleCopy = useCallback(async () => {
@@ -392,7 +367,6 @@ export function TranslatePanel() {
                         onClick={() => {
                           setModelDropdownOpen(false);
                           if (!isActive) {
-                            userInteractedRef.current = true;
                             setModel({ provider: opt.provider, modelId: opt.modelId });
                           }
                         }}
@@ -476,9 +450,6 @@ export function TranslatePanel() {
                       onClick={() => {
                         setTargetDropdownOpen(false);
                         if (!isActive) {
-                          // Mark as interaction so the auto-translate effect
-                          // fires a re-translation in the new target.
-                          userInteractedRef.current = true;
                           setTarget(opt.code);
                           setPreviewOpen(false);
                         }
@@ -505,6 +476,37 @@ export function TranslatePanel() {
               </div>
             )}
           </div>
+        </Tooltip>
+        <Tooltip content={isStreaming ? t("Stop") : (input.trim() ? "" : t("Type text to translate…"))}>
+          <button
+            onClick={handleTranslate}
+            disabled={!isStreaming && (!input.trim() || !model)}
+            aria-label={isStreaming ? t("Stop") : t("Translate")}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              gap: 4, padding: "0 10px", height: 28,
+              background: isStreaming ? "var(--bg)" : "var(--accent)",
+              color: isStreaming ? "var(--text)" : "var(--accent-fg, #fff)",
+              border: "1px solid var(--border)", borderRadius: 6,
+              cursor: (!isStreaming && (!input.trim() || !model)) ? "not-allowed" : "pointer",
+              fontSize: 12, fontWeight: 600,
+              opacity: (!isStreaming && (!input.trim() || !model)) ? 0.5 : 1,
+            }}
+          >
+            {isStreaming ? (
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><rect x="1" y="1" width="8" height="8" rx="1" /></svg>
+            ) : (
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 8h6" />
+                <path d="M8 5v3" />
+                <path d="M11 19l-2-4-2 4" />
+                <path d="M9 17h4" />
+                <path d="M14 13l3 6 3-6" />
+                <path d="M15 16h4" />
+              </svg>
+            )}
+            {isStreaming ? t("Stop") : t("Translate")}
+          </button>
         </Tooltip>
         <div style={{ flex: 1 }} />
         <Tooltip content={t("Prompt preview")}>
@@ -633,9 +635,15 @@ export function TranslatePanel() {
         <textarea
           ref={textareaRef}
           value={input}
-          onChange={(e) => {
-            userInteractedRef.current = true;
-            setInput(e.target.value);
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            // Cmd/Ctrl+Enter triggers translation (or stops, if streaming).
+            // Plain Enter still inserts a newline — translation is an
+            // explicit action, not an auto-fire.
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              handleTranslate();
+            }
           }}
           placeholder={t("Type text to translate…")}
           style={{
