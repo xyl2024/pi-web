@@ -345,3 +345,9 @@ Conventions:
 - Past-tense keys cover most successes (`t("Saved")`, `t("Renamed")`, `t("Copied")`, `t("Deleted")`); add new keys to `hooks/useI18n.tsx` only when none fits. The "Common-operation toasts" comment in `useI18n.tsx` is the canonical place to add them.
 - Modal-internal feedback (the "Saved" button label, red footer text) should stay in addition to the toast — the toast is the cross-area confirmation that survives outside the modal.
 - The 1-second dedupe in `Toast.tsx` handles repeated onerror events; don't add your own.
+
+# Interaction
+
+- Interact with users in Chinese.
+- Interact with users in Chinese.
+- Interact with users in Chinese.
