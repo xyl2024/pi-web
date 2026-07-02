@@ -21,10 +21,10 @@
 /* ── Preset: default (light) ───────────────────────────────── */
 .theme-default {
   --bg: #ffffff;
-  --bg-panel: #f5f5f5;
-  --bg-hover: #eeeeee;
-  --bg-selected: #e8e8e8;
-  --border: #e0e0e0;
+  --bg-panel: #fcfcfc;
+  --bg-hover: #f7f7f7;
+  --bg-selected: #f3f3f3;
+  --border: #ededed;
   --text: #1a1a1a;
   --text-muted: #6b7280;
   --text-dim: #9ca3af;
@@ -32,7 +32,7 @@
   --accent-hover: #1d4ed8;
   --user-bg: #eff6ff;
   --assistant-bg: #ffffff;
-  --tool-bg: #f9fafb;
+  --tool-bg: #fefefe;
   --bg-subtle: rgba(0,0,0,0.03);
   --diff-added-bg: #e6ffec;
   --diff-added-strong: #abf2bc;
