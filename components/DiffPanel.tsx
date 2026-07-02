@@ -285,9 +285,9 @@ export function DiffPanel() {
         <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
           {hasChanges ? (
             <>
-              <span style={{ color: "var(--diff-added-strong, #2ea043)" }}>+{stats.added}</span>
+              <span style={{ color: "#1a7f37", fontWeight: 700 }}>+{stats.added}</span>
               {" / "}
-              <span style={{ color: "var(--diff-removed-strong, #f85149)" }}>-{stats.removed}</span>
+              <span style={{ color: "#cf222e", fontWeight: 700 }}>-{stats.removed}</span>
             </>
           ) : !isEmpty ? (
             <span>{t("No changes")}</span>
