@@ -1379,7 +1379,26 @@ function RequestTabs({
       >
         <TabButton label={t("Params")} count={draft.params.filter((p) => p.enabled && p.key).length} active={tab === "params"} onClick={() => setTab("params")} />
         <TabButton label={t("Headers")} count={draft.headers.filter((h) => h.enabled && h.key).length} active={tab === "headers"} onClick={() => setTab("headers")} />
-        <TabButton label={t("Body")} active={tab === "body"} onClick={() => setTab("body")} />
+        <TabButton label={t("Body")} active={tab === "body"} onClick={() => {
+          // Default to json mode on first interaction with Body tab so the
+          // user lands in a sensible editor instead of the "none" placeholder.
+          // Also pretty-print any valid JSON body so minified drafts become
+          // readable immediately (matches the manual Format button's indent).
+          if (draft.bodyMode === "none") {
+            onBodyModeChange("json");
+          }
+          if (draft.body.trim().length > 0) {
+            try {
+              const parsed = JSON.parse(draft.body);
+              const formatted = JSON.stringify(parsed, null, 2);
+              if (formatted !== draft.body) onBodyChange(formatted);
+            } catch {
+              // Invalid JSON — leave body untouched, same silent-skip as
+              // BodyEditor's auto-format effect.
+            }
+          }
+          setTab("body");
+        }} />
         <div style={{ flex: 1 }} />
         <TimeoutControl valueMs={draft.options.timeoutMs} onChange={onTimeoutChange} />
       </div>
