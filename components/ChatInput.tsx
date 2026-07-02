@@ -1400,18 +1400,18 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     background: "none",
                     border: "none",
                     borderRadius: 9,
-                    color: "var(--text-muted)",
+                    color: "var(--accent)",
                     cursor: "pointer",
                     flexShrink: 0,
                     transition: "background 0.12s, color 0.12s",
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = "var(--bg-hover)";
-                    e.currentTarget.style.color = "var(--text)";
+                    e.currentTarget.style.color = "var(--accent-hover)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.background = "none";
-                    e.currentTarget.style.color = "var(--text-muted)";
+                    e.currentTarget.style.color = "var(--accent)";
                   }}
                 >
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
