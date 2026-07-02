@@ -437,36 +437,79 @@ function UnifiedView({ rows }: { rows: Row[] }) {
 
 function SplitView({ rows }: { rows: Row[] }) {
   return (
-    <div>
-      {rows.map((row, idx) => {
-        if (row.kind === "changed") {
-          return (
-            <RowPairSplit
-              key={idx}
-              oldLine={row.oldLine!}
-              newLine={row.newLine!}
-              oldNo={row.oldLineNo!}
-              newNo={row.newLineNo!}
-              wordDiff={row.wordDiff!}
-            />
-          );
-        }
-        if (row.kind === "removed") {
-          return <RowPairSplit key={idx} oldLine={row.oldLine!} oldNo={row.oldLineNo!} />;
-        }
-        if (row.kind === "added") {
-          return <RowPairSplit key={idx} newLine={row.newLine!} newNo={row.newLineNo!} />;
-        }
-        return (
-          <RowPairSplit
-            key={idx}
-            oldLine={row.oldLine!}
-            newLine={row.newLine!}
-            oldNo={row.oldLineNo!}
-            newNo={row.newLineNo!}
-          />
-        );
-      })}
+    <div style={{ display: "flex", alignItems: "stretch", minHeight: 0 }}>
+      <SplitColumn side="left" rows={rows} />
+      <SplitColumn side="right" rows={rows} />
+    </div>
+  );
+}
+
+// One column of the side-by-side view. Each column is its own horizontal
+// scroll container so scrolling the left side never moves the right (and vice
+// versa). Vertical scroll is delegated to the body container above.
+function SplitColumn({ side, rows }: { side: "left" | "right"; rows: Row[] }) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        overflowX: "auto",
+        overflowY: "hidden",
+        minWidth: 0,
+        ...(side === "right" ? { borderLeft: "1px solid var(--border)" } : {}),
+      }}
+    >
+      {rows.map((row, idx) => (
+        <SplitRow key={idx} side={side} row={row} />
+      ))}
+    </div>
+  );
+}
+
+// One row inside a split column. The gutter is `position: sticky; left: 0` so
+// the line number stays anchored to the column's left edge while content
+// scrolls horizontally behind it.
+function SplitRow({ side, row }: { side: "left" | "right"; row: Row }) {
+  const showLine = side === "left" ? row.oldLine : row.newLine;
+  const showNo = side === "left" ? row.oldLineNo : row.newLineNo;
+  const bg =
+    row.kind === "changed"
+      ? side === "left"
+        ? "var(--diff-removed-bg)"
+        : "var(--diff-added-bg)"
+      : row.kind === "removed" && side === "left"
+        ? "var(--diff-removed-bg)"
+        : row.kind === "added" && side === "right"
+          ? "var(--diff-added-bg)"
+          : "transparent";
+  const hasChange = row.kind === "changed" && !!row.wordDiff;
+
+  return (
+    <div style={{ display: "flex", alignItems: "stretch", minHeight: 20, background: bg }}>
+      <span
+        style={{
+          flexShrink: 0,
+          width: GUTTER_WIDTH,
+          padding: "0 6px",
+          textAlign: "right",
+          color: "var(--diff-line-number)",
+          userSelect: "none",
+          background: bg,
+          borderRight: "1px solid var(--border)",
+          fontSize: 11,
+          position: "sticky",
+          left: 0,
+          zIndex: 1,
+        }}
+      >
+        {showNo ?? ""}
+      </span>
+      <span style={{ padding: "0 8px", whiteSpace: "pre", minWidth: "max-content", color: "var(--text)" }}>
+        {showLine !== null && showLine !== undefined
+          ? hasChange
+            ? renderWordSpans(row.wordDiff!, side)
+            : showLine || " "
+          : " "}
+      </span>
     </div>
   );
 }
@@ -500,7 +543,7 @@ function RowSingle({
         {marker}
       </span>
       <GutterCell>{lineNo}</GutterCell>
-      <span style={{ padding: "0 8px", whiteSpace: "pre", flex: 1, color: "var(--text)" }}>
+      <span style={{ padding: "0 8px", whiteSpace: "pre", flex: 1, minWidth: "max-content", color: "var(--text)" }}>
         {line || " "}
       </span>
     </div>
@@ -524,63 +567,18 @@ function RowPairUnified({
       <div style={{ ...ROW_BASE, background: "var(--diff-removed-bg)" }}>
         <span style={{ flexShrink: 0, width: 24, textAlign: "center", color: "var(--text-dim)", userSelect: "none", fontSize: 11 }}>-</span>
         <GutterCell>{oldNo}</GutterCell>
-        <span style={{ padding: "0 8px", whiteSpace: "pre", flex: 1, color: "var(--text)" }}>
+        <span style={{ padding: "0 8px", whiteSpace: "pre", flex: 1, minWidth: "max-content", color: "var(--text)" }}>
           {renderWordSpans(wordDiff, "left")}
         </span>
       </div>
       <div style={{ ...ROW_BASE, background: "var(--diff-added-bg)" }}>
         <span style={{ flexShrink: 0, width: 24, textAlign: "center", color: "var(--text-dim)", userSelect: "none", fontSize: 11 }}>+</span>
         <GutterCell>{newNo}</GutterCell>
-        <span style={{ padding: "0 8px", whiteSpace: "pre", flex: 1, color: "var(--text)" }}>
+        <span style={{ padding: "0 8px", whiteSpace: "pre", flex: 1, minWidth: "max-content", color: "var(--text)" }}>
           {renderWordSpans(wordDiff, "right")}
         </span>
       </div>
     </>
-  );
-}
-
-// Split view: left cell + right cell on the same row. Missing content fills
-// with the opposite side's background to keep row alignment obvious.
-function RowPairSplit({
-  oldLine,
-  newLine,
-  oldNo,
-  newNo,
-  wordDiff,
-}: {
-  oldLine?: string;
-  newLine?: string;
-  oldNo?: number;
-  newNo?: number;
-  wordDiff?: Change[];
-}) {
-  const hasChange = !!wordDiff;
-  const leftBg = oldLine === undefined
-    ? "transparent"
-    : hasChange || oldNo !== undefined && newNo === undefined && newLine === undefined
-      ? "var(--diff-removed-bg)"
-      : "transparent";
-  const rightBg = newLine === undefined
-    ? "transparent"
-    : hasChange || newNo !== undefined && oldNo === undefined && oldLine === undefined
-      ? "var(--diff-added-bg)"
-      : "transparent";
-
-  return (
-    <div style={{ display: "flex", alignItems: "stretch", minHeight: 20 }}>
-      <div style={{ flex: 1, display: "flex", alignItems: "stretch", background: leftBg, minWidth: 0 }}>
-        <GutterCell>{oldNo ?? ""}</GutterCell>
-        <span style={{ padding: "0 8px", whiteSpace: "pre", flex: 1, color: "var(--text)", overflow: "hidden" }}>
-          {oldLine !== undefined ? (hasChange ? renderWordSpans(wordDiff!, "left") : oldLine || " ") : " "}
-        </span>
-      </div>
-      <div style={{ flex: 1, display: "flex", alignItems: "stretch", background: rightBg, minWidth: 0, borderLeft: "1px solid var(--border)" }}>
-        <GutterCell>{newNo ?? ""}</GutterCell>
-        <span style={{ padding: "0 8px", whiteSpace: "pre", flex: 1, color: "var(--text)", overflow: "hidden" }}>
-          {newLine !== undefined ? (hasChange ? renderWordSpans(wordDiff!, "right") : newLine || " ") : " "}
-        </span>
-      </div>
-    </div>
   );
 }
 
