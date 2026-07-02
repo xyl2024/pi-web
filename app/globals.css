@@ -34,6 +34,11 @@
   --assistant-bg: #ffffff;
   --tool-bg: #f9fafb;
   --bg-subtle: rgba(0,0,0,0.03);
+  --diff-added-bg: #e6ffec;
+  --diff-added-strong: #abf2bc;
+  --diff-removed-bg: #ffebe9;
+  --diff-removed-strong: #ffcecb;
+  --diff-line-number: #9ca3af;
 }
 
 /* ── Preset: midnight (dark) ───────────────────────────────── */
@@ -52,6 +57,11 @@
   --assistant-bg: #1a1a1a;
   --tool-bg: #1f2937;
   --bg-subtle: rgba(255,255,255,0.04);
+  --diff-added-bg: #033a16;
+  --diff-added-strong: rgba(46,160,67,0.40);
+  --diff-removed-bg: #67060c;
+  --diff-removed-strong: rgba(248,81,73,0.40);
+  --diff-line-number: #6b7280;
 }
 
 /* ── Preset: synthwave ─────────────────────────────────────── */
@@ -70,6 +80,11 @@
   --assistant-bg: #1a1625;
   --tool-bg: #251e35;
   --bg-subtle: rgba(255,110,199,0.08);
+  --diff-added-bg: #1f4030;
+  --diff-added-strong: rgba(80,200,120,0.45);
+  --diff-removed-bg: #4a1f3a;
+  --diff-removed-strong: rgba(255,110,140,0.45);
+  --diff-line-number: #7a6598;
 }
 
 /* ── Preset: forest ────────────────────────────────────────── */
@@ -88,6 +103,11 @@
   --assistant-bg: #f4f1e8;
   --tool-bg: #e0dbd0;
   --bg-subtle: rgba(46,125,50,0.06);
+  --diff-added-bg: #d7ecd9;
+  --diff-added-strong: #98d8a0;
+  --diff-removed-bg: #f5d7d7;
+  --diff-removed-strong: #f0a0a0;
+  --diff-line-number: #9a8665;
 }
 
 /* ── Preset: sepia ─────────────────────────────────────────── */
@@ -106,6 +126,11 @@
   --assistant-bg: #f7f0e3;
   --tool-bg: #ece0ce;
   --bg-subtle: rgba(139,69,19,0.07);
+  --diff-added-bg: #e0e8d0;
+  --diff-added-strong: #b8c890;
+  --diff-removed-bg: #f0d8c8;
+  --diff-removed-strong: #e0a890;
+  --diff-line-number: #a88650;
 }
 
 /* Theme toggle: circular wipe via View Transitions API.

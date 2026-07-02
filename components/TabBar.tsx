@@ -13,7 +13,8 @@ export type Tab =
   | { kind: "toolCalls"; id: string; label: string }
   | { kind: "http"; id: string; label: string }
   | { kind: "json"; id: string; label: string }
-  | { kind: "canvas"; id: string; label: string };
+  | { kind: "canvas"; id: string; label: string }
+  | { kind: "diff"; id: string; label: string };
 
 interface Props {
   tabs: Tab[];
@@ -55,6 +56,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
             <JsonTabIcon />
           ) : tab.kind === "canvas" ? (
             <CanvasTabIcon />
+          ) : tab.kind === "diff" ? (
+            <DiffTabIcon />
           ) : (
             getFileIcon(tab.label, 13)
           );
@@ -195,6 +198,20 @@ function CanvasTabIcon() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M18.37 2.63a1.75 1.75 0 0 1 2.48 2.48L9 16.96l-4.5 1.04 1.04-4.5Z" />
       <path d="M14 7l3 3" />
+    </svg>
+  );
+}
+
+function DiffTabIcon() {
+  // Two stacked panels with a swap arrow — reads as "compare two things".
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="8" height="16" rx="1.5" />
+      <rect x="13" y="4" width="8" height="16" rx="1.5" />
+      <line x1="7" y1="9" x2="7" y2="9" />
+      <line x1="7" y1="13" x2="7" y2="13" />
+      <line x1="17" y1="13" x2="17" y2="13" />
+      <line x1="17" y1="17" x2="17" y2="17" />
     </svg>
   );
 }

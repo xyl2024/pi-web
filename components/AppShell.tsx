@@ -15,6 +15,7 @@ import { ToolCallStatsPanel } from "./ToolCallStatsPanel";
 import { HttpPanel } from "./HttpPanel";
 import { JsonPanel } from "./JsonPanel";
 import { CanvasPanel } from "./CanvasPanel";
+import { DiffPanel } from "./DiffPanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 
 const TODO_TAB_ID = "todo:global";
@@ -24,6 +25,7 @@ const TOOL_CALLS_TAB_ID = "toolCalls:global";
 const HTTP_TAB_ID = "http:global";
 const JSON_TAB_ID = "json:global";
 const CANVAS_TAB_ID = "canvas:global";
+const DIFF_TAB_ID = "diff:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -633,6 +635,16 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [t]);
 
+  // Open the diff panel — same pattern as translate / http / json.
+  const handleOpenDiffTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((tab) => tab.kind === "diff")) return prev;
+      return [{ kind: "diff", id: DIFF_TAB_ID, label: t("Diff") }, ...prev];
+    });
+    setActiveFileTabId(DIFF_TAB_ID);
+    setRightPanelState("normal");
+  }, [t]);
+
   const handleCloseFileTab = useCallback((tabId: string) => {
     setFileTabs((prev) => {
       const next = prev.filter((t) => t.id !== tabId);
@@ -739,6 +751,7 @@ export function AppShell() {
     openToolCallsTab: handleOpenToolCallsTab,
     openHttpTab: handleOpenHttpTab,
     openJsonTab: handleOpenJsonTab,
+    openDiffTab: handleOpenDiffTab,
     toggleSidebar: () => setSidebarOpen((v) => !v),
     toggleRightPanel: () => setRightPanelState((v) => v === "closed" ? "normal" : "closed"),
     toggleFocus,
@@ -749,6 +762,7 @@ export function AppShell() {
     theme.setPreset, setLocale, handleSlashNew,
     handleOpenTodoTab, handleOpenFavoritesTab, handleOpenCanvasTab,
     handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenHttpTab, handleOpenJsonTab,
+    handleOpenDiffTab,
     toggleFocus, agentControls,
     selectedSession, newSessionCwd, activeCwd,
   ]);
@@ -1319,6 +1333,8 @@ export function AppShell() {
             <FileViewer filePath={activeFileTab.filePath} cwd={activeCwd ?? undefined} />
           ) : activeFileTab?.kind === "canvas" ? (
             <CanvasPanel />
+          ) : activeFileTab?.kind === "diff" ? (
+            <DiffPanel />
           ) : (
             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
               {t("No file open")}
@@ -1456,6 +1472,26 @@ export function AppShell() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M8 3 H6 a2 2 0 0 0 -2 2 v3 a2 2 0 0 1 -2 2 a2 2 0 0 1 2 2 v3 a2 2 0 0 0 2 2 h2" />
               <path d="M16 3 h2 a2 2 0 0 1 2 2 v3 a2 2 0 0 0 2 2 a2 2 0 0 0 -2 2 v3 a2 2 0 0 1 -2 2 h-2" />
+            </svg>
+          </button>
+        </Tooltip>
+        {/* Open diff panel */}
+        <Tooltip content={t("Open Diff")}>
+          <button
+            onClick={handleOpenDiffTab}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, padding: 0,
+              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+              color: activeFileTab?.kind === "diff" ? "var(--text)" : "var(--text-muted)",
+              cursor: "pointer", transition: "color 0.12s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "diff" ? "var(--text)" : "var(--text-muted)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="8" height="16" rx="1.5" />
+              <rect x="13" y="4" width="8" height="16" rx="1.5" />
             </svg>
           </button>
         </Tooltip>
