@@ -387,6 +387,9 @@ const ROW_BASE: React.CSSProperties = {
   display: "flex",
   alignItems: "stretch",
   minHeight: 20,
+  // Row width follows content so the row's background covers the entire line
+  // — including the part that lives past the horizontal scroll viewport.
+  minWidth: "max-content",
 };
 
 function GutterCell({ children, color }: { children: React.ReactNode; color?: string }) {
@@ -484,7 +487,17 @@ function SplitRow({ side, row }: { side: "left" | "right"; row: Row }) {
   const hasChange = row.kind === "changed" && !!row.wordDiff;
 
   return (
-    <div style={{ display: "flex", alignItems: "stretch", minHeight: 20, background: bg }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "stretch",
+        minHeight: 20,
+        background: bg,
+        // Row width follows content so the background covers the entire line —
+        // including the part that lives past the column's horizontal scroll viewport.
+        minWidth: "max-content",
+      }}
+    >
       <span
         style={{
           flexShrink: 0,
