@@ -103,9 +103,9 @@ export function HttpPanel() {
   // Collections drawer + save / replace modal state
   const collectionsApi = useHttpCollections();
   const [drawerOpen, setDrawerOpen] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
+    if (typeof window === "undefined") return false;
     const stored = window.localStorage.getItem(DRAWER_OPEN_STORAGE_KEY);
-    if (stored === null) return true; // W3: default expanded on first use
+    if (stored === null) return false; // default: drawer collapsed on first use
     return stored === "1";
   });
   const [saveModalOpen, setSaveModalOpen] = useState(false);
