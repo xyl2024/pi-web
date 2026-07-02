@@ -718,6 +718,8 @@ const ZH_TRANSLATIONS = {
   "Format": "格式化",
   "Minify": "压缩",
   "Minify & escape": "压缩并转义",
+  "Copy minify": "复制并压缩",
+  "Copy minify & escape": "复制并压缩转义",
   "Tree view": "树形视图",
   "Collapse all": "全部折叠",
   "Expand all": "全部展开",

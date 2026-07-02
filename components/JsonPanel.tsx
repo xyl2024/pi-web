@@ -39,7 +39,7 @@ const ICON_PROPS = {
 // Lucide-derived icons (24x24, stroke=currentColor, strokeWidth=1.8).
 // Each one is paired with its tooltip label below.
 const ICONS: Record<string, ReactNode> = {
-  // Minify (diagonal arrows compressing)
+  // Copy minify (diagonal arrows compressing)
   minify: (
     <svg {...ICON_PROPS}>
       <polyline points="4 14 10 14 10 20" />
@@ -48,7 +48,7 @@ const ICONS: Record<string, ReactNode> = {
       <line x1="3" y1="21" x2="10" y2="14" />
     </svg>
   ),
-  // Minify & escape (scroll with text lines = JSON-as-string)
+  // Copy minify & escape (document with text lines)
   escape: (
     <svg {...ICON_PROPS}>
       <path d="M14 3v4a1 1 0 0 0 1 1h4" />
@@ -301,17 +301,25 @@ export function JsonPanel() {
     }
   }, []);
 
-  const handleMinify = useCallback(() => {
+  const handleCopyMinify = useCallback(async () => {
     if (parsed === null) return;
-    setContent(JSON.stringify(parsed));
-    setView("textarea");
-  }, [parsed]);
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(parsed));
+      toast.show({ kind: "success", message: t("Copied") });
+    } catch {
+      toast.show({ kind: "error", message: t("Failed to copy") });
+    }
+  }, [parsed, t, toast]);
 
-  const handleEscape = useCallback(() => {
+  const handleCopyMinifyEscape = useCallback(async () => {
     if (parsed === null) return;
-    setContent(escapeJsonString(parsed));
-    setView("textarea");
-  }, [parsed]);
+    try {
+      await navigator.clipboard.writeText(escapeJsonString(parsed));
+      toast.show({ kind: "success", message: t("Copied") });
+    } catch {
+      toast.show({ kind: "error", message: t("Failed to copy") });
+    }
+  }, [parsed, t, toast]);
 
   const handleToggleTree = useCallback(() => {
     if (parsed === null) return;
@@ -335,16 +343,6 @@ export function JsonPanel() {
     });
   }, []);
 
-  const handleCopy = useCallback(async () => {
-    if (content.length === 0) return;
-    try {
-      await navigator.clipboard.writeText(content);
-      toast.show({ kind: "success", message: t("Copied") });
-    } catch {
-      toast.show({ kind: "error", message: t("Failed to copy") });
-    }
-  }, [content, t, toast]);
-
   const handleClear = useCallback(() => {
     setContent("");
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
@@ -359,13 +357,6 @@ export function JsonPanel() {
   return (
     <div ref={panelRef} style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <div style={toolbarStyle}>
-        {!isTreeView && (
-          <>
-            <IconButton label={t("Minify")} icon={ICONS.minify} onClick={handleMinify} disabled={disableTransform} />
-            <IconButton label={t("Minify & escape")} icon={ICONS.escape} onClick={handleEscape} disabled={disableTransform} />
-            <div style={toolbarDividerStyle} />
-          </>
-        )}
         <IconButton label={t("Tree view")} icon={ICONS.tree} active={isTreeView} onClick={handleToggleTree} disabled={disableTransform} />
         {isTreeView && (
           <>
@@ -377,7 +368,8 @@ export function JsonPanel() {
         <div style={{ flex: 1 }} />
         <ErrorBadge error={error} ignoredPrefix={error?.ignoredPrefix} ignoredSuffix={error?.ignoredSuffix} />
         <IconButton label={t("Clear")} icon={ICONS.clear} onClick={handleClear} disabled={content.length === 0} />
-        <IconButton label={t("Copy")} icon={ICONS.copy} onClick={handleCopy} disabled={content.length === 0} />
+        <IconButton label={t("Copy minify")} icon={ICONS.minify} onClick={handleCopyMinify} disabled={disableTransform} />
+        <IconButton label={t("Copy minify & escape")} icon={ICONS.escape} onClick={handleCopyMinifyEscape} disabled={disableTransform} />
       </div>
 
       {isTreeView && (
