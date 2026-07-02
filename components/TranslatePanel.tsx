@@ -226,6 +226,11 @@ export function TranslatePanel() {
           // "done" → loop exits on next read returning done.
         }
       }
+      // Strip leading/trailing whitespace (spaces, tabs, newlines) from the
+      // final accumulated translation. Models frequently pad the response
+      // with surrounding newlines; without this, the user sees a blank line
+      // before/after the actual translation.
+      setOutput((o) => o.trim());
     } catch (e) {
       if ((e as { name?: string })?.name === "AbortError") return;
       const msg = e instanceof Error ? e.message : String(e);
