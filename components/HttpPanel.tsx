@@ -1779,6 +1779,27 @@ function BodyEditor({
     }
   }, [body]);
 
+  // Auto-format body when transitioning into json mode (if it parses cleanly).
+  // Re-entering json mode after editing in raw mode is the common case where
+  // minified JSON should be pretty-printed; for an already-formatted body the
+  // output is identical so this is a no-op.
+  const prevModeRef = useRef<BodyMode>(mode);
+  useEffect(() => {
+    if (prevModeRef.current !== "json" && mode === "json") {
+      if (body.trim().length > 0) {
+        try {
+          const parsed = JSON.parse(body);
+          const formatted = JSON.stringify(parsed, null, 2);
+          if (formatted !== body) onBodyChange(formatted);
+        } catch {
+          // Invalid JSON — leave body untouched. Matches the silent-skip
+          // intent here (vs. the manual Format button which toasts on error).
+        }
+      }
+    }
+    prevModeRef.current = mode;
+  }, [mode, body, onBodyChange]);
+
   const showOverlay = mode === "json" && highlight && jsonValid;
 
   return (
