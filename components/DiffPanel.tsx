@@ -225,7 +225,7 @@ export function DiffPanel() {
           gap: 6,
           padding: "6px 8px",
           borderBottom: "1px solid var(--border)",
-          background: "var(--bg-panel)",
+          background: "var(--bg)",
           flexShrink: 0,
           minHeight: 36,
         }}
@@ -399,7 +399,7 @@ function GutterCell({ children, color }: { children: React.ReactNode; color?: st
         textAlign: "right",
         color: color ?? "var(--diff-line-number)",
         userSelect: "none",
-        background: "var(--bg-panel)",
+        background: "transparent",
         borderRight: "1px solid var(--border)",
         fontSize: 11,
       }}
