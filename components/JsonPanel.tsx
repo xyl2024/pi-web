@@ -476,7 +476,7 @@ const toolbarStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 4,
   padding: "6px 10px",
-  background: "var(--bg-panel)",
+  background: "#ffffff",
   borderBottom: "1px solid var(--border)",
   flexShrink: 0,
 };
@@ -493,7 +493,7 @@ const searchRowStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 6,
   padding: "6px 10px",
-  background: "var(--bg-panel)",
+  background: "#ffffff",
   borderBottom: "1px solid var(--border)",
   flexShrink: 0,
 };
