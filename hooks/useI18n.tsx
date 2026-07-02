@@ -617,6 +617,7 @@ const ZH_TRANSLATIONS = {
   "Browser": "浏览器",
   // Translate panel (right-panel tab)
   "Translate": "翻译",
+  "Translate (⌘+Enter)": "翻译 (⌘+Enter)",
   "Open translate": "打开翻译",
   "Translation input": "翻译输入",
   "Translation output": "译文",

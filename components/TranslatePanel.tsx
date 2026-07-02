@@ -482,7 +482,7 @@ export function TranslatePanel() {
             )}
           </div>
         </Tooltip>
-        <Tooltip content={isStreaming ? t("Stop") : (input.trim() ? "" : t("Type text to translate…"))}>
+        <Tooltip content={isStreaming ? t("Stop") : (input.trim() ? t("Translate (⌘+Enter)") : t("Type text to translate…"))}>
           <button
             onClick={handleTranslate}
             disabled={!isStreaming && (!input.trim() || !model)}
@@ -501,13 +501,13 @@ export function TranslatePanel() {
             {isStreaming ? (
               <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><rect x="1" y="1" width="8" height="8" rx="1" /></svg>
             ) : (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 8h6" />
-                <path d="M8 5v3" />
-                <path d="M11 19l-2-4-2 4" />
-                <path d="M9 17h4" />
-                <path d="M14 13l3 6 3-6" />
-                <path d="M15 16h4" />
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 5h12" />
+                <path d="M9 3v2" />
+                <path d="M5 5c0 4 3 7 6 9" />
+                <path d="M11 5c0 3-2 6-6 8" />
+                <path d="M14 21l5-12 5 12" />
+                <path d="M15.5 17h7" />
               </svg>
             )}
             {isStreaming ? t("Stop") : t("Translate")}
