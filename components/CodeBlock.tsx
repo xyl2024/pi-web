@@ -40,34 +40,67 @@ export function CodeBlock({ code, lang }: Props) {
     <div
       style={{
         position: "relative",
-        marginTop: 4,
-        marginBottom: 4,
-        borderRadius: 6,
+        marginTop: 8,
+        marginBottom: 8,
+        borderRadius: 10,
         overflow: "hidden",
         border: "1px solid var(--border)",
+        background: "var(--bg)",
+        boxShadow: isDark
+          ? "0 6px 18px rgba(0,0,0,0.35)"
+          : "0 4px 14px rgba(0,0,0,0.08)",
       }}
     >
       <div
         style={{
-          padding: "3px 10px",
-          background: "var(--bg-panel)",
+          position: "relative",
+          minHeight: 32,
+          padding: "0 12px",
+          background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)",
           borderBottom: "1px solid var(--border)",
-          fontSize: 11,
-          color: "var(--text-dim)",
           display: "flex",
-          justifyContent: "space-between",
           alignItems: "center",
+          gap: 10,
         }}
       >
-        <span>{lang}</span>
+        {/* macOS traffic-light buttons (decorative) */}
+        <span
+          aria-hidden
+          style={{ display: "inline-flex", gap: 7, alignItems: "center" }}
+        >
+          <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#ff5f57", boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.15)" }} />
+          <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#febc2e", boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.15)" }} />
+          <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#28c840", boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.15)" }} />
+        </span>
+        <span
+          style={{
+            position: "absolute",
+            left: "50%",
+            transform: "translateX(-50%)",
+            fontSize: 11,
+            color: "var(--text-muted)",
+            fontFamily: "var(--font-sans)",
+            pointerEvents: "none",
+            maxWidth: "calc(100% - 120px)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {lang}
+        </span>
         <button
           onClick={copy}
           style={{
+            marginLeft: "auto",
             background: "none",
             border: "none",
             color: "var(--text-muted)",
             cursor: "pointer",
             fontSize: 11,
+            fontFamily: "var(--font-sans)",
+            padding: "2px 6px",
+            borderRadius: 4,
           }}
         >
           {copied ? t("copied") : t("copy")}
