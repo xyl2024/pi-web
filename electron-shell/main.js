@@ -109,6 +109,18 @@ function createWindow() {
     }
   });
 
+  // DevTools: F12 or Ctrl+Shift+I toggles it (no native menu means the
+  // default accelerators are not registered, so wire them up manually).
+  win.webContents.on("before-input-event", (_event, input) => {
+    if (
+      input.type === "keyDown" &&
+      (input.key === "F12" ||
+        (input.control && input.shift && input.key.toLowerCase() === "i"))
+    ) {
+      win.webContents.toggleDevTools();
+    }
+  });
+
   // Load the title bar — the Pi Web app is loaded inside its <iframe>.
   console.log(`[Pi Shell] Loading title bar (iframe will connect to ${PI_URL})`);
   win.loadFile(path.join(__dirname, "titlebar.html"));
