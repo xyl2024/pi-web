@@ -58,6 +58,7 @@ export function TranslatePanel() {
 
   const [target, setTarget] = useState<LanguageCode>(DEFAULT_TARGET_LANGUAGE);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [hoveredAction, setHoveredAction] = useState<"prompts" | "copy" | "clear" | null>(null);
 
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
@@ -517,14 +518,19 @@ export function TranslatePanel() {
         <Tooltip content={t("Prompt preview")}>
           <button
             onClick={() => setPreviewOpen((v) => !v)}
+            onMouseEnter={() => setHoveredAction("prompts")}
+            onMouseLeave={() => setHoveredAction(null)}
             aria-pressed={previewOpen}
+            aria-label={t("Prompts")}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
-              gap: 4, padding: "0 10px", height: 28,
+              gap: hoveredAction === "prompts" ? 4 : 0,
+              padding: "0 10px", height: 28,
               background: previewOpen ? "var(--bg-hover)" : "var(--bg)",
               color: "var(--text)",
               border: "1px solid var(--border)", borderRadius: 6,
               cursor: "pointer", fontSize: 12,
+              transition: "gap 0.15s",
             }}
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -533,42 +539,78 @@ export function TranslatePanel() {
               <line x1="9" y1="13" x2="15" y2="13" />
               <line x1="9" y1="17" x2="13" y2="17" />
             </svg>
-            {t("Prompts")}
+            <span style={{
+              opacity: hoveredAction === "prompts" ? 1 : 0,
+              maxWidth: hoveredAction === "prompts" ? 80 : 0,
+              overflow: "hidden", whiteSpace: "nowrap",
+              transition: "opacity 0.15s, max-width 0.15s",
+            }}>
+              {t("Prompts")}
+            </span>
           </button>
         </Tooltip>
         <Tooltip content={output ? "" : t("Clear")}>
           <button
             onClick={handleCopy}
+            onMouseEnter={() => setHoveredAction("copy")}
+            onMouseLeave={() => setHoveredAction(null)}
             disabled={!output}
+            aria-label={t("Copy")}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
-              gap: 4, padding: "0 10px", height: 28,
+              gap: hoveredAction === "copy" ? 4 : 0,
+              padding: "0 10px", height: 28,
               background: "var(--bg)", color: "var(--text)",
               border: "1px solid var(--border)", borderRadius: 6,
               cursor: !output ? "not-allowed" : "pointer", fontSize: 12,
               opacity: !output ? 0.5 : 1,
+              transition: "gap 0.15s",
             }}
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="9" y="9" width="13" height="13" rx="2" />
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
-            {t("Copy")}
+            <span style={{
+              opacity: hoveredAction === "copy" ? 1 : 0,
+              maxWidth: hoveredAction === "copy" ? 80 : 0,
+              overflow: "hidden", whiteSpace: "nowrap",
+              transition: "opacity 0.15s, max-width 0.15s",
+            }}>
+              {t("Copy")}
+            </span>
           </button>
         </Tooltip>
         <button
           onClick={handleClear}
+          onMouseEnter={() => setHoveredAction("clear")}
+          onMouseLeave={() => setHoveredAction(null)}
           disabled={!input && !output}
+          aria-label={t("Clear")}
           style={{
             display: "flex", alignItems: "center", justifyContent: "center",
-            gap: 4, padding: "0 10px", height: 28,
+            gap: hoveredAction === "clear" ? 4 : 0,
+            padding: "0 10px", height: 28,
             background: "var(--bg)", color: "var(--text)",
             border: "1px solid var(--border)", borderRadius: 6,
             cursor: (!input && !output) ? "not-allowed" : "pointer", fontSize: 12,
             opacity: (!input && !output) ? 0.5 : 1,
+            transition: "gap 0.15s",
           }}
         >
-          {t("Clear")}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+            <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+          </svg>
+          <span style={{
+            opacity: hoveredAction === "clear" ? 1 : 0,
+            maxWidth: hoveredAction === "clear" ? 80 : 0,
+            overflow: "hidden", whiteSpace: "nowrap",
+            transition: "opacity 0.15s, max-width 0.15s",
+          }}>
+            {t("Clear")}
+          </span>
         </button>
       </div>
 
