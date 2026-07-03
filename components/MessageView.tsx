@@ -11,6 +11,7 @@ import { SvgBlock } from "./SvgBlock";
 import { CodeBlock, copyText } from "./CodeBlock";
 import { SHOW_FILE_TOOL_NAME } from "@/lib/show-file-tool-types";
 import { PayloadChip } from "./PayloadChip";
+import { ProviderIcon, hasProviderIcon } from "./ProviderIcon";
 import type {
   AgentMessage,
   UserMessage,
@@ -463,7 +464,12 @@ function AssistantMessageView({
         }}
       >
         {message.provider && (
-          <span>{modelNames?.[`${message.provider}:${message.model}`] ?? modelNames?.[message.model] ?? message.model}</span>
+          <>
+            {hasProviderIcon(message.provider) && (
+              <ProviderIcon id={message.provider} size={12} />
+            )}
+            <span>{modelNames?.[`${message.provider}:${message.model}`] ?? modelNames?.[message.model] ?? message.model}</span>
+          </>
         )}
         {sessionId && entryId && (
           <PayloadChip sessionId={sessionId} entryId={entryId} pending={!!isStreaming} />
