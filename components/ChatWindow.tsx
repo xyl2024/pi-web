@@ -9,6 +9,7 @@ import { Tooltip } from "./Tooltip";
 import { GithubHeatmap, GithubHeatmapPlaceholder } from "./GithubHeatmap";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { AgentTodoPanel } from "./AgentTodoPanel";
+import { ReplayBar } from "./ReplayBar";
 import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
 import { useAudio } from "@/hooks/useAudio";
 import { useDragDrop } from "@/hooks/useDragDrop";
@@ -216,6 +217,20 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const [highlightEntryId, setHighlightEntryId] = useState<string | null>(null);
   const [pendingJumpEntryId, setPendingJumpEntryId] = useState<string | null>(null);
 
+  // ── Replay ("time travel"): message-level scrubber. All state is local so it
+  // resets on session switch (ChatWindow remounts via key={sessionKey}). ──
+  const [replayOpen, setReplayOpen] = useState(false);
+  const [replayIndex, setReplayIndex] = useState(0);
+  const [replayPlaying, setReplayPlaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState(1);
+  const handleReplayIndexChange = useCallback((n: number) => setReplayIndex(n), []);
+  const handleReplayPlayingChange = useCallback((p: boolean) => setReplayPlaying(p), []);
+  const handleReplaySpeedChange = useCallback((s: number) => setReplaySpeed(s), []);
+  const closeReplay = useCallback(() => {
+    setReplayOpen(false);
+    setReplayPlaying(false);
+  }, []);
+
   const handleScroll = useCallback(() => {
     if (isProgrammaticScrollRef.current) return;
     const el = scrollContainerRef.current;
@@ -253,7 +268,18 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     setMatchedEntryIds(new Set());
     setHighlightEntryId(null);
     setPendingJumpEntryId(null);
+    setReplayOpen(false);
+    setReplayPlaying(false);
   }, [session?.id]);
+
+  // ── Replay: force-close when the agent starts running (replay and a live
+  // stream must not coexist — the truncated view would fight the SSE tail). ──
+  useEffect(() => {
+    if (streamState.isStreaming || agentRunning) {
+      setReplayOpen(false);
+      setReplayPlaying(false);
+    }
+  }, [streamState.isStreaming, agentRunning]);
 
   // ── In-session search: results change callback ──
   const handleSearchResultsChange = useCallback((ids: string[], keyword: string) => {
@@ -342,6 +368,16 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     }
   }, [streamState.streamingMessage, streamState.isStreaming]);
 
+  // ── Auto-scroll to the truncation point as replay advances ──
+  useEffect(() => {
+    if (!replayOpen) return;
+    if (userScrolledUpRef.current) return;
+    isProgrammaticScrollRef.current = true;
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const timer = setTimeout(() => { isProgrammaticScrollRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, [replayIndex, replayOpen, messagesEndRef]);
+
   const onDrop = useCallback((files: File[]) => {
     chatInputRef?.current?.addImages(files);
   }, [chatInputRef]);
@@ -350,6 +386,25 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
 
   const visibleMessages = messages.filter((m) => m.role === "user" || m.role === "assistant");
   const messageRefs = useMessageRefs(visibleMessages.length);
+
+  // Replay is only active for a settled (non-streaming) session. When active,
+  // the chat renders only messages[0..replayIndex]; toolResultsMap is still
+  // built from the FULL messages so a tool call still pairs with its result
+  // even when the result sits past the cutoff.
+  const replayActive = replayOpen && !streamState.isStreaming && !agentRunning;
+  const renderMessages = replayActive ? messages.slice(0, replayIndex) : messages;
+  const renderEntryIds = replayActive ? entryIds.slice(0, replayIndex) : entryIds;
+  const replayLabel = (() => {
+    const base = `${replayIndex} / ${messages.length}`;
+    const m = messages[replayIndex - 1] as (AgentMessage & { timestamp?: number }) | undefined;
+    if (m?.timestamp) return `${base} · ${new Date(m.timestamp).toLocaleTimeString()}`;
+    return base;
+  })();
+  const openReplay = useCallback(() => {
+    setReplayIndex(messages.length);
+    setReplayPlaying(false);
+    setReplayOpen(true);
+  }, [messages.length]);
 
   // Map agent_todo task id → toolCallId of the most recent "mark completed"
   // call. Used by AgentTodoPanel to scroll-to on click. Rebuilt from messages
@@ -586,6 +641,19 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
         </div>
       ) : (
       <>
+      {replayActive && (
+        <ReplayBar
+          total={messages.length}
+          index={replayIndex}
+          playing={replayPlaying}
+          speed={replaySpeed}
+          positionLabel={replayLabel}
+          onIndexChange={handleReplayIndexChange}
+          onPlayingChange={handleReplayPlayingChange}
+          onSpeedChange={handleReplaySpeedChange}
+          onClose={closeReplay}
+        />
+      )}
       <div className="relative flex flex-1 overflow-hidden">
         {/* Agent Todo: absolute-positioned floating panel in the chat area's
             left whitespace. Lives as a sibling of the scroll container (not
@@ -606,27 +674,27 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                 }
               }
               let lastUserIdx = -1;
-              for (let i = messages.length - 1; i >= 0; i--) {
-                if (messages[i].role === "user") { lastUserIdx = i; break; }
+              for (let i = renderMessages.length - 1; i >= 0; i--) {
+                if (renderMessages[i].role === "user") { lastUserIdx = i; break; }
               }
               let refIdx = 0;
-              return messages.map((msg, idx) => {
+              return renderMessages.map((msg, idx) => {
                 const prevAssistantEntryId =
-                  msg.role === "user" && idx > 0 && messages[idx - 1].role === "assistant"
-                    ? entryIds[idx - 1]
+                  msg.role === "user" && idx > 0 && renderMessages[idx - 1].role === "assistant"
+                    ? renderEntryIds[idx - 1]
                     : undefined;
                 const isVisible = msg.role === "user" || msg.role === "assistant";
                 const currentRefIdx = isVisible ? refIdx++ : -1;
                 let showTimestamp = false;
                 if (msg.role === "assistant") {
                   showTimestamp = true;
-                  for (let j = idx + 1; j < messages.length; j++) {
-                    const r = messages[j].role;
+                  for (let j = idx + 1; j < renderMessages.length; j++) {
+                    const r = renderMessages[j].role;
                     if (r === "user") break;
                     if (r === "assistant") { showTimestamp = false; break; }
                   }
                   // Hide on the currently-streaming tail (the streaming bubble owns the live timestamp)
-                  if (showTimestamp && streamState.isStreaming && idx === messages.length - 1) {
+                  if (showTimestamp && streamState.isStreaming && idx === renderMessages.length - 1) {
                     showTimestamp = false;
                   }
                 }
@@ -636,17 +704,17 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                     message={msg}
                     toolResults={toolResultsMap}
                     modelNames={modelNames}
-                    entryId={entryIds[idx]}
+                    entryId={renderEntryIds[idx]}
                     onFork={agentRunning || isNew || (idx === 0 && msg.role === "user") ? undefined : handleFork}
-                    forking={forkingEntryId === entryIds[idx]}
+                    forking={forkingEntryId === renderEntryIds[idx]}
                     onNavigate={agentRunning ? undefined : handleNavigate}
                     prevAssistantEntryId={agentRunning ? undefined : prevAssistantEntryId}
                     onEditContent={(content) => chatInputRef?.current?.insertIfEmpty(content)}
                     showTimestamp={showTimestamp}
-                    prevTimestamp={idx > 0 ? (messages[idx - 1] as import("@/lib/types").AgentMessage & { timestamp?: number }).timestamp : undefined}
+                    prevTimestamp={idx > 0 ? (renderMessages[idx - 1] as import("@/lib/types").AgentMessage & { timestamp?: number }).timestamp : undefined}
                     keywords={searchKeywords}
                     highlightEntryId={highlightEntryId}
-                    isSearchMatch={matchedEntryIds.has(entryIds[idx])}
+                    isSearchMatch={matchedEntryIds.has(renderEntryIds[idx])}
                     cwd={session?.cwd}
                     sessionId={session?.id}
                   />
@@ -681,7 +749,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
           </div>
         </div>
         <ChatMinimap
-          messages={messages}
+          messages={renderMessages}
           streamingMessage={streamState.streamingMessage}
           scrollContainer={scrollContainerRef}
           messageRefs={messageRefs}
@@ -701,6 +769,27 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          </Tooltip>
+        )}
+
+        {/* Replay toggle — opens the time-travel scrubber. Hidden while the
+            agent is running (replay must not coexist with a live stream). */}
+        {!replayOpen && !streamState.isStreaming && !agentRunning && messages.length > 0 && (
+          <Tooltip content={t("Replay")}>
+          <button
+            onClick={openReplay}
+            aria-label={t("Replay")}
+            className="absolute top-3 right-12 z-10 flex h-9 w-9 items-center justify-center rounded-full border shadow-lg transition-all duration-200 hover:scale-110"
+            style={{
+              background: "var(--bg-panel)",
+              borderColor: "var(--border)",
+              color: "var(--text-muted)",
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
             </svg>
           </button>
           </Tooltip>
