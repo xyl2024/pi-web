@@ -18,6 +18,7 @@ import { HttpPanel } from "./HttpPanel";
 import { JsonPanel } from "./JsonPanel";
 import { CanvasPanel } from "./CanvasPanel";
 import { DiffPanel } from "./DiffPanel";
+import { RssPanel } from "./RssPanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 
 const TODO_TAB_ID = "todo:global";
@@ -29,6 +30,7 @@ const HTTP_TAB_ID = "http:global";
 const JSON_TAB_ID = "json:global";
 const CANVAS_TAB_ID = "canvas:global";
 const DIFF_TAB_ID = "diff:global";
+const RSS_TAB_ID = "rss:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -670,6 +672,16 @@ export function AppShell() {
       return [{ kind: "diff", id: DIFF_TAB_ID, label: t("Diff") }, ...prev];
     });
     setActiveFileTabId(DIFF_TAB_ID);
+    setRightPanelState("normal");
+  }, [t]);
+
+  // Open the RSS panel — same pattern as translate / http / json / diff.
+  const handleOpenRssTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((tab) => tab.kind === "rss")) return prev;
+      return [{ kind: "rss", id: RSS_TAB_ID, label: t("RSS") }, ...prev];
+    });
+    setActiveFileTabId(RSS_TAB_ID);
     setRightPanelState("normal");
   }, [t]);
 
@@ -1366,6 +1378,8 @@ export function AppShell() {
             <CanvasPanel />
           ) : activeFileTab?.kind === "diff" ? (
             <DiffPanel />
+          ) : activeFileTab?.kind === "rss" ? (
+            <RssPanel />
           ) : (
             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
               {t("No file open")}
@@ -1548,6 +1562,27 @@ export function AppShell() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="8" height="16" rx="1.5" />
               <rect x="13" y="4" width="8" height="16" rx="1.5" />
+            </svg>
+          </button>
+        </Tooltip>
+        {/* Open RSS panel */}
+        <Tooltip content={t("RSS")}>
+          <button
+            onClick={handleOpenRssTab}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, padding: 0,
+              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+              color: activeFileTab?.kind === "rss" ? "var(--text)" : "var(--text-muted)",
+              cursor: "pointer", transition: "color 0.12s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "rss" ? "var(--text)" : "var(--text-muted)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="3.5" cy="12.5" r="1.2" fill="currentColor" stroke="none" />
+              <path d="M2 8a6 6 0 0 1 6 6" />
+              <path d="M2 4a10 10 0 0 1 10 10" />
             </svg>
           </button>
         </Tooltip>

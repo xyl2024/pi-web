@@ -17,5 +17,7 @@ export async function register(): Promise<void> {
     wechatBootstrap();
     const { bootstrap: schedulerBootstrap } = await import("@/lib/scheduler/startup");
     schedulerBootstrap();
+    const { bootstrap: rssBootstrap } = await import("@/lib/rss/startup");
+    rssBootstrap();
   }
 }

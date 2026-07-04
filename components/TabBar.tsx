@@ -15,7 +15,8 @@ export type Tab =
   | { kind: "http"; id: string; label: string }
   | { kind: "json"; id: string; label: string }
   | { kind: "canvas"; id: string; label: string }
-  | { kind: "diff"; id: string; label: string };
+  | { kind: "diff"; id: string; label: string }
+  | { kind: "rss"; id: string; label: string };
 
 interface Props {
   tabs: Tab[];
@@ -61,6 +62,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
             <CanvasTabIcon />
           ) : tab.kind === "diff" ? (
             <DiffTabIcon />
+          ) : tab.kind === "rss" ? (
+            <RssTabIcon />
           ) : (
             getFileIcon(tab.label, 13)
           );
@@ -231,6 +234,17 @@ function DiffTabIcon() {
       <line x1="7" y1="13" x2="7" y2="13" />
       <line x1="17" y1="13" x2="17" y2="13" />
       <line x1="17" y1="17" x2="17" y2="17" />
+    </svg>
+  );
+}
+
+function RssTabIcon() {
+  // Classic RSS glyph: dot at the bottom-left plus two concentric arcs.
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="3.5" cy="12.5" r="1.2" fill="currentColor" stroke="none" />
+      <path d="M2 8a6 6 0 0 1 6 6" />
+      <path d="M2 4a10 10 0 0 1 10 10" />
     </svg>
   );
 }
