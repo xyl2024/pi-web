@@ -616,7 +616,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                 justifyContent: "space-between",
                 gap: 12,
                 marginLeft: 16,
-                marginRight: 52,
+                marginRight: 16,
                 fontFamily: "var(--font-mono)",
               }}
             >
