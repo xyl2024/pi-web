@@ -287,8 +287,13 @@ export function FinanceCategoryManager({
             </div>
           )}
           {sortedRows.map((row) => {
-            const count =
-              categories.find((c) => c.name === row.originalName)?.count ?? 0;
+            const meta = categories.find((c) => c.name === row.originalName);
+            const count = meta?.count ?? 0;
+            // Orphan categories (used in transactions but never registered in
+            // the categories table) cannot be deleted — DELETE would 404
+            // because there's no row to remove. Disable the button and
+            // surface the constraint so users know how to clean up.
+            const isOrphan = row.originalName !== null && (meta?.createdAt ?? 0) === 0;
             const dirty = row.mode === "editing" || row.mode === "new";
             return (
               <div
@@ -340,9 +345,14 @@ export function FinanceCategoryManager({
                   <button
                     type="button"
                     onClick={() => void handleDeleteExisting(row)}
-                    aria-label={t("Delete")}
-                    title={t("Delete")}
-                    style={iconButtonStyle}
+                    aria-label={isOrphan ? t("Orphan category — cannot be deleted") : t("Delete")}
+                    title={isOrphan ? t("This category comes from existing transactions. Delete those transactions first, then remove the category.") : t("Delete")}
+                    disabled={isOrphan}
+                    style={{
+                      ...iconButtonStyle,
+                      opacity: isOrphan ? 0.35 : 1,
+                      cursor: isOrphan ? "not-allowed" : "pointer",
+                    }}
                   >
                     <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M3 4h10M6 4V2.5h4V4M5 4l1 9h4l1-9" />
