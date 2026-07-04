@@ -678,28 +678,13 @@ li.todo-task-item[data-checked="true"] > div {
   pointer-events: none;
 }
 
-/* @goujon/calendar-heatmap theme overrides — the package ships hard-coded
-   colors that don't adapt to our theme presets. Pin its classes to the
-   theme variables so GitHubHeatmap matches the rest of the UI. */
-text.month-name,
-text.calendar-heatmap-legend-text,
-text.day-initial {
-  fill: var(--text-dim);
-  font-family: var(--font-mono);
-}
-rect.day-cell {
+/* Self-built GitHub heatmap in components/GithubHeatmap.tsx. The hover/focus
+   outline is the only styling not already provided by inline SVG attributes. */
+.gh-cell {
   cursor: default;
-  rx: 2;
 }
-rect.day-cell:hover,
-rect.day-cell:focus,
-rect.day-cell:focus-visible {
+.gh-cell:hover,
+.gh-cell:focus-visible {
   stroke: var(--text);
   stroke-width: 1px;
-}
-.day-cell-tooltip {
-  background: var(--bg-panel);
-  color: var(--text);
-  border: 1px solid var(--border);
-  font-family: var(--font-mono);
 }
