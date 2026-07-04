@@ -42,7 +42,7 @@ interface Props {
  */
 export function MermaidBlock({ code, isStreaming }: Props) {
   const { t } = useI18n();
-  const { preset } = useTheme();
+  const { preset, isDark } = useTheme();
   const [lib, setLib] = useState<typeof BeautifulMermaid | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -215,11 +215,15 @@ export function MermaidBlock({ code, isStreaming }: Props) {
   return (
     <div
       style={{
-        marginTop: 4,
-        marginBottom: 4,
-        borderRadius: 6,
+        marginTop: 8,
+        marginBottom: 8,
+        borderRadius: 10,
         overflow: "hidden",
         border: "1px solid var(--border)",
+        background: "var(--bg)",
+        boxShadow: isDark
+          ? "0 6px 18px rgba(0,0,0,0.35)"
+          : "0 4px 14px rgba(0,0,0,0.08)",
       }}
     >
       <Header
@@ -324,22 +328,49 @@ function Header({
   onToggleView: () => void;
 }) {
   const { t } = useI18n();
+  const { isDark } = useTheme();
   return (
     <div
       style={{
-        padding: "3px 10px",
-        background: "var(--bg-panel)",
+        position: "relative",
+        minHeight: 32,
+        padding: "0 12px",
+        background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)",
         borderBottom: "1px solid var(--border)",
         fontSize: 11,
         color: "var(--text-dim)",
         display: "flex",
-        justifyContent: "space-between",
         alignItems: "center",
-        gap: 8,
+        gap: 10,
       }}
     >
-      <span>mermaid</span>
-      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+      {/* macOS traffic-light buttons (decorative) */}
+      <span
+        aria-hidden
+        style={{ display: "inline-flex", gap: 7, alignItems: "center" }}
+      >
+        <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#ff5f57", boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.15)" }} />
+        <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#febc2e", boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.15)" }} />
+        <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#28c840", boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.15)" }} />
+      </span>
+      <span
+        style={{
+          position: "absolute",
+          left: "50%",
+          transform: "translateX(-50%)",
+          fontSize: 11,
+          color: "var(--text-muted)",
+          fontFamily: "var(--font-sans)",
+          pointerEvents: "none",
+          maxWidth: "calc(100% - 240px)",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        mermaid
+      </span>
+      <div style={{ display: "flex", gap: 4, alignItems: "center", marginLeft: "auto" }}>
         <HeaderButton
           onClick={onExpand}
           disabled={!canExpand}
@@ -410,7 +441,7 @@ function HeaderButton({
         cursor: disabled ? "default" : "pointer",
         fontSize: 11,
         padding: "2px 6px",
-        borderRadius: 3,
+        borderRadius: 4,
         fontFamily: "var(--font-mono)",
         opacity: disabled ? 0.5 : 1,
       }}
