@@ -8,6 +8,8 @@ import { ChatWindow } from "./ChatWindow";
 import { FileViewer } from "./FileViewer";
 import { TabBar, type Tab } from "./TabBar";
 import { TodoPanel } from "./TodoPanel";
+import { NotesPanel } from "./NotesPanel";
+import { useNotes } from "@/hooks/useNotes";
 import { PlaywrightDashboardPanel } from "./PlaywrightDashboardPanel";
 import { CollectionPanel } from "./CollectionPanel";
 import { TranslatePanel } from "./TranslatePanel";
@@ -19,6 +21,7 @@ import { DiffPanel } from "./DiffPanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 
 const TODO_TAB_ID = "todo:global";
+const NOTES_TAB_ID = "notes:global";
 const FAVORITES_TAB_ID = "favorites:global";
 const TRANSLATE_TAB_ID = "translate:global";
 const TOOL_CALLS_TAB_ID = "toolCalls:global";
@@ -75,6 +78,7 @@ export function AppShell() {
   const theme = useTheme();
   const toast = useToast();
   const cm = useContextMenu();
+  const { addNote } = useNotes();
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
   // When user clicks +, we only store the cwd — no fake session id
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
@@ -176,58 +180,6 @@ export function AppShell() {
   const toggleTopPanel = useCallback((panel: "branches" | "system" | "context" | "tools" | "dashboard") => {
     setActiveTopPanel((cur) => cur === panel ? null : panel);
   }, []);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      const active = document.activeElement;
-      const isEditable =
-        active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement ||
-        (active instanceof HTMLElement && active.isContentEditable);
-      // Ctrl+B — toggle left sidebar (skipped when an editor is focused)
-      if (mod && e.key === "b" && !e.altKey) {
-        if (!isEditable) {
-          e.preventDefault();
-          setSidebarOpen((v) => !v);
-        }
-        return;
-      }
-      // Ctrl+Alt+B — toggle right sidebar
-      if (mod && e.altKey && e.key === "b") {
-        e.preventDefault();
-        setRightPanelState((v) => v === "closed" ? "normal" : "closed");
-        return;
-      }
-      // Ctrl+K — command palette (skipped when an editor is focused)
-      if (mod && e.key === "k") {
-        if (!isEditable) {
-          e.preventDefault();
-          if (paletteOpen) {
-            setPaletteOpen(false);
-          } else {
-            openPalette();
-          }
-        }
-        return;
-      }
-      // Space — focus chat input when not already focused
-      if (
-        e.key === " " &&
-        !e.ctrlKey && !e.metaKey && !e.altKey &&
-        !paletteOpen &&
-        chatInputRef.current
-      ) {
-        if (!isEditable) {
-          e.preventDefault();
-          chatInputRef.current.focus();
-        }
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [paletteOpen, openPalette]);
 
   useEffect(() => {
     if (!activeTopPanel || !topBarRef.current) return;
@@ -625,6 +577,82 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [t]);
 
+  // Open the notes tab — same pattern as todos. Default is NOT to auto-open
+  // notes; user has to click the button or hit ⌘N (handled below).
+  const handleOpenNotesTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((t) => t.kind === "notes")) return prev;
+      return [{ kind: "notes", id: NOTES_TAB_ID, label: t("Notes") }, ...prev];
+    });
+    setActiveFileTabId(NOTES_TAB_ID);
+    setRightPanelState("normal");
+  }, [t]);
+
+  // Global keyboard shortcuts. Registered here (not earlier in the
+  // component) so we can close over handleOpenNotesTab and addNote.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      const active = document.activeElement;
+      const isEditable =
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        (active instanceof HTMLElement && active.isContentEditable);
+      // Ctrl+B — toggle left sidebar (skipped when an editor is focused)
+      if (mod && e.key === "b" && !e.altKey) {
+        if (!isEditable) {
+          e.preventDefault();
+          setSidebarOpen((v) => !v);
+        }
+        return;
+      }
+      // Ctrl+Alt+B — toggle right sidebar
+      if (mod && e.altKey && e.key === "b") {
+        e.preventDefault();
+        setRightPanelState((v) => v === "closed" ? "normal" : "closed");
+        return;
+      }
+      // Ctrl+K — command palette (skipped when an editor is focused)
+      if (mod && e.key === "k") {
+        if (!isEditable) {
+          e.preventDefault();
+          if (paletteOpen) {
+            setPaletteOpen(false);
+          } else {
+            openPalette();
+          }
+        }
+        return;
+      }
+      // Ctrl+N — open notes panel and create a blank note. Skipped when an
+      // editor is focused so the user can type a literal "n" without losing
+      // focus. The new note's auto-select happens inside NotesPanel via a
+      // count-based useEffect.
+      if (mod && !e.altKey && !e.shiftKey && e.key === "n") {
+        if (!isEditable) {
+          e.preventDefault();
+          handleOpenNotesTab();
+          void addNote();
+        }
+        return;
+      }
+      // Space — focus chat input when not already focused
+      if (
+        e.key === " " &&
+        !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !paletteOpen &&
+        chatInputRef.current
+      ) {
+        if (!isEditable) {
+          e.preventDefault();
+          chatInputRef.current.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [paletteOpen, openPalette, handleOpenNotesTab, addNote]);
+
   // Open the canvas tab — single global whiteboard, persisted in localStorage.
   const handleOpenCanvasTab = useCallback(() => {
     setFileTabs((prev) => {
@@ -745,6 +773,7 @@ export function AppShell() {
     openPrompts: () => setPromptsConfigOpen(true),
     openPayloads: () => { if (selectedSession?.id) setPayloadsOpen(true); },
     openTodosTab: handleOpenTodoTab,
+    openNotesTab: handleOpenNotesTab,
     openFavoritesTab: handleOpenFavoritesTab,
     openCanvasTab: handleOpenCanvasTab,
     openTranslateTab: handleOpenTranslateTab,
@@ -760,7 +789,7 @@ export function AppShell() {
     hasCwd: !!(activeCwd ?? selectedSession?.cwd ?? newSessionCwd),
   }), [
     theme.setPreset, setLocale, handleSlashNew,
-    handleOpenTodoTab, handleOpenFavoritesTab, handleOpenCanvasTab,
+    handleOpenTodoTab, handleOpenNotesTab, handleOpenFavoritesTab, handleOpenCanvasTab,
     handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenHttpTab, handleOpenJsonTab,
     handleOpenDiffTab,
     toggleFocus, agentControls,
@@ -1315,6 +1344,8 @@ export function AppShell() {
         <div style={{ flex: 1, overflow: "hidden" }}>
           {activeFileTab?.kind === "todo" ? (
             <TodoPanel />
+          ) : activeFileTab?.kind === "notes" ? (
+            <NotesPanel />
           ) : activeFileTab?.kind === "favorites" ? (
             <CollectionPanel
               favoriteIds={favoriteIds}
@@ -1388,6 +1419,31 @@ export function AppShell() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <polyline points="8 12 11 15 17 9" />
+          </svg>
+        </button>
+        </Tooltip>
+        {/* Open notes — always visible */}
+        <Tooltip content={t("Open notes")}>
+        <button
+          onClick={handleOpenNotesTab}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 36, height: 36, padding: 0,
+            background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+            color: activeFileTab?.kind === "notes" ? "var(--text)" : "var(--text-muted)",
+            cursor: "pointer", transition: "color 0.12s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "notes" ? "var(--text)" : "var(--text-muted)"; }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 3.5h10.5L19 7v12.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z" />
+            <path d="M15.5 3.5V7H19" />
+            <line x1="3.5" y1="9" x2="3" y2="9" />
+            <line x1="3.5" y1="12" x2="3" y2="12" />
+            <line x1="3.5" y1="15" x2="3" y2="15" />
+            <line x1="7" y1="11.5" x2="16" y2="11.5" />
+            <line x1="7" y1="14.5" x2="16" y2="14.5" />
           </svg>
         </button>
         </Tooltip>

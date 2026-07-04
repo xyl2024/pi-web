@@ -71,6 +71,7 @@ const BookIcon = () => I(<><path d="M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.
 const RadioIcon = () => I(<><circle cx="12" cy="12" r="2" /><path d="M16.24 7.76a6 6 0 0 1 0 8.49" /><path d="M7.76 16.24a6 6 0 0 1 0-8.49" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /><path d="M4.93 19.07a10 10 0 0 1 0-14.14" /></>);
 const LangIcon = () => I(<><path d="M5 8h14" /><path d="M8 5h7" /><path d="M11 12c0 4-3 7-6 7" /><path d="M11 12c0 4 3 7 6 7" /><path d="M9 19l3-7 3 7" /></>);
 const DiffIcon = () => I(<><rect x="3" y="4" width="8" height="16" rx="1.5" /><rect x="13" y="4" width="8" height="16" rx="1.5" /><line x1="7" y1="9" x2="7" y2="9" /><line x1="17" y1="13" x2="17" y2="13" /></>);
+const NoteIcon = () => I(<><path d="M5 3.5h10.5L19 7v12.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z" /><path d="M15.5 3.5V7H19" /><line x1="7" y1="11.5" x2="16" y2="11.5" /><line x1="7" y1="14.5" x2="16" y2="14.5" /></>);
 
 // Theme icons picked from PRESET_IS_DARK to give the swatch a hint.
 const ThemeIcon = ({ preset }: { preset: ThemePreset }) => {
@@ -136,6 +137,7 @@ export interface CommandContext {
 
   // Right-panel tabs
   openTodosTab: () => void;
+  openNotesTab: () => void;
   openFavoritesTab: () => void;
   openCanvasTab: () => void;
   openTranslateTab: () => void;
@@ -342,6 +344,14 @@ export function buildCommands(ctx: CommandContext, opts: BuildOptions): Command[
     keywords: ["todo", "task", "待办", "任务"],
     icon: <CheckIcon />,
     run: () => ctx.openTodosTab(),
+  });
+  cmds.push({
+    id: "panel.notes",
+    title: t("Open notes"),
+    group: "Panel",
+    keywords: ["note", "memo", "笔记", "备忘"],
+    icon: <NoteIcon />,
+    run: () => ctx.openNotesTab(),
   });
   cmds.push({
     id: "panel.canvas",
