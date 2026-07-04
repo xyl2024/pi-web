@@ -19,6 +19,7 @@ import { JsonPanel } from "./JsonPanel";
 import { CanvasPanel } from "./CanvasPanel";
 import { DiffPanel } from "./DiffPanel";
 import { RssPanel } from "./RssPanel";
+import { FinancePanel } from "./FinancePanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 
 const TODO_TAB_ID = "todo:global";
@@ -31,6 +32,7 @@ const JSON_TAB_ID = "json:global";
 const CANVAS_TAB_ID = "canvas:global";
 const DIFF_TAB_ID = "diff:global";
 const RSS_TAB_ID = "rss:global";
+const FINANCE_TAB_ID = "finance:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -685,6 +687,16 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [t]);
 
+  // Open the Finance (daily-accounting) panel — same pattern.
+  const handleOpenFinanceTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((tab) => tab.kind === "finance")) return prev;
+      return [{ kind: "finance", id: FINANCE_TAB_ID, label: t("Finance") }, ...prev];
+    });
+    setActiveFileTabId(FINANCE_TAB_ID);
+    setRightPanelState("normal");
+  }, [t]);
+
   const handleCloseFileTab = useCallback((tabId: string) => {
     setFileTabs((prev) => {
       const next = prev.filter((t) => t.id !== tabId);
@@ -793,6 +805,7 @@ export function AppShell() {
     openHttpTab: handleOpenHttpTab,
     openJsonTab: handleOpenJsonTab,
     openDiffTab: handleOpenDiffTab,
+    openFinanceTab: handleOpenFinanceTab,
     toggleSidebar: () => setSidebarOpen((v) => !v),
     toggleRightPanel: () => setRightPanelState((v) => v === "closed" ? "normal" : "closed"),
     toggleFocus,
@@ -804,6 +817,7 @@ export function AppShell() {
     handleOpenTodoTab, handleOpenNotesTab, handleOpenFavoritesTab, handleOpenCanvasTab,
     handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenHttpTab, handleOpenJsonTab,
     handleOpenDiffTab,
+    handleOpenFinanceTab,
     toggleFocus, agentControls,
     selectedSession, newSessionCwd, activeCwd,
   ]);
@@ -1380,6 +1394,8 @@ export function AppShell() {
             <DiffPanel />
           ) : activeFileTab?.kind === "rss" ? (
             <RssPanel />
+          ) : activeFileTab?.kind === "finance" ? (
+            <FinancePanel />
           ) : (
             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
               {t("No file open")}
@@ -1583,6 +1599,27 @@ export function AppShell() {
               <circle cx="3.5" cy="12.5" r="1.2" fill="currentColor" stroke="none" />
               <path d="M2 8a6 6 0 0 1 6 6" />
               <path d="M2 4a10 10 0 0 1 10 10" />
+            </svg>
+          </button>
+        </Tooltip>
+        {/* Open Finance (daily-accounting) panel */}
+        <Tooltip content={t("Finance")}>
+          <button
+            onClick={handleOpenFinanceTab}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, padding: 0,
+              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+              color: activeFileTab?.kind === "finance" ? "var(--text)" : "var(--text-muted)",
+              cursor: "pointer", transition: "color 0.12s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "finance" ? "var(--text)" : "var(--text-muted)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="4.5" width="12" height="9" rx="1.5" />
+              <path d="M2 7h12" />
+              <circle cx="11.5" cy="10.5" r="0.8" fill="currentColor" stroke="none" />
             </svg>
           </button>
         </Tooltip>

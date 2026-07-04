@@ -16,7 +16,8 @@ export type Tab =
   | { kind: "json"; id: string; label: string }
   | { kind: "canvas"; id: string; label: string }
   | { kind: "diff"; id: string; label: string }
-  | { kind: "rss"; id: string; label: string };
+  | { kind: "rss"; id: string; label: string }
+  | { kind: "finance"; id: string; label: string };
 
 interface Props {
   tabs: Tab[];
@@ -64,6 +65,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
             <DiffTabIcon />
           ) : tab.kind === "rss" ? (
             <RssTabIcon />
+          ) : tab.kind === "finance" ? (
+            <FinanceTabIcon />
           ) : (
             getFileIcon(tab.label, 13)
           );
@@ -245,6 +248,17 @@ function RssTabIcon() {
       <circle cx="3.5" cy="12.5" r="1.2" fill="currentColor" stroke="none" />
       <path d="M2 8a6 6 0 0 1 6 6" />
       <path d="M2 4a10 10 0 0 1 10 10" />
+    </svg>
+  );
+}
+
+function FinanceTabIcon() {
+  // Wallet silhouette with a ¥ coin slot — reads as "money / accounting".
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4.5" width="12" height="9" rx="1.5" />
+      <path d="M2 7h12" />
+      <circle cx="11.5" cy="10.5" r="0.8" fill="currentColor" stroke="none" />
     </svg>
   );
 }
