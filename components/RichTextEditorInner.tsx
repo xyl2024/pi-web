@@ -17,6 +17,7 @@ import { BubbleMenu } from "@tiptap/react/menus";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "@/components/Toast";
 import { uploadTodoImages, extractImageFiles, extractClipboardImageFiles } from "@/lib/todo-image-upload";
+import type { ImageUploader } from "@/components/RichTextEditor";
 import { buildDescriptionSanitizeConfig } from "@/lib/description-sanitize";
 import { TextColorPicker, TextColorToolbarButton, applyEditorColor } from "@/components/TextColorPicker";
 
@@ -30,6 +31,7 @@ interface Props {
   placeholder?: string;
   minHeight?: number;
   className?: string;
+  uploadImages?: ImageUploader;
 }
 
 // Lowlight with the common grammar set + an explicit empty "mermaid" entry so
@@ -60,10 +62,15 @@ export function RichTextEditorInner({
   placeholder,
   minHeight = 240,
   className,
+  uploadImages,
 }: Props) {
   const { t } = useI18n();
   const { show: showToast } = useToast();
   const editorRef = useRef<Editor | null>(null);
+  // Caller-supplied uploader wins; otherwise the editor falls back to the
+  // todo-images endpoint so existing callers (TodoPanel) keep working.
+  const uploaderRef = useRef<ImageUploader>(uploadImages ?? uploadTodoImages);
+  uploaderRef.current = uploadImages ?? uploadTodoImages;
 
   // Capture the seed at mount so the unmount-save diff isn't fooled by a
   // later defaultValue prop change (defensive — in practice defaultValue is
@@ -165,7 +172,7 @@ export function RichTextEditorInner({
         event.preventDefault();
         const editor = editorRef.current;
         if (!editor) return true;
-        void uploadAndInsert(editor, files, showToast, t);
+        void uploadAndInsert(editor, files, showToast, t, uploaderRef.current);
         return true;
       },
       handleDrop(_view, event, _slice, moved) {
@@ -176,7 +183,7 @@ export function RichTextEditorInner({
         const editor = editorRef.current;
         if (!editor) return true;
         const coords = { left: (event as DragEvent).clientX, top: (event as DragEvent).clientY };
-        void uploadAndInsert(editor, files, showToast, t, coords);
+        void uploadAndInsert(editor, files, showToast, t, uploaderRef.current, coords);
         return true;
       },
     },
@@ -612,10 +619,11 @@ async function uploadAndInsert(
   files: File[],
   showToast: (input: { kind: "error"; message: string }) => void,
   t: TFunction,
+  uploader: ImageUploader,
   coords?: { left: number; top: number },
 ): Promise<void> {
   if (files.length === 0) return;
-  const { urls, errors } = await uploadTodoImages(files);
+  const { urls, errors } = await uploader(files);
   for (const err of errors) {
     showToast({ kind: "error", message: `${t("Failed to upload image")}: ${err}` });
   }

@@ -7,6 +7,10 @@
 import type { ComponentType } from "react";
 import dynamic from "next/dynamic";
 
+export type ImageUploader = (
+  files: File[],
+) => Promise<{ urls: string[]; errors: string[] }>;
+
 export interface RichTextEditorProps {
   /** Initial HTML. Sanitized on save. */
   defaultValue: string;
@@ -20,6 +24,10 @@ export interface RichTextEditorProps {
   placeholder?: string;
   minHeight?: number;
   className?: string;
+  /** Override the image upload endpoint. Defaults to the todo-images uploader
+   *  so existing callers (TodoPanel) keep working. NotesPanel passes in the
+   *  note-images uploader. */
+  uploadImages?: ImageUploader;
 }
 
 export const RichTextEditor = dynamic(
