@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
-import parseHtml, { type DOMNode, type Element, type HTMLReactParserOptions } from "html-react-parser";
+import parseHtml, { domToReact, type DOMNode, type Element, type HTMLReactParserOptions } from "html-react-parser";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -688,6 +688,19 @@ function ReaderView({ feed, article, onBack, t }: ReaderViewProps): ReactElement
     replace: (node: DOMNode) => {
       if (node.type !== "tag") return undefined;
       const el = node as Element;
+      if (el.name === "a") {
+        // Force every link to open in a new tab so article navigation
+        // never replaces the Pi Web session in the current tab.
+        return (
+          <a
+            href={el.attribs?.href}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {domToReact(el.children as DOMNode[])}
+          </a>
+        );
+      }
       if (el.name !== "img") return undefined;
       const src = el.attribs?.src;
       if (!src) return undefined;
