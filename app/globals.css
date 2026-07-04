@@ -382,6 +382,61 @@ span.linenumber {
   pointer-events: none;
 }
 
+/* ── GitHub heatmap piano-roll animation ────────────────────── */
+/* Active cells (count > 0) bounce, pulse with the theme accent, and emit a
+   small note. Inactive cells stay static. Driven by inline CSS vars
+   (--gh-delay / --gh-cycle) set per cell by the React component so the whole
+   180-day history plays back as a single looping sequence. */
+
+.gh-cell {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.gh-cell.gh-active {
+  animation:
+    gh-pop var(--gh-cycle, 4000ms) infinite,
+    gh-glow var(--gh-cycle, 4000ms) infinite;
+  animation-delay: var(--gh-delay, 0ms);
+}
+
+.gh-note {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gh-note var(--gh-cycle, 4000ms) infinite;
+  animation-delay: var(--gh-delay, 0ms);
+  pointer-events: none;
+}
+
+@keyframes gh-pop {
+  0%, 30%, 100% { transform: scale(1); }
+  8%           { transform: scale(1.4); }
+  20%          { transform: scale(0.96); }
+}
+
+@keyframes gh-glow {
+  0%, 30%, 100% {
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+  }
+  8% {
+    filter: brightness(1.6) drop-shadow(0 0 4px var(--accent));
+  }
+}
+
+@keyframes gh-note {
+  0%   { opacity: 0; transform: translateY(0)     scale(1); }
+  8%   { opacity: 1; transform: translateY(-2px)  scale(1.4); }
+  30%  { opacity: 0; transform: translateY(-10px) scale(0.6); }
+  100% { opacity: 0; transform: translateY(-10px) scale(0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-cell.gh-active,
+  .gh-note {
+    animation: none;
+  }
+}
+
 
 /* Desktop sidebar: width driven by inline style (drag-resize) */
 @media (min-width: 641px) {

@@ -35,12 +35,22 @@ const BOTTOM_PAD = 4;
 const WINDOW_DAYS = 180;
 const MAX_WIDTH = 690;
 
+// Piano-roll animation timing. Each active cell gets a CSS animation-delay
+// equal to its position in the time-ordered *active* sequence (not the cells
+// array index — inactive cells must not consume stagger slots).
+const STAGGER_MS = 35;
+const ANIM_DURATION_MS = 900;
+
 interface Cell {
   x: number;
   y: number;
   date: Date;
   count: number;
   level: number;
+  /** 0-based index within the active subset, or -1 for inactive cells. Drives
+   *  the per-cell CSS animation-delay so the keyframes hit their bounce peak
+   *  exactly when each cell's stagger window opens. */
+  playIndex: number;
 }
 
 interface MonthLabel {
@@ -53,6 +63,7 @@ interface Grid {
   monthLabels: MonthLabel[];
   svgW: number;
   svgH: number;
+  activeCount: number;
 }
 
 /** Format a Date as local "YYYY-MM-DD" without going through toISOString
@@ -113,6 +124,12 @@ export function GithubHeatmap({ username }: Props) {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // playOrder[i] = the random 0..N-1 stagger slot assigned to cells[i] when
+  // it is active; -1 for inactive cells. playVersion increments every cycle
+  // so rect keys change → React remounts each <rect> → CSS re-reads
+  // --gh-delay and restarts the bounce animation.
+  const [playOrder, setPlayOrder] = useState<number[]>([]);
+  const [playVersion, setPlayVersion] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -165,6 +182,7 @@ export function GithubHeatmap({ username }: Props) {
     const cells: Cell[] = [];
     const monthLabels: MonthLabel[] = [];
     let lastMonth = -1;
+    let activeIndex = 0;
 
     for (let col = 0; col < numCols; col++) {
       const colStart = addDays(gridStart, col * 7);
@@ -185,20 +203,70 @@ export function GithubHeatmap({ username }: Props) {
         const inWindow =
           date.getTime() >= windowStart.getTime() &&
           date.getTime() <= windowEnd.getTime();
+        const count = inWindow ? entry.count : 0;
+        // Only count toward the active subset if this cell has real activity.
+        // Using `cells.length` here would burn stagger slots on inactive slots
+        // and push the first active cell's bounce past the keyframes window.
+        const playIndex = count > 0 ? activeIndex++ : -1;
         cells.push({
           x: LEFT_PAD + col * CELL_STEP,
           y: TOP_PAD + row * CELL_STEP,
           date,
-          count: inWindow ? entry.count : 0,
+          count,
           level: inWindow ? entry.level : 0,
+          playIndex,
         });
       }
     }
 
     const svgW = LEFT_PAD + numCols * CELL_STEP - CELL_PADDING + RIGHT_PAD;
     const svgH = TOP_PAD + 7 * CELL_STEP - CELL_PADDING + BOTTOM_PAD;
-    return { cells, monthLabels, svgW, svgH };
+    return { cells, monthLabels, svgW, svgH, activeCount: activeIndex };
   }, [data, dateLocale, weekStartsOn]);
+
+  // Total cycle = stagger budget for every active cell + the per-cell animation
+  // duration, so the last active cell finishes its bounce exactly as the first
+  // cell restarts. Inactive cells don't get a CSS var and stay static.
+  const activeCount = grid?.activeCount ?? 0;
+  const totalCycleMs = activeCount * STAGGER_MS + ANIM_DURATION_MS;
+
+  // (Re-)seed playOrder whenever the grid changes (first load, locale
+  // switch). Mirrors cell.playIndex so each active cell starts in its
+  // natural time-order slot on the very first frame, even before the first
+  // setInterval tick fires.
+  useEffect(() => {
+    if (!grid) {
+      setPlayOrder([]);
+      return;
+    }
+    setPlayOrder(grid.cells.map((c) => c.playIndex));
+  }, [grid]);
+
+  // Re-shuffle the play order every full cycle so the bounce order is random
+  // across rounds. Bumping playVersion forces rect remount → CSS re-reads
+  // --gh-delay → animation restarts from frame 0 with the new ordering.
+  useEffect(() => {
+    if (!grid || activeCount === 0) return;
+    const id = setInterval(() => {
+      setPlayOrder((prev) => {
+        if (prev.length === 0) return prev;
+        const active = prev.filter((x) => x >= 0);
+        // Fisher-Yates shuffle of the active stagger slots.
+        for (let i = active.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [active[i], active[j]] = [active[j], active[i]];
+        }
+        const next = [...prev];
+        let ai = 0;
+        for (let k = 0; k < next.length; k++) {
+          if (next[k] >= 0) next[k] = active[ai++];
+        }
+        return next;
+      });
+      setPlayVersion((v) => v + 1);
+    }, totalCycleMs);
+    return () => clearInterval(id);
+  }, [grid, activeCount, totalCycleMs]);
 
   const tooltipFormatter = useCallback(
     (date: Date, count: number): string => {
@@ -262,22 +330,48 @@ export function GithubHeatmap({ username }: Props) {
               {m.label}
             </text>
           ))}
-          {grid.cells.map((c, i) => (
-            <rect
-              key={`c-${i}`}
-              className="gh-cell"
-              x={c.x}
-              y={c.y}
-              width={CELL_SIZE}
-              height={CELL_SIZE}
-              rx={2}
-              fill={palette[c.level] ?? palette[0]}
-              role="img"
-              aria-label={tooltipFormatter(c.date, c.count)}
-            >
-              <title>{tooltipFormatter(c.date, c.count)}</title>
-            </rect>
-          ))}
+          {grid.cells.map((c, i) => {
+            const active = c.count > 0;
+            // Use the randomized playOrder slot rather than the time-ordered
+            // cell.playIndex — this is what makes each round's bounce order
+            // random. Fallback to c.playIndex during the first render before
+            // the grid → playOrder sync useEffect has run.
+            const playIndex = active ? (playOrder[i] ?? c.playIndex) : -1;
+            return (
+              <rect
+                key={`c-${i}-${playVersion}`}
+                className={active ? "gh-cell gh-active" : "gh-cell"}
+                style={
+                  active
+                    ? ({
+                        "--gh-delay": `${playIndex * STAGGER_MS}ms`,
+                        "--gh-cycle": `${totalCycleMs}ms`,
+                      } as React.CSSProperties)
+                    : undefined
+                }
+                x={c.x}
+                y={c.y}
+                width={CELL_SIZE}
+                height={CELL_SIZE}
+                rx={2}
+                fill={palette[c.level] ?? palette[0]}
+                role="img"
+                aria-label={tooltipFormatter(c.date, c.count)}
+              >
+                <title>{tooltipFormatter(c.date, c.count)}</title>
+                {active && (
+                  <circle
+                    key={`note-${i}-${playVersion}`}
+                    className="gh-note"
+                    cx={c.x + CELL_SIZE / 2}
+                    cy={c.y + CELL_SIZE / 2}
+                    r={1.5}
+                    fill="var(--accent)"
+                  />
+                )}
+              </rect>
+            );
+          })}
         </svg>
       )}
 
