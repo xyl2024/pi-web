@@ -17,12 +17,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
-import parseHtml from "html-react-parser";
+import parseHtml, { type DOMNode, type Element, type HTMLReactParserOptions } from "html-react-parser";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useRss } from "@/hooks/useRss";
 import { sanitizeRssHtml } from "@/lib/rss-sanitize";
+import { ImageLightbox, extractImagesFromHtml, type ImageItem } from "@/components/ImageLightbox";
 import type { RssArticle, RssFeed } from "@/lib/rss-schema";
 
 // ---------------------------------------------------------------------------
@@ -673,6 +674,42 @@ function ReaderView({ feed, article, onBack, t }: ReaderViewProps): ReactElement
     article?.contentHtml,
   ]);
 
+  // Pull every <img> out of the sanitized HTML so the user can open any
+  // one in the full-screen lightbox and navigate prev/next within the
+  // article's gallery. DOMParser is browser-only, so this runs at render
+  // time on the client.
+  const images = useMemo<ImageItem[]>(
+    () => (safeHtml ? extractImagesFromHtml(safeHtml) : []),
+    [safeHtml],
+  );
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const parseOptions = useMemo<HTMLReactParserOptions>(() => ({
+    replace: (node: DOMNode) => {
+      if (node.type !== "tag") return undefined;
+      const el = node as Element;
+      if (el.name !== "img") return undefined;
+      const src = el.attribs?.src;
+      if (!src) return undefined;
+      const idx = images.findIndex((it) => it.src === src);
+      if (idx === -1) return undefined;
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={el.attribs?.alt ?? ""}
+          loading="lazy"
+          style={{ cursor: "zoom-in" }}
+          onClick={(e: React.MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setLightboxIndex(idx);
+          }}
+        />
+      );
+    },
+  }), [images]);
+
   if (!article) {
     return <div style={emptyStyle}>{t("Article not found")}</div>;
   }
@@ -725,8 +762,16 @@ function ReaderView({ feed, article, onBack, t }: ReaderViewProps): ReactElement
         className="rss-reader-body"
         style={{ color: "var(--text)" }}
       >
-        {safeHtml ? parseHtml(safeHtml) : null}
+        {safeHtml ? parseHtml(safeHtml, parseOptions) : null}
       </div>
+      {lightboxIndex !== null && images.length > 0 && (
+        <ImageLightbox
+          images={images}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+        />
+      )}
     </div>
   );
 }
