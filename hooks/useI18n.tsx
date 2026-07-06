@@ -887,6 +887,7 @@ const ZH_TRANSLATIONS = {
   "Amount and details are required (# for category)": "金额和备注不能为空（输入 # 选择分类）",
   "# to pick a category": "输入 # 选择分类",
   "Details, # for category": "备注（输入 # 选择分类）",
+  "No matching categories": "没有匹配的分类",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

@@ -105,7 +105,7 @@ export function FinanceEntryModal({
     if (!activeToken) return [];
     const q = activeToken.query.toLowerCase();
     return FINANCE_PRESET_CATEGORIES
-      .filter((name) => name.toLowerCase().startsWith(q))
+      .filter((name) => name.toLowerCase().includes(q))
       .map((name) => ({ name, count: countsByName.get(name) ?? 0 }));
   }, [activeToken, countsByName]);
 
@@ -314,72 +314,78 @@ export function FinanceEntryModal({
           required
           hint={t("# to pick a category")}
         >
-          <div style={{ position: "relative" }}>
-            <textarea
-              ref={detailsRef}
-              value={details}
-              onChange={(e) => {
-                setDetails(e.target.value);
-                setSelectionStart(e.target.selectionStart ?? e.target.value.length);
-              }}
-              onSelect={(e) => {
-                setSelectionStart(e.currentTarget.selectionStart ?? 0);
-              }}
-              onClick={(e) => {
-                setSelectionStart(e.currentTarget.selectionStart ?? 0);
-              }}
-              onKeyUp={(e) => {
-                setSelectionStart(e.currentTarget.selectionStart ?? 0);
-              }}
-              placeholder={t("What was this for?")}
-              rows={2}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  if (dropdownOpen) {
-                    e.preventDefault();
-                    const item = dropdownItems[activeIndex];
-                    if (item) commitCategory(item.name);
-                  }
-                  // else: let the default submit behavior fire
-                } else if (e.key === "Escape") {
-                  if (dropdownOpen) {
-                    e.preventDefault();
-                    setDropdownDismissed(true);
-                  }
-                } else if (e.key === "ArrowDown" && dropdownOpen) {
-                  e.preventDefault();
-                  setActiveIndex((i) => (i + 1) % dropdownItems.length);
-                } else if (e.key === "ArrowUp" && dropdownOpen) {
-                  e.preventDefault();
-                  setActiveIndex(
-                    (i) => (i - 1 + dropdownItems.length) % dropdownItems.length,
-                  );
-                } else if (e.key === "Tab" && dropdownOpen) {
+          <textarea
+            ref={detailsRef}
+            value={details}
+            onChange={(e) => {
+              setDetails(e.target.value);
+              setSelectionStart(e.target.selectionStart ?? e.target.value.length);
+            }}
+            onSelect={(e) => {
+              setSelectionStart(e.currentTarget.selectionStart ?? 0);
+            }}
+            onClick={(e) => {
+              setSelectionStart(e.currentTarget.selectionStart ?? 0);
+            }}
+            onKeyUp={(e) => {
+              setSelectionStart(e.currentTarget.selectionStart ?? 0);
+            }}
+            placeholder={t("What was this for?")}
+            rows={2}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                if (dropdownOpen) {
                   e.preventDefault();
                   const item = dropdownItems[activeIndex];
                   if (item) commitCategory(item.name);
                 }
+                // else: let the default submit behavior fire
+              } else if (e.key === " " && dropdownOpen) {
+                // Space selects the highlighted category when the popover
+                // is open. Without this, space inserts whitespace and
+                // closes the token (which is the wrong intent here).
+                e.preventDefault();
+                const item = dropdownItems[activeIndex];
+                if (item) commitCategory(item.name);
+              } else if (e.key === "Escape") {
+                if (dropdownOpen) {
+                  e.preventDefault();
+                  setDropdownDismissed(true);
+                }
+              } else if (e.key === "ArrowDown" && dropdownOpen) {
+                e.preventDefault();
+                setActiveIndex((i) => (i + 1) % dropdownItems.length);
+              } else if (e.key === "ArrowUp" && dropdownOpen) {
+                e.preventDefault();
+                setActiveIndex(
+                  (i) => (i - 1 + dropdownItems.length) % dropdownItems.length,
+                );
+              } else if (e.key === "Tab" && dropdownOpen) {
+                e.preventDefault();
+                const item = dropdownItems[activeIndex];
+                if (item) commitCategory(item.name);
+              }
+            }}
+            style={{
+              ...inputStyle,
+              resize: "vertical",
+              minHeight: 40,
+              fontFamily: "var(--font-sans)",
+            }}
+          />
+          {dropdownOpen && (
+            <FinanceCategoryPopover
+              anchorRef={detailsRef}
+              items={dropdownItems}
+              activeIndex={activeIndex}
+              onHover={setActiveIndex}
+              onSelect={(i) => {
+                const item = dropdownItems[i];
+                if (item) commitCategory(item.name);
               }}
-              style={{
-                ...inputStyle,
-                resize: "vertical",
-                minHeight: 40,
-                fontFamily: "var(--font-sans)",
-              }}
+              onDismiss={() => setDropdownDismissed(true)}
             />
-            {dropdownOpen && (
-              <FinanceCategoryPopover
-                items={dropdownItems}
-                activeIndex={activeIndex}
-                onHover={setActiveIndex}
-                onSelect={(i) => {
-                  const item = dropdownItems[i];
-                  if (item) commitCategory(item.name);
-                }}
-                onMouseDownOutside={() => setDropdownDismissed(true)}
-              />
-            )}
-          </div>
+          )}
         </Field>
 
         {submitError && (

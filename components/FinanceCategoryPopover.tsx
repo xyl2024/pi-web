@@ -2,14 +2,19 @@
 
 /**
  * Suggestion list for the in-progress `#<category>` token inside a Finance
- * details input. Lists preset categories whose names contain the current
- * query, with keyboard and mouse nav owned by the parent (so the input
- * keeps focus and cursor-placement authority). Mirrors TodoPanel's
- * TagPickerPopover in shape, but categories are preset-only — there is no
- * "Create new" row.
+ * details input. Renders into `document.body` via a portal so it escapes
+ * any parent that might clip floating UI (the right-side panel stack in
+ * AppShell commonly sets `overflow: hidden`). The popover anchors itself to
+ * the input element via `getBoundingClientRect()` and tracks scroll/resize
+ * so it stays glued to the right edge of the field even when the page moves.
+ *
+ * The list is preset-only — there is no "Create new" row because the
+ * Finance feature no longer allows user-defined categories.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { useI18n } from "@/hooks/useI18n";
 
 export interface FinanceCategoryPopoverItem {
   name: string;
@@ -17,94 +22,160 @@ export interface FinanceCategoryPopoverItem {
 }
 
 interface FinanceCategoryPopoverProps {
+  /** The input element the popover is anchored to (textarea or input). */
+  anchorRef: RefObject<HTMLElement | null>;
   items: FinanceCategoryPopoverItem[];
   activeIndex: number;
   onHover: (index: number) => void;
   onSelect: (index: number) => void;
-  onMouseDownOutside: () => void;
+  /** Click outside / Escape — parent toggles the open state. */
+  onDismiss: () => void;
+}
+
+interface PopoverPos {
+  top: number;
+  left: number;
+  width: number;
 }
 
 export function FinanceCategoryPopover({
+  anchorRef,
   items,
   activeIndex,
   onHover,
   onSelect,
-  onMouseDownOutside,
+  onDismiss,
 }: FinanceCategoryPopoverProps) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<PopoverPos | null>(null);
 
+  // Recompute position from the anchor's rect. Runs when the popover mounts
+  // and on every relevant scroll/resize. We use capture-phase scroll so
+  // scroll events fired by ANY ancestor (including non-bubbling cases) still
+  // reach us.
+  useEffect(() => {
+    const update = () => {
+      const el = anchorRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [anchorRef]);
+
+  // Dismiss on any mousedown that lands outside the popover AND outside the
+  // anchored input. We can't use `onBlur` because the popover lives in a
+  // different part of the DOM tree.
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
-      if (!ref.current) return;
-      if (e.target instanceof Node && ref.current.contains(e.target)) return;
-      onMouseDownOutside();
+      const target = e.target;
+      if (!(target instanceof Node)) return;
+      if (ref.current && ref.current.contains(target)) return;
+      if (anchorRef.current && anchorRef.current.contains(target)) return;
+      onDismiss();
     };
     document.addEventListener("mousedown", onMouseDown);
     return () => document.removeEventListener("mousedown", onMouseDown);
-  }, [onMouseDownOutside]);
+  }, [anchorRef, onDismiss]);
 
-  return (
+  // Escape-to-dismiss fallback. The parent input also handles Escape but
+  // only when its own keydown fires; this catches edge cases where the focus
+  // has moved to the popover (e.g. after a mouse click on a row).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onDismiss();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [onDismiss]);
+
+  if (!pos) return null;
+
+  return createPortal(
     <div
       ref={ref}
       role="listbox"
       style={{
-        position: "absolute",
-        top: "calc(100% + 4px)",
-        left: 0,
-        right: 0,
-        zIndex: 10,
-        maxHeight: 200,
+        position: "fixed",
+        top: pos.top,
+        left: pos.left,
+        width: pos.width,
+        zIndex: 10001, // above the modal (10000)
+        maxHeight: 240,
         overflowY: "auto",
         padding: 4,
         background: "var(--bg-panel)",
         border: "1px solid var(--border)",
         borderRadius: 6,
-        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.25)",
+        boxShadow: "0 6px 20px rgba(0, 0, 0, 0.35)",
       }}
     >
-      {items.map((item, i) => {
-        const isActive = i === activeIndex;
-        return (
-          <div
-            key={item.name}
-            role="option"
-            aria-selected={isActive}
-            onMouseEnter={() => onHover(i)}
-            onMouseDown={(e) => {
-              // mousedown (not click) so the input's blur doesn't dismiss the
-              // popover before our handler runs.
-              e.preventDefault();
-              onSelect(i);
-            }}
-            style={{
-              padding: "4px 8px",
-              fontSize: 12,
-              cursor: "pointer",
-              background: isActive ? "var(--bg-selected)" : "transparent",
-              color: "var(--text)",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              borderRadius: 3,
-            }}
-          >
-            <span style={{ color: "var(--text-dim)" }}>#</span>
-            <span style={{ flex: 1 }}>{item.name}</span>
-            {item.count > 0 && (
-              <span
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 11,
-                  color: "var(--text-muted)",
-                }}
-              >
-                {item.count}
-              </span>
-            )}
-          </div>
-        );
-      })}
-    </div>
+      {items.length === 0 ? (
+        <div
+          style={{
+            padding: "6px 10px",
+            fontSize: 12,
+            color: "var(--text-muted)",
+          }}
+        >
+          {t("No matching categories")}
+        </div>
+      ) : (
+        items.map((item, i) => {
+          const isActive = i === activeIndex;
+          return (
+            <div
+              key={item.name}
+              role="option"
+              aria-selected={isActive}
+              onMouseEnter={() => onHover(i)}
+              onMouseDown={(e) => {
+                // mousedown (not click) so the input's blur doesn't dismiss
+                // the popover before our handler runs.
+                e.preventDefault();
+                onSelect(i);
+              }}
+              style={{
+                padding: "6px 10px",
+                fontSize: 13,
+                cursor: "pointer",
+                background: isActive ? "var(--bg-selected)" : "transparent",
+                color: "var(--text)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                borderRadius: 3,
+              }}
+            >
+              <span style={{ color: "var(--text-dim)" }}>#</span>
+              <span style={{ flex: 1 }}>{item.name}</span>
+              {item.count > 0 && (
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  {item.count}
+                </span>
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>,
+    document.body,
   );
 }
 
