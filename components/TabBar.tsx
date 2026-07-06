@@ -44,8 +44,12 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
     >
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
+        // Derive the displayed label at render time for the Finance tab so
+        // locale switches update the open tab's name. Other tabs keep the
+        // label captured at open time (existing behavior).
+        const displayLabel = tab.kind === "finance" ? t("Finance") : tab.label;
         const tooltipContent =
-          tab.kind === "file" ? tab.filePath : tab.label;
+          tab.kind === "file" ? tab.filePath : displayLabel;
         const icon =
           tab.kind === "todo" ? (
             <TodoTabIcon />
@@ -117,7 +121,7 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
                 fontWeight: isActive ? 500 : 400,
               }}
             >
-              {tab.label}
+              {displayLabel}
             </span>
             </Tooltip>
             <Tooltip content={t("Close")}>
