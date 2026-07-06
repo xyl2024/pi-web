@@ -80,7 +80,7 @@ A single careless command can wipe data that has no backup, is not in git, and c
 
 ### Why this is so dangerous in this project specifically
 
-- The user todo list is stored in `~/.pi-web/todos.db` (SQLite via `better-sqlite3`). The legacy `todos.json` was renamed to `todos.json.migrated.<ts>` on first DB read — it is **not** deleted and can be inspected with `cat`. To roll back: run `npx tsx scripts/todos-restore.ts` (writes a fresh `todos.json` from the DB; never overwrites an existing one).
+- The user todo list is stored in `~/.pi-web/todos.db` (SQLite via `better-sqlite3`). The legacy `todos.json` was renamed to `todos.json.migrated.<ts>` on first DB read — it is **not** deleted and can be inspected with `cat`. To roll back: run `npx tsx scripts/todos-restore.ts` (writes a fresh `todos.json` from the DB; if `--out` already exists it is renamed to `<out>.restored.<ts>` first, matching the rename-not-delete migration pattern).
 - The `cat > ~/.pi-web/todos.db` (or `todos.json`) idiom is the kind of thing that looks safe in a one-liner test script but truncates the file immediately. If the heredoc body is wrong, the file is `0 bytes` and unrecoverable.
 - Other irreplaceable user data in this project: `~/.pi-web/todo_images/`, `~/.pi-web/workspace/`, `~/.pi-web/payloads/`, `~/.pi-web/config.yaml`, `~/.pi-web/scheduler.db`, `~/.pi-web/http-collections.db`, `~/.pi-web/favorites.json`, `~/.pi-web/agent-todo/`, `~/.pi/agent/sessions/`, `~/.pi/agent/models.json`, `~/.pi-web/pinned.json`, `~/.pi-web/todo-tools.json`.
 - The agent todo state lives in `~/.pi-web/agent-todo/<sessionId>.jsonl` (append-only snapshots). The current state is the last parsed line; truncating the file wipes it instantly with no DB backup.
@@ -161,16 +161,17 @@ Browser                Next.js Server              AgentSession (in-process)
 ### Process startup
 
 `instrumentation.ts` runs once per server boot. It lazily imports the WeChat
-monitor bootstrap and the scheduler loop bootstrap, so a logged-in WeChat
-account and any enabled cron tasks start being serviced as soon as the server
-is up — no need to load any page first.
+monitor bootstrap, the scheduler loop bootstrap, and the RSS poll-loop
+bootstrap, so a logged-in WeChat account, any enabled cron tasks, and any
+configured RSS feeds start being serviced as soon as the server is up — no
+need to load any page first.
 
 ### Right-panel architecture
 
 The right side of `AppShell` hosts a stack of tool panels, each backed by a
 module-scoped store using `useSyncExternalStore`:
 
-- `sessionUiStore` — branch leaf, model/thinking/tools/compact state owned by `useAgentSession`, read by `AppShell` for the top bar and `CommandPalette` ⌘K.
+- `sessionUiStore` — branch leaf (`branchTree`/`ActiveLeafId`), `systemPrompt`, `agentsFiles`, `sessionStats`, `contextUsage`. Owned by `useAgentSession`, read by `AppShell`. Imperative session controls (model/thinking/tools/compact/steer) are bridged to `CommandPalette` ⌘K via the separate `useAgentControls()` hook, **not** part of this store's snapshot.
 - `toolCallStatsStore` — per-turn tool call statistics, owned by `useAgentSession`, read by the vertical button + `ToolCallStatsPanel`.
 - `httpStore` — HTTP debug-panel draft state; survives tab switches and panel closes (no disk persistence, by design).
 
@@ -285,6 +286,12 @@ app/api/
   translate/route.ts                POST { text, provider, modelId, target } — in-memory LLM call, no disk
   weixin/{login,login/verify-code,logout,status,contacts,test-send,inbound,workspace}
                                     WeChat login, contacts, send/receive, push-to-workspace
+  finance/{route,[id]/route,export/route}.ts
+                                    CRUD + zip export for the finance ledger (~/.pi-web/finance.db)
+  notes/{route,notes-tags/{route,color/route}}.ts + note-images/{route,[filename]/route}.ts
+                                    notes CRUD, tag rename/color, image upload/serve
+  rss/{feeds/{route,[id]/route,[id]/articles/route},articles/{[id]/route,mark-all-read/route},fetch/route}.ts
+                                    RSS feed CRUD + article list/fetch + bulk read state
 
 lib/
   rpc-manager.ts            AgentSessionWrapper + registry + startRpcSession; customTools registration
@@ -334,6 +341,9 @@ lib/
   playwright-dashboard.ts   lazy-spawn + health-probe for playwright-cli show
   wechat/                   WeChat client + workspace push utilities + inbound monitor + state
   fonts/                    vendored LXGW WenKai webfonts (woff2, subsetted) + OFL + README
+  finance-{db,schema,store,preset-categories}.ts + notes-{db,store} + rss-{db,schema,sanitize,store}.ts
+                                    DB handles + validation + CRUD for the three side features
+  note-image-upload.ts + rss/{loop,startup}.ts  one-shot image upload + self-rescheduling RSS poll loop
 
 components/
   AppShell.tsx              layout + URL state + tab management + right-panel stack
@@ -343,7 +353,7 @@ components/
   MessageView.tsx           renders one message (user/assistant/toolCall/toolResult/show_file)
   BranchNavigator.tsx       in-session branch switcher
   ChatMinimap.tsx           scroll minimap alongside the message list
-  ToolPanel.tsx             exports PRESET_NONE + getPresetFromTools (only "none" / "full")
+  ToolPanel.tsx             exports `PRESET_NONE` (the only named preset constant; `getPresetFromTools` returns "none" / "full" only)
   ModelsConfig.tsx          modal for editing ~/.pi/agent/models.json
   SkillsConfig.tsx          modal for installing / browsing / toggling skills
   PromptsConfig.tsx         modal for managing slash-command prompts
@@ -363,7 +373,6 @@ components/
   TextColorPicker.tsx       editor-scoped Tiptap text color popover
   AgentTodoPanel.tsx        floating panel showing the agent's live task plan for the active session
   HighlightText.tsx         search-term <mark> wrapper (single + recursive)
-  ToolCallStatsDrawer.tsx   per-tool call statistics for the active turn
   ToolCallStatsPanel.tsx    right-panel tab body (reads toolCallStatsStore)
   HttpPanel.tsx             right-panel tab: method/URL/headers/body editor + send
   HttpPanelCollections.tsx  collections drawer inside HttpPanel (search, grouped tree)
@@ -385,7 +394,6 @@ components/
   PermissionDialog.tsx      portal'd permission prompt (Esc/Enter/backdrop-click defaults)
   PlaywrightDashboardPanel.tsx  sidebar panel hosting the spawned playwright-cli dashboard iframe
   SessionSearch.tsx         in-session and cross-session keyword search UI
-  SessionHeatmap.tsx        session activity heatmap
   GithubHeatmap.tsx         GitHub contribution heatmap
   AudioPlayer.tsx           audio file viewer (vinyl-disc aesthetic, 0.5x–2x speed)
   CommandPalette.tsx        ⌘K Raycast-style palette (reads commands + session results)
@@ -398,6 +406,11 @@ components/
   FileIcons.tsx             file-type icon set
   WeChatSettingsSection.tsx
                             WeChat login + send-to-workspace settings
+  ReplayBar.tsx            replay controls above ChatWindow (rewind/step through earlier turns)
+  FinancePanel.tsx + FinanceEntryModal.tsx + FinanceQuickEntry.tsx + FinanceStatsCards.tsx
+  + FinanceTransactionList.tsx  right-panel tab for the finance ledger
+  NotesPanel.tsx           right-panel tab for markdown notes + tags
+  RssPanel.tsx             right-panel tab for RSS feeds / articles / read state
 
 hooks/
   useAgentSession.ts        everything chat-window-related: load, stream, fork,
@@ -415,6 +428,9 @@ hooks/
                             per-turn tool-call statistics reducer + provider
   useDragDrop.ts            drag-and-drop file/image upload
   useAudio.ts               tone for agent-end notifications
+  useFinance.ts             single-snapshot GET finance ledger + mutate via /api/finance
+  useNotes.tsx              notes provider + tag list + image upload
+  useRss.ts                 RSS feeds/articles polling + mark-read actions
 
 extensions/
   clawd-on-desk/            vendored pi extension: shouldReport() forced to () => true
@@ -484,7 +500,7 @@ On `useAgentSession` mount, `GET /api/sessions/[id]?includeState` is called. If 
 Newer pi emits `compaction_start` / `compaction_end`; older versions emitted `auto_compaction_start` / `auto_compaction_end`. `handleAgentEvent` accepts both sets to keep `isCompacting` in sync. Manual compact is a blocking POST — the button stays disabled until the response returns.
 
 ### Module-scoped stores
-`sessionUiStore`, `toolCallStatsStore`, and `httpStore` all follow the same pattern: one typed state object, `useSyncExternalStore` subscription, content-equality guarded patcher (`lib/shallowEqual.ts`), functions held in refs (not the snapshot) to avoid identity-based re-render loops. When adding a new cross-cutting UI state, follow this pattern — it survives `ChatWindow` remounts and eliminates prop-drilling.
+`sessionUiStore`, `toolCallStatsStore`, and `httpStore` all follow the same pattern: one typed state object, `useSyncExternalStore` subscription, content-equality guarded patcher (`lib/shallowEqual.ts`). Callback handles are kept in refs outside the snapshot — `sessionUiStore` exposes both a state snapshot and a separate `useAgentControls()` hook, while `httpStore` uses module-level action helpers that mutate the draft directly — so identity-based re-render loops are avoided. When adding a new cross-cutting UI state, follow this pattern — it survives `ChatWindow` remounts and eliminates prop-drilling.
 
 ### HTTP proxy in-flight registry
 `getInFlightRegistry()` returns a `Map<id, AbortController>` stored on `globalThis.__piHttpInFlight`. The route writes on entry and removes on completion; `POST /api/http/[id]/cancel` looks up by id and calls `controller.abort()`. Process-exit / SIGINT / SIGTERM hooks iterate the map and abort every entry so we never leak a pending upstream fetch.
@@ -528,7 +544,7 @@ Location: `~/.pi-web/agent-todo/<sessionId>.jsonl`
 {"ts":<ms>,"action":"update","stateAfter":{...}}
 ```
 
-Append-only snapshots — current state is the last parsed line's `stateAfter`. O(1) tail read. `agent-todo-store.ts` always `fsync`s before emitting the SSE event so consumers never observe a state that isn't already on disk. Tombstoned tasks are kept (not deleted) so `blockedBy` references and audit history still resolve.
+Append-only snapshots — current state is the last parsed line's `stateAfter`. O(1) tail read. `agent-todo-store.ts` always `fsync`s before returning the tool result, and the frontend picks up new state via 1.5s HTTP polling on `/api/agent/[id]/agent-todo` (`useAgentTodo.ts`), not via SSE. Tombstoned tasks are kept (not deleted) so `blockedBy` references and audit history still resolve.
 
 ---
 
@@ -583,9 +599,10 @@ When Pi Work is loaded inside the `electron-shell` `<iframe>`, every
 `navigator.clipboard.writeText()` call requires the iframe to declare
 `allow="clipboard-read; clipboard-write"` (set in `electron-shell/titlebar.html`).
 Without it, Chromium's Permissions-Policy silently blocks the call. The web
-app has a `document.execCommand("copy")` fallback for some flows
-(`components/HttpPanel.tsx` and the copy button) — but the iframe attribute
-is the canonical fix and the fallback should not be relied on.
+app has a `document.execCommand("copy")` fallback in `components/CodeBlock.tsx`'s
+`copyText()` helper (also reached by `HttpPanel`'s copy button via that import,
+plus `MermaidBlock.tsx`, `SvgBlock.tsx`, `FileExplorer.tsx`) — but the iframe
+attribute is the canonical fix and the fallback should not be relied on.
 
 ---
 
