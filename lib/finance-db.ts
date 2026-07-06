@@ -11,7 +11,7 @@
  *
  * Migration story:
  *   v1: transactions(note), budgets
- *   v2: transactions(details), categories added (note column dropped)
+ *   v2: transactions(details) added, note column dropped
  *
  * The migration runs on every open; each step is guarded by `PRAGMA
  * table_info(...)` so it's idempotent and safe on fresh DBs.
@@ -55,11 +55,6 @@ const SCHEMA = `
     category      TEXT PRIMARY KEY,
     monthly_limit REAL    NOT NULL,
     updated_at    INTEGER NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS categories (
-    name       TEXT PRIMARY KEY,
-    created_at INTEGER NOT NULL
   );
 `;
 

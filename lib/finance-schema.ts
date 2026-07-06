@@ -47,7 +47,13 @@ export interface CreateTransactionInput {
   date: number;
   amount: number;
   direction: FinanceDirection;
-  category: string;
+  /**
+   * Optional. When the details string contains a `#<preset>` token the
+   * server derives the category from there (see `parseCategoryFromDetails`
+   * in `lib/finance-preset-categories.ts`); otherwise this field is used as
+   * a fallback. At least one source must yield a valid preset name.
+   */
+  category?: string;
   details: string;
 }
 

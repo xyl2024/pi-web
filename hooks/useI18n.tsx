@@ -883,8 +883,10 @@ const ZH_TRANSLATIONS = {
   "Failed to load finance": "加载记账失败",
   "Amount and category are required": "金额和类别不能为空",
   "Amount must be a positive number": "金额必须是正数",
-  "Orphan category — cannot be deleted": "孤儿分类 — 不可删除",
-  "This category comes from existing transactions. Delete those transactions first, then remove the category.": "该分类来自历史流水。请先删除对应流水，再移除该分类。",
+  "Select category…": "选择分类…",
+  "Amount and details are required (# for category)": "金额和备注不能为空（输入 # 选择分类）",
+  "# to pick a category": "输入 # 选择分类",
+  "Details, # for category": "备注（输入 # 选择分类）",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

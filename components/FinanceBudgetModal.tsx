@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useI18n } from "@/hooks/useI18n";
+import { FINANCE_PRESET_CATEGORIES } from "@/lib/finance-preset-categories";
 import type { Budget } from "@/lib/finance-schema";
 
 interface FinanceBudgetModalProps {
@@ -210,15 +211,21 @@ export function FinanceBudgetModal({
                 alignItems: "center",
               }}
             >
-              <input
-                type="text"
+              <select
                 value={row.category}
                 onChange={(e) =>
                   handleRowChange(idx, { category: e.target.value })
                 }
-                placeholder={t("Category")}
+                aria-label={t("Category")}
                 style={inputStyle}
-              />
+              >
+                <option value="">{t("Select category…")}</option>
+                {FINANCE_PRESET_CATEGORIES.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
               <input
                 type="number"
                 step="0.01"

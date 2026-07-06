@@ -9,7 +9,6 @@ import { FinanceEntryModal } from "./FinanceEntryModal";
 import { FinanceStatsCards } from "./FinanceStatsCards";
 import { FinanceBudgetCard } from "./FinanceBudgetCard";
 import { FinanceBudgetModal } from "./FinanceBudgetModal";
-import { FinanceCategoryManager } from "./FinanceCategoryManager";
 import { FinanceTransactionList } from "./FinanceTransactionList";
 import type {
   FinanceDirection,
@@ -68,9 +67,6 @@ export function FinancePanel() {
     deleteTransaction,
     upsertBudget,
     deleteBudget,
-    createCategory,
-    renameCategory,
-    deleteCategory,
   } = useFinance();
 
   // Default to current month; "全部" sets both to null.
@@ -84,7 +80,6 @@ export function FinancePanel() {
     mode: "create",
   });
   const [budgetModalOpen, setBudgetModalOpen] = useState(false);
-  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
 
   // Stats: either for the selected month or aggregated over all time when
   // month is null. For "全部" we use the transactions list directly.
@@ -338,22 +333,6 @@ export function FinancePanel() {
         <div style={{ flex: 1 }} />
         <button
           type="button"
-          onClick={() => setCategoryModalOpen(true)}
-          title={t("Manage categories")}
-          style={{
-            background: "transparent",
-            border: "1px solid var(--border)",
-            color: "var(--text-muted)",
-            borderRadius: 4,
-            padding: "4px 10px",
-            fontSize: 12,
-            cursor: "pointer",
-          }}
-        >
-          {t("Categories")}
-        </button>
-        <button
-          type="button"
           onClick={handleExport}
           title={t("Export CSV")}
           style={{
@@ -462,13 +441,6 @@ export function FinancePanel() {
       <FinanceQuickEntry
         categories={categories}
         onSubmit={handleSubmitCreate}
-        onCreateCategory={async (name) => {
-          try {
-            await createCategory(name);
-          } catch {
-            // ignore — the POST will surface a real error
-          }
-        }}
       />
 
       {/* Modals */}
@@ -478,13 +450,6 @@ export function FinancePanel() {
           initial={entryModal.initial}
           categories={categories}
           onSubmit={entryModal.mode === "edit" ? handleSubmitEdit : handleSubmitCreate}
-          onCreateCategory={async (name) => {
-            try {
-              await createCategory(name);
-            } catch {
-              // ignore — POST will surface a real error
-            }
-          }}
           onClose={() => setEntryModal({ open: false, mode: "create" })}
         />
       )}
@@ -494,21 +459,6 @@ export function FinancePanel() {
           upsertBudget={upsertBudget}
           deleteBudget={deleteBudget}
           onClose={() => setBudgetModalOpen(false)}
-        />
-      )}
-      {categoryModalOpen && (
-        <FinanceCategoryManager
-          categories={categories}
-          onCreate={async (name) => {
-            await createCategory(name);
-          }}
-          onRename={async (oldName, newName) => {
-            await renameCategory(oldName, newName);
-          }}
-          onDelete={async (name) => {
-            await deleteCategory(name);
-          }}
-          onClose={() => setCategoryModalOpen(false)}
         />
       )}
     </div>

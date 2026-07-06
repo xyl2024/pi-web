@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/hooks/useI18n";
+import { FINANCE_PRESET_CATEGORIES } from "@/lib/finance-preset-categories";
 import type { FinanceDirection } from "@/lib/finance-schema";
 import type { CategoryWithCount } from "@/hooks/useFinance";
+import {
+  detectActiveCategoryToken,
+  FinanceCategoryPopover,
+} from "./FinanceCategoryPopover";
 
 export interface FinanceEntryModalInitialValues {
   id?: string;
@@ -21,6 +26,7 @@ interface FinanceEntryModalProps {
    * When false the modal is in "create" mode.
    */
   mode: "create" | "edit";
+  /** Used to render a small usage count next to each preset in the picker. */
   categories: CategoryWithCount[];
   onSubmit: (input: {
     date: number;
@@ -29,7 +35,6 @@ interface FinanceEntryModalProps {
     category: string;
     details: string;
   }) => Promise<void>;
-  onCreateCategory: (name: string) => Promise<void>;
   onClose: () => void;
 }
 
@@ -53,7 +58,6 @@ export function FinanceEntryModal({
   mode,
   categories,
   onSubmit,
-  onCreateCategory,
   onClose,
 }: FinanceEntryModalProps) {
   const { t } = useI18n();
@@ -67,10 +71,10 @@ export function FinanceEntryModal({
     initial?.direction ?? "expense",
   );
   const [details, setDetails] = useState(initial?.details ?? "");
-  // Category: separate "value" (what's in the input) from "committed" (what's
-  // selected from the datalist). Lets users type a new category name and
-  // commit it on submit without it being silently lost.
-  const [categoryValue, setCategoryValue] = useState(initial?.category ?? "");
+  const [selectionStart, setSelectionStart] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [dropdownDismissed, setDropdownDismissed] = useState(false);
+  const detailsRef = useRef<HTMLTextAreaElement | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -85,14 +89,62 @@ export function FinanceEntryModal({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
 
-  const categoryNames = useMemo(() => categories.map((c) => c.name), [categories]);
-  const trimmedCategory = categoryValue.trim();
+  // Detect an in-progress `#xxx` token at the cursor in the details textarea.
+  const activeToken = useMemo(
+    () => detectActiveCategoryToken(details, selectionStart),
+    [details, selectionStart],
+  );
+
+  const countsByName = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of categories) m.set(c.name, c.count);
+    return m;
+  }, [categories]);
+
+  const dropdownItems = useMemo(() => {
+    if (!activeToken) return [];
+    const q = activeToken.query.toLowerCase();
+    return FINANCE_PRESET_CATEGORIES
+      .filter((name) => name.toLowerCase().startsWith(q))
+      .map((name) => ({ name, count: countsByName.get(name) ?? 0 }));
+  }, [activeToken, countsByName]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [activeToken?.start, activeToken?.query, dropdownItems.length]);
+
+  useEffect(() => {
+    if (!activeToken) setDropdownDismissed(false);
+  }, [activeToken]);
+
+  const dropdownOpen =
+    activeToken !== null && !dropdownDismissed && dropdownItems.length > 0;
+
+  const commitCategory = (name: string) => {
+    if (!activeToken) return;
+    // Replace the `#xxx` token with `#<name> ` (trailing space jumps the
+    // cursor out of the picker zone so further typing lands in the
+    // description).
+    const next =
+      details.slice(0, activeToken.start) + `#${name} ` + details.slice(activeToken.end);
+    const newCursor = activeToken.start + 1 + name.length + 1;
+    setDetails(next);
+    setSelectionStart(newCursor);
+    setActiveIndex(0);
+    setDropdownDismissed(false);
+    requestAnimationFrame(() => {
+      if (detailsRef.current) {
+        detailsRef.current.focus();
+        detailsRef.current.setSelectionRange(newCursor, newCursor);
+      }
+    });
+  };
+
   const trimmedAmount = amount.trim();
   const trimmedDetails = details.trim();
   const canSubmit =
-    trimmedCategory.length > 0 &&
-    trimmedAmount.length > 0 &&
     trimmedDetails.length > 0 &&
+    trimmedAmount.length > 0 &&
     !submitting &&
     Number.isFinite(Number(trimmedAmount)) &&
     Number(trimmedAmount) > 0;
@@ -102,21 +154,15 @@ export function FinanceEntryModal({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      // Auto-create the category if it doesn't exist (matches the server-side
-      // auto-registration on POST/PATCH, so the user's typed name survives).
-      if (!categoryNames.includes(trimmedCategory)) {
-        try {
-          await onCreateCategory(trimmedCategory);
-        } catch {
-          // ignore — the server will register it again on POST, but if that
-          // also fails the actual createTransaction will surface the error.
-        }
-      }
+      // The server (`createTransaction` / `updateTransaction`) parses
+      // `details` for an embedded `#<preset>` token and strips it. We pass
+      // the existing `initial.category` so the server has a fallback in
+      // edit mode (where no token may be present).
       await onSubmit({
         date: parseDateInput(dateStr),
         amount: Number(trimmedAmount),
         direction,
-        category: trimmedCategory,
+        category: initial?.category ?? "",
         details: trimmedDetails,
       });
       onClose();
@@ -263,40 +309,77 @@ export function FinanceEntryModal({
           </div>
         </Field>
 
-        <Field label={t("Details")} required>
-          <textarea
-            value={details}
-            onChange={(e) => setDetails(e.target.value)}
-            placeholder={t("What was this for?")}
-            rows={2}
-            style={{
-              ...inputStyle,
-              resize: "vertical",
-              minHeight: 40,
-              fontFamily: "var(--font-sans)",
-            }}
-          />
-        </Field>
-
-        <Field label={t("Category")} required>
-          <input
-            type="text"
-            value={categoryValue}
-            onChange={(e) => setCategoryValue(e.target.value)}
-            placeholder={t("Category")}
-            list="finance-categories-list"
-            style={inputStyle}
-          />
-          <datalist id="finance-categories-list">
-            {categoryNames.map((n) => (
-              <option key={n} value={n} />
-            ))}
-          </datalist>
-          {!categoryNames.includes(trimmedCategory) && trimmedCategory.length > 0 && (
-            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-              {t("Will be added as a new category")}
-            </span>
-          )}
+        <Field
+          label={t("Details")}
+          required
+          hint={t("# to pick a category")}
+        >
+          <div style={{ position: "relative" }}>
+            <textarea
+              ref={detailsRef}
+              value={details}
+              onChange={(e) => {
+                setDetails(e.target.value);
+                setSelectionStart(e.target.selectionStart ?? e.target.value.length);
+              }}
+              onSelect={(e) => {
+                setSelectionStart(e.currentTarget.selectionStart ?? 0);
+              }}
+              onClick={(e) => {
+                setSelectionStart(e.currentTarget.selectionStart ?? 0);
+              }}
+              onKeyUp={(e) => {
+                setSelectionStart(e.currentTarget.selectionStart ?? 0);
+              }}
+              placeholder={t("What was this for?")}
+              rows={2}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  if (dropdownOpen) {
+                    e.preventDefault();
+                    const item = dropdownItems[activeIndex];
+                    if (item) commitCategory(item.name);
+                  }
+                  // else: let the default submit behavior fire
+                } else if (e.key === "Escape") {
+                  if (dropdownOpen) {
+                    e.preventDefault();
+                    setDropdownDismissed(true);
+                  }
+                } else if (e.key === "ArrowDown" && dropdownOpen) {
+                  e.preventDefault();
+                  setActiveIndex((i) => (i + 1) % dropdownItems.length);
+                } else if (e.key === "ArrowUp" && dropdownOpen) {
+                  e.preventDefault();
+                  setActiveIndex(
+                    (i) => (i - 1 + dropdownItems.length) % dropdownItems.length,
+                  );
+                } else if (e.key === "Tab" && dropdownOpen) {
+                  e.preventDefault();
+                  const item = dropdownItems[activeIndex];
+                  if (item) commitCategory(item.name);
+                }
+              }}
+              style={{
+                ...inputStyle,
+                resize: "vertical",
+                minHeight: 40,
+                fontFamily: "var(--font-sans)",
+              }}
+            />
+            {dropdownOpen && (
+              <FinanceCategoryPopover
+                items={dropdownItems}
+                activeIndex={activeIndex}
+                onHover={setActiveIndex}
+                onSelect={(i) => {
+                  const item = dropdownItems[i];
+                  if (item) commitCategory(item.name);
+                }}
+                onMouseDownOutside={() => setDropdownDismissed(true)}
+              />
+            )}
+          </div>
         </Field>
 
         {submitError && (
@@ -362,10 +445,12 @@ export function FinanceEntryModal({
 function Field({
   label,
   required,
+  hint,
   children,
 }: {
   label: string;
   required?: boolean;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -373,6 +458,11 @@ function Field({
       <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
         {label}
         {required && <span style={{ color: "#ef4444", marginLeft: 2 }}>*</span>}
+        {hint && (
+          <span style={{ marginLeft: 8, color: "var(--text-dim)", fontSize: 11 }}>
+            {hint}
+          </span>
+        )}
       </span>
       {children}
     </label>

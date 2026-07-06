@@ -12,10 +12,10 @@
  */
 
 import { getFinanceDb } from "@/lib/finance-db";
+import { parseCategoryFromDetails, validatePresetCategory } from "@/lib/finance-preset-categories";
 import {
   type Budget,
   type ByCategoryRow,
-  type Category,
   type CreateTransactionInput,
   type CreateTransactionResult,
   type FinanceDirection,
@@ -27,7 +27,6 @@ import {
   generateId,
   monthBounds,
   validateAmount,
-  validateCategory,
   validateDateMs,
   validateDetails,
   validateDirection,
@@ -54,11 +53,6 @@ interface BudgetRow {
   updated_at: number;
 }
 
-interface CategoryRow {
-  name: string;
-  created_at: number;
-}
-
 function rowToTransaction(row: TransactionRow): Transaction {
   return {
     id: row.id,
@@ -79,13 +73,6 @@ function rowToBudget(row: BudgetRow): Budget {
   };
 }
 
-function rowToCategory(row: CategoryRow): Category {
-  return {
-    name: row.name,
-    createdAt: row.created_at,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Transaction CRUD
 // ---------------------------------------------------------------------------
@@ -96,24 +83,32 @@ export function createTransaction(
   const date = validateDateMs(input.date, "date");
   const amount = validateAmount(input.amount, "amount");
   const direction = validateDirection(input.direction, "direction");
-  const category = validateCategory(input.category, "category");
-  const details = validateDetails(input.details, "details");
+  // Category resolution: a `#<preset>` token inside `details` is the
+  // preferred source (UI inserts it via the picker); otherwise fall back to
+  // `input.category`. At least one source must yield a valid preset name —
+  // missing both produces a 400 "category required" error.
+  const parsed = parseCategoryFromDetails(input.details);
+  const cleanDetails = validateDetails(parsed.cleanDetails, "details");
+  const category =
+    parsed.category ??
+    (input.category !== undefined && input.category.length > 0
+      ? validatePresetCategory(input.category, "category")
+      : (() => {
+          throw new FinanceValidationError(
+            "category is required (type # in details to pick one)",
+            "category",
+          );
+        })());
 
   const id = generateId();
   const now = Date.now();
   const db = getFinanceDb();
 
   const apply = db.transaction(() => {
-    // Auto-register the category so the CRUD list stays accurate.
-    db.prepare(
-      `INSERT INTO categories (name, created_at) VALUES (?, ?)
-       ON CONFLICT(name) DO NOTHING`,
-    ).run(category, now);
-
     db.prepare(
       `INSERT INTO transactions (id, date, amount, direction, category, details, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, date, amount, direction, category, details, now);
+    ).run(id, date, amount, direction, category, cleanDetails, now);
   });
   apply();
 
@@ -123,7 +118,7 @@ export function createTransaction(
     amount,
     direction,
     category,
-    details,
+    details: cleanDetails,
     createdAt: now,
   };
 
@@ -159,16 +154,22 @@ export function updateTransaction(
     if (patch.direction !== undefined) {
       next.direction = validateDirection(patch.direction, "direction");
     }
-    if (patch.category !== undefined) {
-      next.category = validateCategory(patch.category, "category");
-      // Auto-register the new category so the CRUD list stays accurate.
-      db.prepare(
-        `INSERT INTO categories (name, created_at) VALUES (?, ?)
-         ON CONFLICT(name) DO NOTHING`,
-      ).run(next.category, Date.now());
-    }
     if (patch.details !== undefined) {
-      next.details = validateDetails(patch.details, "details");
+      // Re-parse the new details for an embedded `#<preset>` token; it takes
+      // precedence over `patch.category` (the UI inserts the token via the
+      // picker so it's the more recent intent). Strip the token from the
+      // stored details either way.
+      const parsed = parseCategoryFromDetails(patch.details);
+      next.details = validateDetails(parsed.cleanDetails, "details");
+      if (parsed.category !== null) {
+        next.category = parsed.category;
+      } else if (patch.category !== undefined) {
+        next.category = validatePresetCategory(patch.category, "category");
+      } else {
+        // Keep the existing category.
+      }
+    } else if (patch.category !== undefined) {
+      next.category = validatePresetCategory(patch.category, "category");
     }
     db.prepare(
       `UPDATE transactions
@@ -317,21 +318,16 @@ export function computeMonthStats(
 }
 
 // ---------------------------------------------------------------------------
-// Categories (CRUD + distinct-with-counts for filter dropdown)
+// Categories — preset list only (see `lib/finance-preset-categories.ts`). The
+// only categories-related helper here is the per-transaction count view,
+// used by clients that want to show usage stats.
 // ---------------------------------------------------------------------------
 
-export function getAllCategories(): Category[] {
-  const rows = getFinanceDb()
-    .prepare(`SELECT * FROM categories ORDER BY name ASC`)
-    .all() as CategoryRow[];
-  return rows.map(rowToCategory);
-}
-
 /**
- * Distinct categories with counts — combines the `categories` table (registered
- * names) and the `transactions` table (names actually used) so the dropdown
- * surfaces every category the user might want to filter by, even ones used
- * before the categories table existed. Sorted by frequency desc, name asc.
+ * Distinct categories that appear in `transactions`, with counts. Includes
+ * any legacy free-text categories from before the preset migration so they
+ * remain visible in historical aggregation (the preset list itself comes
+ * from `lib/finance-preset-categories.ts`). Sorted by frequency desc.
  */
 export function distinctCategoriesWithCounts(): Array<{
   category: string;
@@ -349,79 +345,6 @@ export function distinctCategoriesWithCounts(): Array<{
   return rows.map((r) => ({ category: r.category, count: r.c }));
 }
 
-export function createCategory(rawName: string): Category {
-  const name = validateCategory(rawName, "name");
-  const now = Date.now();
-  const db = getFinanceDb();
-  db.prepare(
-    `INSERT INTO categories (name, created_at) VALUES (?, ?)
-     ON CONFLICT(name) DO NOTHING`,
-  ).run(name, now);
-  return { name, createdAt: now };
-}
-
-export function renameCategory(
-  oldName: string,
-  newName: string,
-): { oldName: string; newName: string } {
-  const oldValidated = validateCategory(oldName, "oldName");
-  const newValidated = validateCategory(newName, "newName");
-  if (oldValidated === newValidated) {
-    return { oldName: oldValidated, newName: newValidated };
-  }
-  const db = getFinanceDb();
-  const apply = db.transaction(() => {
-    // Refuse if the target name already exists.
-    const exists = db
-      .prepare(`SELECT 1 FROM categories WHERE name = ?`)
-      .get(newValidated);
-    if (exists) {
-      throw new FinanceValidationError(
-        `category "${newValidated}" already exists`,
-        "newName",
-      );
-    }
-    // Ensure the source exists; if not, the rename is a no-op throw.
-    const source = db
-      .prepare(`SELECT 1 FROM categories WHERE name = ?`)
-      .get(oldValidated);
-    if (!source) {
-      throw new FinanceNotFoundError("category", oldValidated);
-    }
-    db.prepare(`INSERT INTO categories (name, created_at) VALUES (?, ?)`).run(
-      newValidated,
-      Date.now(),
-    );
-    db.prepare(
-      `UPDATE transactions SET category = ? WHERE category = ?`,
-    ).run(newValidated, oldValidated);
-    db.prepare(`DELETE FROM categories WHERE name = ?`).run(oldValidated);
-    // Cascade to budgets.
-    const budget = db
-      .prepare(`SELECT monthly_limit FROM budgets WHERE category = ?`)
-      .get(oldValidated) as { monthly_limit: number } | undefined;
-    if (budget) {
-      db.prepare(`DELETE FROM budgets WHERE category = ?`).run(oldValidated);
-      db.prepare(
-        `INSERT INTO budgets (category, monthly_limit, updated_at)
-         VALUES (?, ?, ?)`,
-      ).run(newValidated, budget.monthly_limit, Date.now());
-    }
-  });
-  apply();
-  return { oldName: oldValidated, newName: newValidated };
-}
-
-export function deleteCategory(name: string): { name: string } {
-  const validated = validateCategory(name, "name");
-  const db = getFinanceDb();
-  const result = db
-    .prepare(`DELETE FROM categories WHERE name = ?`)
-    .run(validated);
-  if (result.changes === 0) throw new FinanceNotFoundError("category", validated);
-  return { name: validated };
-}
-
 // ---------------------------------------------------------------------------
 // Budgets
 // ---------------------------------------------------------------------------
@@ -437,7 +360,7 @@ export function upsertBudget(
   rawCategory: string,
   rawLimit: unknown,
 ): Budget {
-  const category = validateCategory(rawCategory, "category");
+  const category = validatePresetCategory(rawCategory, "category");
   const monthlyLimit = validateMonthlyLimit(rawLimit, "monthlyLimit");
   const now = Date.now();
   const db = getFinanceDb();
@@ -452,7 +375,7 @@ export function upsertBudget(
 }
 
 export function deleteBudget(category: string): { category: string } {
-  const validated = validateCategory(category, "category");
+  const validated = validatePresetCategory(category, "category");
   const db = getFinanceDb();
   const result = db
     .prepare(`DELETE FROM budgets WHERE category = ?`)
