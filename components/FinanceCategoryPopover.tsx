@@ -36,7 +36,14 @@ interface PopoverPos {
   top: number;
   left: number;
   width: number;
+  /** Final height in px — may be less than `POPOVER_MAX_HEIGHT` when the
+   *  available space (above or below the input) is constrained by the
+   *  viewport. */
+  height: number;
 }
+
+const POPOVER_MAX_HEIGHT = 240;
+const POPOVER_GAP = 4;
 
 export function FinanceCategoryPopover({
   anchorRef,
@@ -59,7 +66,20 @@ export function FinanceCategoryPopover({
       const el = anchorRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+      // Flip above the input when there isn't enough room below — the
+      // `FinanceQuickEntry` strip is sticky at the bottom of the right panel
+      // and has no usable space below it. Standard dropdown behavior.
+      const spaceBelow = window.innerHeight - rect.bottom - POPOVER_GAP;
+      const spaceAbove = rect.top - POPOVER_GAP;
+      const placeAbove =
+        spaceBelow < POPOVER_MAX_HEIGHT && spaceAbove > spaceBelow;
+      const height = placeAbove
+        ? Math.min(POPOVER_MAX_HEIGHT, spaceAbove)
+        : Math.min(POPOVER_MAX_HEIGHT, spaceBelow);
+      const top = placeAbove
+        ? rect.top - POPOVER_GAP - height
+        : rect.bottom + POPOVER_GAP;
+      setPos({ top, left: rect.left, width: rect.width, height });
     };
     update();
     window.addEventListener("scroll", update, true);
@@ -111,7 +131,8 @@ export function FinanceCategoryPopover({
         left: pos.left,
         width: pos.width,
         zIndex: 10001, // above the modal (10000)
-        maxHeight: 240,
+        height: pos.height,
+        maxHeight: POPOVER_MAX_HEIGHT,
         overflowY: "auto",
         padding: 4,
         background: "var(--bg-panel)",
