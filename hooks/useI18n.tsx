@@ -862,6 +862,8 @@ const ZH_TRANSLATIONS = {
   "Transactions": "流水笔数",
   "All months": "全部",
   "All categories": "全部分类",
+  "Back to current month": "回到当前月份",
+  "Show all months": "显示全部月份",
   "Filter by category": "按类别筛选",
   "Search notes…": "搜索备注…",
   "Search notes": "搜索备注",

@@ -296,8 +296,9 @@ export function FinancePanel() {
         </button>
         <button
           type="button"
-          onClick={() => setMonth(null)}
-          disabled={month === null}
+          onClick={() => setMonth(month === null ? nowYearMonth() : null)}
+          aria-pressed={month === null}
+          title={month === null ? t("Back to current month") : t("Show all months")}
           style={pillButtonStyle(month === null)}
         >
           {t("All months")}
