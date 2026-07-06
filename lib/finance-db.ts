@@ -80,11 +80,14 @@ function runMigrations(db: Database.Database): void {
   }
 
   // v3: drop the legacy `budgets` table now that the budget feature is gone.
+  // NOTE: better-sqlite3 `.get()` returns `undefined` (not `null`) on no row,
+  // so `!== null` would be true even when the table is missing and `DROP TABLE
+  // budgets` would then throw "no such table: budgets". Truthy check instead.
   const budgetExists = db
     .prepare(
       `SELECT name FROM sqlite_master WHERE type='table' AND name='budgets'`,
     )
-    .get() !== null;
+    .get();
   if (budgetExists) {
     log.info("finance migration: dropping legacy budgets table");
     db.exec(`DROP TABLE budgets`);
