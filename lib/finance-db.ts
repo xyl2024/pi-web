@@ -10,11 +10,13 @@
  * `PI_WEB_FINANCE_DB` env var.
  *
  * Migration story:
- *   v1: transactions(note), budgets
+ *   v1: transactions(note)
  *   v2: transactions(details) added, note column dropped
+ *   v3: dropped legacy `budgets` table (budget feature removed)
  *
  * The migration runs on every open; each step is guarded by `PRAGMA
- * table_info(...)` so it's idempotent and safe on fresh DBs.
+ * table_info(...)` or `sqlite_master` so it's idempotent and safe on
+ * fresh DBs.
  */
 
 import Database from "better-sqlite3";
@@ -50,12 +52,6 @@ const SCHEMA = `
     ON transactions(date DESC);
   CREATE INDEX IF NOT EXISTS idx_transactions_category
     ON transactions(category);
-
-  CREATE TABLE IF NOT EXISTS budgets (
-    category      TEXT PRIMARY KEY,
-    monthly_limit REAL    NOT NULL,
-    updated_at    INTEGER NOT NULL
-  );
 `;
 
 /**
@@ -81,6 +77,17 @@ function runMigrations(db: Database.Database): void {
       `UPDATE transactions SET details = COALESCE(note, '') WHERE details = ''`,
     );
     db.exec(`ALTER TABLE transactions DROP COLUMN note`);
+  }
+
+  // v3: drop the legacy `budgets` table now that the budget feature is gone.
+  const budgetExists = db
+    .prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='budgets'`,
+    )
+    .get() !== null;
+  if (budgetExists) {
+    log.info("finance migration: dropping legacy budgets table");
+    db.exec(`DROP TABLE budgets`);
   }
 }
 

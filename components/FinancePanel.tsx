@@ -7,8 +7,6 @@ import { useFinance } from "@/hooks/useFinance";
 import { FinanceQuickEntry } from "./FinanceQuickEntry";
 import { FinanceEntryModal } from "./FinanceEntryModal";
 import { FinanceStatsCards } from "./FinanceStatsCards";
-import { FinanceBudgetCard } from "./FinanceBudgetCard";
-import { FinanceBudgetModal } from "./FinanceBudgetModal";
 import { FinanceTransactionList } from "./FinanceTransactionList";
 import type {
   FinanceDirection,
@@ -43,7 +41,6 @@ function fmtMonthLabel(year: number, month1to12: number): string {
  *
  * Layout:
  *   - Top toolbar (month switcher + "全部" + export button + ⌘N entry shortcut)
- *   - FinanceBudgetCard (top of scroll area)
  *   - FinanceStatsCards (4 cards)
  *   - FinanceQuickEntry (sticky)
  *   - Category filter + note search bar
@@ -56,7 +53,6 @@ export function FinancePanel() {
   const toast = useToast();
   const {
     transactions,
-    budgets,
     isLoading,
     error,
     categories,
@@ -65,8 +61,6 @@ export function FinancePanel() {
     createTransaction,
     updateTransaction,
     deleteTransaction,
-    upsertBudget,
-    deleteBudget,
   } = useFinance();
 
   // Default to current month; "全部" sets both to null.
@@ -79,7 +73,6 @@ export function FinancePanel() {
     open: false,
     mode: "create",
   });
-  const [budgetModalOpen, setBudgetModalOpen] = useState(false);
 
   // Stats: either for the selected month or aggregated over all time when
   // month is null. For "全部" we use the transactions list directly.
@@ -106,16 +99,13 @@ export function FinancePanel() {
           byCategoryMap.set(key, { total: tr.amount, direction: tr.direction });
         }
       }
-      const budgetMap = new Map(budgets.map((b) => [b.category, b.monthlyLimit]));
       const byCategory = Array.from(byCategoryMap.entries())
         .map(([key, v]) => {
           const category = key.slice(v.direction.length + 1);
-          const limit = budgetMap.get(category);
           return {
             category,
             total: v.total,
             direction: v.direction,
-            ...(limit !== undefined ? { budgetLimit: limit } : {}),
           };
         })
         .sort((a, b) => b.total - a.total);
@@ -130,7 +120,7 @@ export function FinancePanel() {
       };
     }
     return monthStats(month.year, month.month);
-  }, [month, transactions, budgets, monthStats]);
+  }, [month, transactions, monthStats]);
 
   const visible = useMemo(
     () =>
@@ -168,19 +158,8 @@ export function FinancePanel() {
       details: string;
     }) => {
       try {
-        const result = await createTransaction(input);
+        await createTransaction(input);
         toast.show({ kind: "success", message: t("Entry saved") });
-        if (result.budgetWarning) {
-          toast.show({
-            kind: "info",
-            message: t(
-              "Budget exceeded for {category} ({spent} of {limit})",
-            )
-              .replace("{category}", result.budgetWarning.category)
-              .replace("{spent}", `¥${result.budgetWarning.spent.toFixed(2)}`)
-              .replace("{limit}", `¥${result.budgetWarning.monthlyLimit.toFixed(2)}`),
-          });
-        }
       } catch (e) {
         toast.show({
           kind: "error",
@@ -204,15 +183,8 @@ export function FinancePanel() {
         throw new Error("missing id for edit");
       }
       try {
-        const result = await updateTransaction(entryModal.initial.id, input);
+        await updateTransaction(entryModal.initial.id, input);
         toast.show({ kind: "success", message: t("Entry updated") });
-        if (result.budgetWarning) {
-          toast.show({
-            kind: "info",
-            message: t("Budget exceeded for {category}")
-              .replace("{category}", result.budgetWarning.category),
-          });
-        }
       } catch (e) {
         toast.show({
           kind: "error",
@@ -351,11 +323,6 @@ export function FinancePanel() {
 
       {/* Scrollable body */}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-        <FinanceBudgetCard
-          budgets={budgets}
-          stats={stats}
-          onEditBudgets={() => setBudgetModalOpen(true)}
-        />
         <FinanceStatsCards stats={stats} />
 
         {/* Filter row */}
@@ -451,14 +418,6 @@ export function FinancePanel() {
           categories={categories}
           onSubmit={entryModal.mode === "edit" ? handleSubmitEdit : handleSubmitCreate}
           onClose={() => setEntryModal({ open: false, mode: "create" })}
-        />
-      )}
-      {budgetModalOpen && (
-        <FinanceBudgetModal
-          initial={budgets}
-          upsertBudget={upsertBudget}
-          deleteBudget={deleteBudget}
-          onClose={() => setBudgetModalOpen(false)}
         />
       )}
     </div>

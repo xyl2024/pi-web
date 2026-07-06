@@ -37,12 +37,6 @@ export interface Category {
   createdAt: number;
 }
 
-export interface Budget {
-  category: string;
-  monthlyLimit: number;
-  updatedAt: number;
-}
-
 export interface CreateTransactionInput {
   date: number;
   amount: number;
@@ -73,8 +67,6 @@ export interface ByCategoryRow {
   category: string;
   total: number;
   direction: FinanceDirection;
-  /** Joined from `budgets` when present; otherwise undefined. */
-  budgetLimit?: number;
 }
 
 export interface FinanceStatsResponse {
@@ -88,8 +80,6 @@ export interface FinanceStatsResponse {
 
 export interface CreateTransactionResult {
   transaction: Transaction;
-  /** Populated when this write pushed a budgeted category over its limit. */
-  budgetWarning?: { category: string; monthlyLimit: number; spent: number };
 }
 
 export class FinanceValidationError extends Error {
@@ -101,7 +91,7 @@ export class FinanceValidationError extends Error {
 
 export class FinanceNotFoundError extends Error {
   public readonly id: string;
-  constructor(kind: "transaction" | "budget" | "category", id: string) {
+  constructor(kind: "transaction" | "category", id: string) {
     super(`${kind} not found`);
     this.name = "FinanceNotFoundError";
     this.id = id;
@@ -204,22 +194,6 @@ export function validateDateMs(
     throw new FinanceValidationError(`${field} is too large`, field);
   }
   return Math.floor(value);
-}
-
-export function validateMonthlyLimit(
-  value: unknown,
-  field: string = "monthlyLimit",
-): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new FinanceValidationError(`${field} must be a finite number`, field);
-  }
-  if (value < MIN_AMOUNT || value > MAX_AMOUNT) {
-    throw new FinanceValidationError(
-      `${field} must be between ${MIN_AMOUNT} and ${MAX_AMOUNT}`,
-      field,
-    );
-  }
-  return value;
 }
 
 // ---------------------------------------------------------------------------

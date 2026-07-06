@@ -20,7 +20,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FINANCE_PRESET_CATEGORIES } from "@/lib/finance-preset-categories";
 import type {
-  Budget,
   CreateTransactionInput,
   FinanceDirection,
   FinanceStatsResponse,
@@ -30,7 +29,6 @@ import type {
 
 interface CreateTransactionResult {
   transaction: Transaction;
-  budgetWarning?: { category: string; monthlyLimit: number; spent: number };
 }
 
 export interface CategoryWithCount {
@@ -41,7 +39,6 @@ export interface CategoryWithCount {
 
 export interface UseFinanceState {
   transactions: Transaction[];
-  budgets: Budget[];
   /**
    * Preset categories joined with a usage count derived from the current
    * transactions snapshot. `name` is always one of the entries in
@@ -68,8 +65,6 @@ export interface UseFinanceState {
     patch: UpdateTransactionInput,
   ) => Promise<CreateTransactionResult>;
   deleteTransaction: (id: string) => Promise<{ id: string }>;
-  upsertBudget: (category: string, monthlyLimit: number) => Promise<Budget>;
-  deleteBudget: (category: string) => Promise<{ category: string }>;
 }
 
 async function parseError(res: Response, fallback: string): Promise<Error> {
@@ -90,7 +85,6 @@ function monthBoundsMs(year: number, month1to12: number): { startMs: number; end
 
 export function useFinance(): UseFinanceState {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -102,20 +96,12 @@ export function useFinance(): UseFinanceState {
     const p = (async () => {
       setIsLoading(true);
       try {
-        const [txRes, bRes] = await Promise.all([
-          fetch("/api/finance", { cache: "no-store" }),
-          fetch("/api/finance/budgets", { cache: "no-store" }),
-        ]);
-        if (!txRes.ok) {
-          throw await parseError(txRes, `Failed to load transactions (${txRes.status})`);
+        const res = await fetch("/api/finance", { cache: "no-store" });
+        if (!res.ok) {
+          throw await parseError(res, `Failed to load transactions (${res.status})`);
         }
-        if (!bRes.ok) {
-          throw await parseError(bRes, `Failed to load budgets (${bRes.status})`);
-        }
-        const txData = (await txRes.json()) as { transactions: Transaction[] };
-        const bData = (await bRes.json()) as { budgets: Budget[] };
-        setTransactions(txData.transactions);
-        setBudgets(bData.budgets);
+        const data = (await res.json()) as { transactions: Transaction[] };
+        setTransactions(data.transactions);
         setError(null);
       } catch (e) {
         setError(e instanceof Error ? e : new Error(String(e)));
@@ -169,7 +155,6 @@ export function useFinance(): UseFinanceState {
   const monthStats = useCallback(
     (year: number, month1to12: number): FinanceStatsResponse => {
       const { startMs, endMs } = monthBoundsMs(year, month1to12);
-      const budgetMap = new Map(budgets.map((b) => [b.category, b.monthlyLimit]));
 
       let totalIncome = 0;
       let totalExpense = 0;
@@ -197,12 +182,10 @@ export function useFinance(): UseFinanceState {
       const byCategory = Array.from(byCategoryMap.entries())
         .map(([key, v]) => {
           const category = key.slice(v.direction.length + 1);
-          const limit = budgetMap.get(category);
           return {
             category,
             total: v.total,
             direction: v.direction,
-            ...(limit !== undefined ? { budgetLimit: limit } : {}),
           };
         })
         .sort((a, b) => b.total - a.total);
@@ -216,7 +199,7 @@ export function useFinance(): UseFinanceState {
         byCategory,
       };
     },
-    [transactions, budgets],
+    [transactions],
   );
 
   const createTransaction = useCallback(
@@ -262,35 +245,6 @@ export function useFinance(): UseFinanceState {
     [refetch],
   );
 
-  const upsertBudget = useCallback(
-    async (category: string, monthlyLimit: number): Promise<Budget> => {
-      const res = await fetch("/api/finance/budgets", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category, monthlyLimit }),
-      });
-      if (!res.ok) throw await parseError(res, "Failed to save budget");
-      const data = (await res.json()) as { budget: Budget };
-      await refetch();
-      return data.budget;
-    },
-    [refetch],
-  );
-
-  const deleteBudget = useCallback(
-    async (category: string): Promise<{ category: string }> => {
-      const res = await fetch(
-        `/api/finance/budgets/${encodeURIComponent(category)}`,
-        { method: "DELETE" },
-      );
-      if (!res.ok) throw await parseError(res, "Failed to delete budget");
-      const data = (await res.json()) as { category: string };
-      await refetch();
-      return data;
-    },
-    [refetch],
-  );
-
   // Categories are preset-only and the list itself is a static constant; the
   // only thing that changes between fetches is the per-category usage count.
   // Derived from the current transactions snapshot — no extra fetch needed.
@@ -308,7 +262,6 @@ export function useFinance(): UseFinanceState {
 
   return {
     transactions,
-    budgets,
     categories,
     isLoading,
     error,
@@ -318,7 +271,5 @@ export function useFinance(): UseFinanceState {
     createTransaction,
     updateTransaction,
     deleteTransaction,
-    upsertBudget,
-    deleteBudget,
   };
 }

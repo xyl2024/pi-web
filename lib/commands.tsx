@@ -415,7 +415,7 @@ export function buildCommands(ctx: CommandContext, opts: BuildOptions): Command[
     id: "panel.finance",
     title: t("Open Finance"),
     group: "Panel",
-    keywords: ["finance", "money", "expense", "income", "budget", "记账", "预算", "支出", "收入"],
+    keywords: ["finance", "money", "expense", "income", "记账", "支出", "收入"],
     icon: <WalletIcon />,
     run: () => ctx.openFinanceTab(),
   });

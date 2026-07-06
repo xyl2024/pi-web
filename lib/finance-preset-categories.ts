@@ -6,9 +6,9 @@
  *
  * The list is hard-coded (per design decision) and shared by the server
  * (validation in `lib/finance-store.ts`) and the client (dropdown options in
- * `FinanceEntryModal` / `FinanceQuickEntry` / `FinanceBudgetModal` /
- * `FinancePanel` filter). Pure module — no Node-only or browser-only deps,
- * safe to import from both sides. Mirror of the `lib/translate.ts` pattern.
+ * `FinanceEntryModal` / `FinanceQuickEntry` / `FinancePanel` filter). Pure
+ * module — no Node-only or browser-only deps, safe to import from both
+ * sides. Mirror of the `lib/translate.ts` pattern.
  *
  * Order is significant: drop-downs render in this order so the user sees
  * expense categories first, then income, then the catch-all `其他`.
