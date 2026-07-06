@@ -481,112 +481,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
             <PiAgentTitle />
-            <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
-              {onOpenModels && (
-                <Tooltip content={t("Models")}>
-                  <button
-                    onClick={onOpenModels}
-                    aria-label={t("Models")}
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      background: "var(--bg-hover)",
-                      border: "1px solid var(--border)",
-                      color: "var(--text-muted)",
-                      cursor: "pointer",
-                      width: 28, height: 28,
-                      borderRadius: 7,
-                      padding: 0,
-                      flexShrink: 0,
-                      transition: "color 0.12s, background 0.12s",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = "var(--text)";
-                      e.currentTarget.style.background = "var(--bg-selected)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = "var(--text-muted)";
-                      e.currentTarget.style.background = "var(--bg-hover)";
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" />
-                      <line x1="9" y1="1" x2="9" y2="4" /><line x1="15" y1="1" x2="15" y2="4" />
-                      <line x1="9" y1="20" x2="9" y2="23" /><line x1="15" y1="20" x2="15" y2="23" />
-                      <line x1="20" y1="9" x2="23" y2="9" /><line x1="20" y1="14" x2="23" y2="14" />
-                      <line x1="1" y1="9" x2="4" y2="9" /><line x1="1" y1="14" x2="4" y2="14" />
-                    </svg>
-                  </button>
-                </Tooltip>
-              )}
-              {onOpenSkills && (
-                <Tooltip content={t("Skills")}>
-                  <button
-                    onClick={onOpenSkills}
-                    aria-label={t("Skills")}
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      background: "var(--bg-hover)",
-                      border: "1px solid var(--border)",
-                      color: "var(--text-muted)",
-                      cursor: "pointer",
-                      width: 28, height: 28,
-                      borderRadius: 7,
-                      padding: 0,
-                      flexShrink: 0,
-                      transition: "color 0.12s, background 0.12s",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = "var(--text)";
-                      e.currentTarget.style.background = "var(--bg-selected)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = "var(--text-muted)";
-                      e.currentTarget.style.background = "var(--bg-hover)";
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                      <path d="M2 17l10 5 10-5" />
-                      <path d="M2 12l10 5 10-5" />
-                    </svg>
-                  </button>
-                </Tooltip>
-              )}
-              {onOpenPrompts && (
-                <Tooltip content={t("Prompts")}>
-                  <button
-                    onClick={onOpenPrompts}
-                    aria-label={t("Prompts")}
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      background: "var(--bg-hover)",
-                      border: "1px solid var(--border)",
-                      color: "var(--text-muted)",
-                      cursor: "pointer",
-                      width: 28, height: 28,
-                      borderRadius: 7,
-                      padding: 0,
-                      flexShrink: 0,
-                      transition: "color 0.12s, background 0.12s",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = "var(--text)";
-                      e.currentTarget.style.background = "var(--bg-selected)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = "var(--text-muted)";
-                      e.currentTarget.style.background = "var(--bg-hover)";
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 1 4 17.5" />
-                      <path d="M8 7h8" />
-                      <path d="M8 11h6" />
-                    </svg>
-                  </button>
-                </Tooltip>
-              )}
-            </div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             <Tooltip content={t("Refresh")}>
@@ -1205,7 +1099,13 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
 
       <SchedulerPanel onOpenSession={onOpenScheduledSession} />
       {onOpenSettings && (
-        <ProfileBlock onOpenSettings={onOpenSettings} refreshKey={profileRefreshKey} />
+        <ProfileBlock
+          onOpenSettings={onOpenSettings}
+          onOpenModels={onOpenModels}
+          onOpenSkills={onOpenSkills}
+          onOpenPrompts={onOpenPrompts}
+          refreshKey={profileRefreshKey}
+        />
       )}
     </div>
   );
