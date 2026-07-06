@@ -1384,6 +1384,27 @@ export function AppShell() {
           </svg>
         </button>
         </Tooltip>
+        {/* Open Finance (daily-accounting) panel */}
+        <Tooltip content={t("Finance")}>
+          <button
+            onClick={handleOpenFinanceTab}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, padding: 0,
+              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+              color: activeFileTab?.kind === "finance" ? "var(--text)" : "var(--text-muted)",
+              cursor: "pointer", transition: "color 0.12s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "finance" ? "var(--text)" : "var(--text-muted)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="4.5" width="12" height="9" rx="1.5" />
+              <path d="M2 7h12" />
+              <circle cx="11.5" cy="10.5" r="0.8" fill="currentColor" stroke="none" />
+            </svg>
+          </button>
+        </Tooltip>
         {/* Open notes — always visible */}
         <Tooltip content={t("Open notes")}>
         <button
@@ -1531,29 +1552,8 @@ export function AppShell() {
               <circle cx="3.5" cy="12.5" r="1.2" fill="currentColor" stroke="none" />
               <path d="M2 8a6 6 0 0 1 6 6" />
               <path d="M2 4a10 10 0 0 1 10 10" />
-            </svg>
-          </button>
-        </Tooltip>
-        {/* Open Finance (daily-accounting) panel */}
-        <Tooltip content={t("Finance")}>
-          <button
-            onClick={handleOpenFinanceTab}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center",
-              width: 36, height: 36, padding: 0,
-              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "finance" ? "var(--text)" : "var(--text-muted)",
-              cursor: "pointer", transition: "color 0.12s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "finance" ? "var(--text)" : "var(--text-muted)"; }}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="4.5" width="12" height="9" rx="1.5" />
-              <path d="M2 7h12" />
-              <circle cx="11.5" cy="10.5" r="0.8" fill="currentColor" stroke="none" />
-            </svg>
-          </button>
+</svg>
+        </button>
         </Tooltip>
         {/* Expand/collapse — only when panel is open and has tabs */}
         {rightPanelState !== "closed" && fileTabs.length > 0 && (
