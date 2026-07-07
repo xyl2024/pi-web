@@ -43,9 +43,9 @@ function getMessagePreview(msg: AgentMessage | Partial<AgentMessage>): string {
 
 function getNodeColor(msg: AgentMessage | Partial<AgentMessage>): { bg: string; border: string } {
   if (msg.role === "user") {
-    return { bg: "rgba(37,99,235,0.18)", border: "rgba(37,99,235,0.7)" };
+    return { bg: "var(--accent)", border: "var(--accent)" };
   }
-  return { bg: "rgba(107,114,128,0.12)", border: "rgba(107,114,128,0.5)" };
+  return { bg: "#f59e0b", border: "#f59e0b" };
 }
 
 function hasTextContent(msg: AgentMessage | Partial<AgentMessage>): boolean {
@@ -58,20 +58,19 @@ function hasTextContent(msg: AgentMessage | Partial<AgentMessage>): boolean {
 }
 
 interface NodeInfo {
-  topRatio: number;   // 0–1 within total scroll height
-  heightRatio: number;
+  top: number;        // absolute scroll offset of the message element
   msg: AgentMessage | Partial<AgentMessage>;
+  el: HTMLDivElement;
   index: number;
 }
 
 export function ChatMinimap({ messages, streamingMessage, scrollContainer, messageRefs }: Props) {
-  const [scrollRatio, setScrollRatio] = useState(0);
-  const [viewportRatio, setViewportRatio] = useState(1);
   const [visible, setVisible] = useState(false);
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [minimapHovered, setMinimapHovered] = useState(false);
   const [mouseYRatio, setMouseYRatio] = useState<number | null>(null);
-  const draggingRef = useRef(false);
+  const [containerHeight, setContainerHeight] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const allMessages = useMemo(
@@ -81,25 +80,16 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
   const allMessagesRef = useRef(allMessages);
   allMessagesRef.current = allMessages;
 
-  const updatePositionsRef = useRef<() => void>(null!);
-  updatePositionsRef.current = () => {
+  // Rebuild node list from real DOM refs (positions used only for active detection)
+  const rebuildRef = useRef<() => void>(null!);
+  rebuildRef.current = () => {
     const scrollEl = scrollContainer.current;
     if (!scrollEl) return;
 
     const totalH = scrollEl.scrollHeight;
     const clientH = scrollEl.clientHeight;
-    const scrollable = totalH - clientH;
+    setVisible(totalH - clientH > 20 && !!messageRefs.current?.length);
 
-    setVisible(scrollable > 20);
-    if (scrollable <= 0) {
-      setScrollRatio(0);
-      setViewportRatio(1);
-    } else {
-      setScrollRatio(scrollEl.scrollTop / scrollable);
-      setViewportRatio(clientH / totalH);
-    }
-
-    // Build node positions from real DOM refs
     const refs = messageRefs.current;
     const newNodes: NodeInfo[] = [];
     let refIndex = 0;
@@ -118,90 +108,88 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
         const elRect = el.getBoundingClientRect();
         const containerRect = scrollEl.getBoundingClientRect();
         const top = elRect.top - containerRect.top + scrollEl.scrollTop;
-        const h = elRect.height;
-        newNodes.push({
-          topRatio: top / totalH,
-          heightRatio: h / totalH,
-          msg,
-          index: newNodes.length,
-        });
+        newNodes.push({ top, msg, el, index: newNodes.length });
       }
     }
     setNodes(newNodes);
   };
 
-  const updatePositions = useCallback(() => updatePositionsRef.current(), []);
+  const rebuild = useCallback(() => rebuildRef.current(), []);
+
+  // Update which node is "active" (nearest to the top of the viewport)
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  const updateActive = useCallback(() => {
+    const scrollEl = scrollContainer.current;
+    if (!scrollEl) return;
+    const marker = scrollEl.scrollTop + scrollEl.clientHeight * 0.25;
+    const ns = nodesRef.current;
+    let active = 0;
+    for (let i = 0; i < ns.length; i++) {
+      if (ns[i].top <= marker) active = i;
+      else break;
+    }
+    setActiveIndex(active);
+  }, [scrollContainer]);
 
   useEffect(() => {
     const el = scrollContainer.current;
     if (!el) return;
-    el.addEventListener("scroll", updatePositions, { passive: true });
-    const ro = new ResizeObserver(updatePositions);
+    const onScroll = () => updateActive();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    const ro = new ResizeObserver(() => { rebuild(); updateActive(); });
     ro.observe(el);
-    // Also observe the scroll content for height changes
     if (el.firstElementChild) ro.observe(el.firstElementChild);
-    updatePositions();
+    rebuild();
+    updateActive();
     return () => {
-      el.removeEventListener("scroll", updatePositions);
+      el.removeEventListener("scroll", onScroll);
       ro.disconnect();
     };
-  }, [scrollContainer, updatePositions]);
+  }, [scrollContainer, rebuild, updateActive]);
 
   // Re-measure when message count changes (new messages arrive)
   useEffect(() => {
-    const t = setTimeout(updatePositions, 50);
+    const t = setTimeout(() => { rebuild(); updateActive(); }, 50);
     return () => clearTimeout(t);
-  }, [messages.length, updatePositions]);
+  }, [messages.length, rebuild, updateActive]);
 
-  const scrollToMinimapRatio = useCallback((viewportTopRatio: number) => {
-    const el = scrollContainer.current;
+  const jumpTo = useCallback((node: NodeInfo) => {
+    node.el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  // Measure the minimap container height (for compact centered layout)
+  useEffect(() => {
+    const el = containerRef.current;
     if (!el) return;
-    const scrollable = el.scrollHeight - el.clientHeight;
-    if (scrollable <= 0) return;
-    const clamped = Math.max(0, Math.min(1 - viewportRatio, viewportTopRatio));
-    el.scrollTop = (clamped / (1 - viewportRatio)) * scrollable;
-  }, [scrollContainer, viewportRatio]);
+    const ro = new ResizeObserver(() => setContainerHeight(el.clientHeight));
+    ro.observe(el);
+    setContainerHeight(el.clientHeight);
+    return () => ro.disconnect();
+  }, [visible]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!visible) return;
-
-    draggingRef.current = true;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickRatio = (e.clientY - rect.top) / rect.height;
-    const grabOffset = clickRatio - scrollRatio * (1 - viewportRatio);
-    const insideBox = grabOffset >= 0 && grabOffset <= viewportRatio;
-    const offset = insideBox ? grabOffset : viewportRatio / 2;
-
-    scrollToMinimapRatio(clickRatio - offset);
-
-    const onMove = (ev: MouseEvent) => {
-      if (!draggingRef.current) return;
-      const r = (ev.clientY - rect.top) / rect.height;
-      scrollToMinimapRatio(r - offset);
-    };
-    const onUp = () => {
-      draggingRef.current = false;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }, [visible, viewportRatio, scrollRatio, scrollToMinimapRatio]);
-
-
-
-  // Compute collision-free tooltip positions for all nodes
+  // Compact centered layout: lines stacked with a small fixed step, centered vertically
   const TOOLTIP_HEIGHT = 22;
   const TOOLTIP_GAP = 2;
-  const minimapHeightPx = containerRef.current?.clientHeight ?? 600;
+  const ROW_STEP = 12;
+  const minimapHeightPx = containerHeight || 600;
+
+  const nodeCenterPx = useCallback(
+    (index: number) => {
+      const stackH = Math.max(0, nodes.length - 1) * ROW_STEP;
+      const startCenter = minimapHeightPx / 2 - stackH / 2;
+      return startCenter + index * ROW_STEP;
+    },
+    [nodes.length, minimapHeightPx]
+  );
 
   const tooltipPositions = useMemo(() => {
     if (!minimapHovered || nodes.length === 0) return [];
-    // Initial positions: centered on the dot
-    const positions = nodes.map((node) =>
-      Math.round(node.topRatio * minimapHeightPx - TOOLTIP_HEIGHT / 2)
+    const stackH = Math.max(0, nodes.length - 1) * ROW_STEP;
+    const startCenter = minimapHeightPx / 2 - stackH / 2;
+    const positions = nodes.map((_, i) =>
+      Math.round(startCenter + i * ROW_STEP - TOOLTIP_HEIGHT / 2)
     );
-    // Iterative push-apart to resolve overlaps (top-to-bottom pass, then bottom-to-top)
     for (let pass = 0; pass < 10; pass++) {
       for (let i = 1; i < positions.length; i++) {
         const minTop = positions[i - 1] + TOOLTIP_HEIGHT + TOOLTIP_GAP;
@@ -212,29 +200,31 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
         if (positions[i] > maxTop) positions[i] = maxTop;
       }
     }
-    // Clamp all to minimap bounds
+    // Re-center the whole tooltip block vertically
+    if (positions.length > 0) {
+      const blockTop = positions[0];
+      const blockBottom = positions[positions.length - 1] + TOOLTIP_HEIGHT;
+      const shift = minimapHeightPx / 2 - (blockTop + blockBottom) / 2;
+      for (let i = 0; i < positions.length; i++) positions[i] += shift;
+    }
     for (let i = 0; i < positions.length; i++) {
       positions[i] = Math.max(0, Math.min(minimapHeightPx - TOOLTIP_HEIGHT, positions[i]));
     }
     return positions;
   }, [minimapHovered, nodes, minimapHeightPx]);
 
-  if (!visible) return null;
+  if (!visible || nodes.length === 0) return null;
 
-  const viewportBoxTop = scrollRatio * (1 - viewportRatio) * 100;
-  const viewportBoxHeight = viewportRatio * 100;
-
-  // Find the node closest to the current mouse position
-  const nearestIndex = mouseYRatio !== null && nodes.length > 0
-    ? nodes.reduce((best, node) => {
-        return Math.abs(node.topRatio - mouseYRatio) < Math.abs(nodes[best].topRatio - mouseYRatio) ? node.index : best;
-      }, 0)
+  // Node nearest to the current mouse position (for hover highlight)
+  const mouseY = mouseYRatio !== null ? mouseYRatio * minimapHeightPx : null;
+  const nearestIndex = mouseY !== null
+    ? nodes.reduce((best, node) =>
+        Math.abs(nodeCenterPx(node.index) - mouseY) < Math.abs(nodeCenterPx(best) - mouseY) ? node.index : best, 0)
     : null;
 
   return (
     <div
       ref={containerRef}
-      onMouseDown={handleMouseDown}
       onMouseEnter={() => setMinimapHovered(true)}
       onMouseLeave={() => { setMinimapHovered(false); setMouseYRatio(null); }}
       onMouseMove={(e) => {
@@ -247,45 +237,28 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
         position: "relative",
         cursor: "default",
         userSelect: "none",
-        borderLeft: "1px solid var(--border)",
-        background: "var(--bg-panel)",
+        background: "transparent",
         overflow: "visible",
       }}
     >
-      {/* Viewport indicator */}
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: `${viewportBoxTop}%`,
-          height: `${viewportBoxHeight}%`,
-          background: "rgba(100,100,100,0.1)",
-          borderTop: "1px solid rgba(100,100,100,0.2)",
-          borderBottom: "1px solid rgba(100,100,100,0.2)",
-          pointerEvents: "none",
-          zIndex: 1,
-        }}
-      />
-
-      {/* Message nodes */}
+      {/* Message lines — compact centered stack, click to jump */}
       {nodes.map((node) => {
         const color = getNodeColor(node.msg);
+        const isActive = activeIndex === node.index;
         const isNearest = minimapHovered && nearestIndex === node.index;
-        const isUser = node.msg.role === "user";
-        const dotTop = node.topRatio * 100;
+        const highlight = isActive || isNearest;
 
         return (
           <div
             key={node.index}
-
+            onClick={() => jumpTo(node)}
             style={{
               position: "absolute",
-              top: `${dotTop}%`,
+              top: nodeCenterPx(node.index),
               transform: "translateY(-50%)",
               left: 0,
               right: 0,
-              height: "12px",
+              height: "10px",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -293,38 +266,22 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
               zIndex: 2,
             }}
           >
-            {/* Dot */}
+            {/* Horizontal line: equal length, click to jump */}
             <div
               style={{
-                width: isUser ? 8 : 6,
-                height: isUser ? 8 : 6,
-                borderRadius: isUser ? 2 : "50%",
+                width: 14,
+                height: 3,
+                borderRadius: 1.5,
                 background: color.bg,
-                border: `1.5px solid ${color.border}`,
+                opacity: highlight ? 1 : 0.5,
+                boxShadow: highlight ? `0 0 0 1px ${color.border}` : "none",
                 flexShrink: 0,
-                transition: "transform 0.1s",
-                transform: isNearest ? "scale(1.6)" : "scale(1)",
+                transition: "opacity 0.1s, box-shadow 0.1s",
               }}
             />
-
-
           </div>
         );
       })}
-
-      {/* Center line */}
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: 0,
-          bottom: 0,
-          width: 1,
-          background: "var(--border)",
-          transform: "translateX(-50%)",
-          zIndex: 0,
-        }}
-      />
 
       {/* Tooltips for all nodes, collision-free positions */}
       {minimapHovered && nodes.map((node, i) => {
