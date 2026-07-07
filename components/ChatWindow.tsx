@@ -541,6 +541,8 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       slashResourceKey={slashResourceKey}
       onSlashAction={(action) => { if (action === "new") onNewSessionRequest?.(); }}
       onNewSession={onNewSessionRequest}
+      onOpenReplay={openReplay}
+      replayAvailable={!streamState.isStreaming && !agentRunning && messages.length > 0}
     />
   );
 
@@ -774,26 +776,9 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
           </Tooltip>
         )}
 
-        {/* Replay toggle — opens the time-travel scrubber. Hidden while the
-            agent is running (replay must not coexist with a live stream). */}
-        {!replayOpen && !streamState.isStreaming && !agentRunning && messages.length > 0 && (
-          <Tooltip content={t("Replay")}>
-          <button
-            onClick={openReplay}
-            aria-label={t("Replay")}
-            className="absolute top-3 right-12 z-10 flex h-9 w-9 items-center justify-center rounded-full border shadow-lg transition-all duration-200 hover:scale-110"
-            style={{
-              background: "var(--bg-panel)",
-              borderColor: "var(--border)",
-              color: "var(--text-muted)",
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
-            </svg>
-          </button>
-          </Tooltip>
-        )}
+        {/* Replay toggle now lives next to the input box (ChatInput bottom
+            buttons) — opens the time-travel scrubber. Hidden while the agent
+            is running (replay must not coexist with a live stream). */}
 
         {/* Tool call stats are rendered as a right-panel tab by AppShell.
             We just publish the snapshot + scroll callback to the module store. */}

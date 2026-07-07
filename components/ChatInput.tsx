@@ -56,6 +56,8 @@ interface Props {
   onSlashAction?: (action: string) => void;
   contextUsage?: { percent: number | null; contextWindow: number; tokens: number | null } | null;
   onNewSession?: () => void;
+  onOpenReplay?: () => void;
+  replayAvailable?: boolean;
 }
 
 export interface ChatInputHandle {
@@ -172,6 +174,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   onSlashAction,
   contextUsage,
   onNewSession,
+  onOpenReplay,
+  replayAvailable,
 }: Props, ref) {
   const { t } = useI18n();
   const [value, setValue] = useState("");
@@ -1111,6 +1115,38 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
           {/* RIGHT: thinking + tools preset + compact + sound (idle) | Stop + sound (streaming) */}
           <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }}>
+            {onOpenReplay && replayAvailable && (
+              <Tooltip content={t("Replay")}>
+                <button
+                  onClick={onOpenReplay}
+                  aria-label={t("Replay")}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 32, height: 32, padding: 0,
+                    background: "none",
+                    border: "none",
+                    borderRadius: 9,
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                    transition: "background 0.12s, color 0.12s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                    e.currentTarget.style.color = "var(--text)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "none";
+                    e.currentTarget.style.color = "var(--text-muted)";
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
+                  </svg>
+                </button>
+              </Tooltip>
+            )}
+
             {!isStreaming && onThinkingLevelChange && (
               <div ref={thinkingDropdownRef} style={{ position: "relative" }}>
                 <Tooltip content={t("Change thinking level")}>
