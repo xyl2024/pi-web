@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
+import { DatePicker } from "./DatePicker";
 import type { FinanceDirection } from "@/lib/finance-schema";
 import type { CategoryWithCount } from "@/hooks/useFinance";
 import {
@@ -22,16 +23,25 @@ interface FinanceQuickEntryProps {
   }) => Promise<void>;
 }
 
+function startOfDay(ts: number): number {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 /**
  * Top sticky quick-entry strip. Fields (left → right):
- *   direction toggle | amount | details (with `#` category picker) | save
- * Defaults to today's date, expense. Category is picked by typing `#` inside
- * the details input — see `FinanceCategoryPopover` for the picker UX.
+ *   direction toggle | date | amount | details (with `#` category picker) | save
+ * Date defaults to today but can be back-dated; the choice persists across
+ * submits in a session to make backfilling multiple entries easier.
+ * Category is picked by typing `#` inside the details input — see
+ * `FinanceCategoryPopover` for the picker UX.
  */
 export function FinanceQuickEntry({ categories, onSubmit }: FinanceQuickEntryProps) {
   const { t } = useI18n();
   const toast = useToast();
   const [direction, setDirection] = useState<FinanceDirection>("expense");
+  const [date, setDate] = useState(() => startOfDay(Date.now()));
   const [amount, setAmount] = useState("");
   const [details, setDetails] = useState("");
   const [selectionStart, setSelectionStart] = useState(0);
@@ -102,8 +112,8 @@ export function FinanceQuickEntry({ categories, onSubmit }: FinanceQuickEntryPro
     setSubmitting(true);
     try {
       await onSubmit({
-        // Default date to today at noon (avoids TZ off-by-one edge cases).
-        date: Date.now(),
+        // Date chosen in the DatePicker (start-of-day in the user's local TZ).
+        date,
         amount: amt,
         direction,
         // Server parses `details` for a `#<preset>` token and strips it; we
@@ -180,6 +190,17 @@ export function FinanceQuickEntry({ categories, onSubmit }: FinanceQuickEntryPro
         >
           {t("Income")}
         </button>
+      </div>
+      <div style={{ flexShrink: 0, width: 140 }}>
+        <DatePicker
+          value={date}
+          onChange={(ts) => {
+            if (ts != null) setDate(ts);
+          }}
+          clearable={false}
+          ariaLabel={t("Date")}
+          triggerStyle={dateTriggerStyle}
+        />
       </div>
       <input
         type="number"
@@ -301,5 +322,16 @@ const inputStyle: React.CSSProperties = {
   fontSize: 13,
   color: "var(--text)",
   outline: "none",
+  fontFamily: "var(--font-sans)",
+};
+
+// DatePicker's default trigger is sized for inline use inside todo rows;
+// restyle it (font + padding + radius) so it sits flush with the other inputs
+// in the strip. Width is enforced by the wrapping div above to avoid the
+// default trigger's `width: 100%` claiming extra flex space.
+const dateTriggerStyle: React.CSSProperties = {
+  fontSize: 13,
+  padding: "4px 8px",
+  borderRadius: 4,
   fontFamily: "var(--font-sans)",
 };
