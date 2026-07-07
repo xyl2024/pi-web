@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import type { SessionInfo } from "@/lib/types";
 import { FileExplorer } from "./FileExplorer";
-import { SchedulerPanel } from "./SchedulerPanel";
 import { ProfileBlock } from "./ProfileBlock";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
@@ -23,12 +22,12 @@ interface Props {
   onAtMention?: (filePath: string) => void;
   onOpenSearch?: () => void;
   onFileDeleted?: (filePath: string) => void;
-  onOpenScheduledSession?: (sessionId: string) => void;
   favoriteIds?: string[];
   onToggleFavorite?: (sessionId: string) => void;
   onOpenModels?: () => void;
   onOpenSkills?: () => void;
   onOpenPrompts?: () => void;
+  onOpenScheduler?: () => void;
   onOpenSettings?: () => void;
   profileRefreshKey?: number;
 }
@@ -208,7 +207,7 @@ function PiAgentTitle() {
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, onOpenScheduledSession, favoriteIds = [], onToggleFavorite, onOpenModels, onOpenSkills, onOpenPrompts, onOpenSettings, profileRefreshKey }: Props) {
+export function SessionSidebar({ selectedSessionId, onSelectSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, favoriteIds = [], onToggleFavorite, onOpenModels, onOpenSkills, onOpenPrompts, onOpenScheduler, onOpenSettings, profileRefreshKey }: Props) {
   const { t } = useI18n();
   const toast = useToast();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
@@ -1097,13 +1096,13 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
         </div>
       )}
 
-      <SchedulerPanel onOpenSession={onOpenScheduledSession} />
       {onOpenSettings && (
         <ProfileBlock
           onOpenSettings={onOpenSettings}
           onOpenModels={onOpenModels}
           onOpenSkills={onOpenSkills}
           onOpenPrompts={onOpenPrompts}
+          onOpenScheduler={onOpenScheduler}
           refreshKey={profileRefreshKey}
         />
       )}

@@ -375,7 +375,7 @@ components/
                             tree rendering + header-less JSON syntax highlighter
   TranslatePanel.tsx        right-panel tab: target-language picker + LLM call
   DiffPanel.tsx             right-panel tab: unified/split diff viewer (localStorage persisted)
-  SchedulerPanel.tsx        right-panel tab: cron-task CRUD + run history
+  SchedulerModal.tsx        modal opened from the avatar menu: cron-task CRUD + run history (single-stack list/runs/form views)
   DatePicker.tsx            small calendar popover (deadlines + scheduler "next run" preview)
   CanvasPanel.tsx + CanvasPanelInner.tsx
                             Excalidraw whiteboard (dynamic import, IndexedDB-backed)

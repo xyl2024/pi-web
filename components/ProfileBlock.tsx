@@ -9,6 +9,7 @@ interface Props {
   onOpenModels?: () => void;
   onOpenSkills?: () => void;
   onOpenPrompts?: () => void;
+  onOpenScheduler?: () => void;
   refreshKey?: number;
 }
 
@@ -32,7 +33,7 @@ const itemBaseStyle: React.CSSProperties = {
   fontWeight: 500,
 };
 
-export function ProfileBlock({ onOpenSettings, onOpenModels, onOpenSkills, onOpenPrompts, refreshKey }: Props) {
+export function ProfileBlock({ onOpenSettings, onOpenModels, onOpenSkills, onOpenPrompts, onOpenScheduler, refreshKey }: Props) {
   const { t } = useI18n();
   const [username, setUsername] = useState<string | null>(null);
   const [avatarAttempted, setAvatarAttempted] = useState(0);
@@ -87,7 +88,7 @@ export function ProfileBlock({ onOpenSettings, onOpenModels, onOpenSkills, onOpe
   const showImg = avatarOk;
   const showPlaceholder = !avatarOk || !avatarLoaded;
 
-  const hasAnyEntry = Boolean(onOpenModels || onOpenSkills || onOpenPrompts);
+  const hasAnyEntry = Boolean(onOpenModels || onOpenSkills || onOpenPrompts || onOpenScheduler);
 
   return (
     <div
@@ -270,6 +271,21 @@ export function ProfileBlock({ onOpenSettings, onOpenModels, onOpenSkills, onOpe
                 <path d="M8 11h6" />
               </svg>
               <span>{t("Prompts")}</span>
+            </button>
+          )}
+          {onOpenScheduler && (
+            <button
+              role="menuitem"
+              onClick={() => { setMenuOpen(false); onOpenScheduler(); }}
+              style={itemBaseStyle}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "var(--text-muted)"; }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <circle cx="12" cy="12" r="9" />
+                <polyline points="12 7 12 12 15 14" />
+              </svg>
+              <span>{t("Scheduled tasks")}</span>
             </button>
           )}
         </div>

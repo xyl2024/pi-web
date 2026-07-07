@@ -39,6 +39,7 @@ import { Tooltip } from "./Tooltip";
 import { PromptsConfig } from "./PromptsConfig";
 import { SettingsModal } from "./SettingsModal";
 import { PayloadsModal } from "./PayloadsModal";
+import { SchedulerModal } from "./SchedulerModal";
 import { BranchNavigator } from "./BranchNavigator";
 import { CommandPalette } from "./CommandPalette";
 import { CollapsiblePanel } from "./CollapsiblePanel";
@@ -95,6 +96,7 @@ export function AppShell() {
   const [skillsConfigOpen, setSkillsConfigOpen] = useState(false);
   const [promptsConfigOpen, setPromptsConfigOpen] = useState(false);
   const [settingsConfigOpen, setSettingsConfigOpen] = useState(false);
+  const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [profileRefreshKey, setProfileRefreshKey] = useState(0);
   const [payloadsOpen, setPayloadsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -138,6 +140,7 @@ export function AppShell() {
     setPromptsConfigOpen(false);
     setSettingsConfigOpen(false);
     setPayloadsOpen(false);
+    setSchedulerOpen(false);
     setActiveTopPanel(null);
     setPaletteOpen(true);
   }, []);
@@ -443,7 +446,7 @@ export function AppShell() {
     router.replace(`?session=${encodeURIComponent(session.id)}`, { scroll: false });
   }, [router]);
 
-  // Called by SchedulerPanel "Open session" — fetches minimal session info
+  // Called by SchedulerModal "Open session" — fetches minimal session info
   // and routes through the same selection path as the sidebar.
   const handleOpenScheduledSession = useCallback((sessionId: string) => {
     void (async () => {
@@ -796,6 +799,7 @@ export function AppShell() {
     openModels: () => setModelsConfigOpen(true),
     openSkills: () => setSkillsConfigOpen(true),
     openPrompts: () => setPromptsConfigOpen(true),
+    openScheduler: () => setSchedulerOpen(true),
     openPayloads: () => { if (selectedSession?.id) setPayloadsOpen(true); },
     openTodosTab: handleOpenTodoTab,
     openNotesTab: handleOpenNotesTab,
@@ -843,12 +847,12 @@ export function AppShell() {
       onAtMention={handleAtMention}
       onOpenSearch={openPalette}
       onFileDeleted={handleFileDeleted}
-      onOpenScheduledSession={handleOpenScheduledSession}
       favoriteIds={favoriteIds}
       onToggleFavorite={toggleSessionFavorite}
       onOpenModels={() => setModelsConfigOpen(true)}
       onOpenSkills={() => setSkillsConfigOpen(true)}
       onOpenPrompts={() => setPromptsConfigOpen(true)}
+      onOpenScheduler={() => setSchedulerOpen(true)}
       onOpenSettings={() => setSettingsConfigOpen(true)}
       profileRefreshKey={profileRefreshKey}
     />
@@ -1643,6 +1647,13 @@ export function AppShell() {
     {settingsConfigOpen && <SettingsModal onClose={() => setSettingsConfigOpen(false)} onProfileSaved={() => setProfileRefreshKey((k) => k + 1)} />}
     {payloadsOpen && selectedSession?.id && (
       <PayloadsModal sessionId={selectedSession.id} onClose={() => setPayloadsOpen(false)} />
+    )}
+    {schedulerOpen && (
+      <SchedulerModal
+        open={schedulerOpen}
+        onClose={() => setSchedulerOpen(false)}
+        onOpenSession={handleOpenScheduledSession}
+      />
     )}
     <CommandPalette
       open={paletteOpen}

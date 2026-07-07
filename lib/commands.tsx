@@ -69,6 +69,7 @@ const ChipIcon = () => I(<><rect x="4" y="4" width="16" height="16" rx="2" /><re
 const SparkleIcon = () => I(<><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" /></>);
 const BookIcon = () => I(<><path d="M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 1 4 17.5" /><path d="M8 7h8" /><path d="M8 11h6" /></>);
 const RadioIcon = () => I(<><circle cx="12" cy="12" r="2" /><path d="M16.24 7.76a6 6 0 0 1 0 8.49" /><path d="M7.76 16.24a6 6 0 0 1 0-8.49" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /><path d="M4.93 19.07a10 10 0 0 1 0-14.14" /></>);
+const ClockIcon = () => I(<><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></>);
 const LangIcon = () => I(<><path d="M5 8h14" /><path d="M8 5h7" /><path d="M11 12c0 4-3 7-6 7" /><path d="M11 12c0 4 3 7 6 7" /><path d="M9 19l3-7 3 7" /></>);
 const DiffIcon = () => I(<><rect x="3" y="4" width="8" height="16" rx="1.5" /><rect x="13" y="4" width="8" height="16" rx="1.5" /><line x1="7" y1="9" x2="7" y2="9" /><line x1="17" y1="13" x2="17" y2="13" /></>);
 const WalletIcon = () => I(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18" /><circle cx="16.5" cy="14" r="1.2" fill="currentColor" stroke="none" /></>);
@@ -134,6 +135,7 @@ export interface CommandContext {
   openModels: () => void;
   openSkills: () => void;
   openPrompts: () => void;
+  openScheduler: () => void;
   openPayloads: () => void;
 
   // Right-panel tabs
@@ -454,6 +456,14 @@ export function buildCommands(ctx: CommandContext, opts: BuildOptions): Command[
     icon: <BookIcon />,
     when: (c) => c.hasCwd,
     run: () => ctx.openPrompts(),
+  });
+  cmds.push({
+    id: "modal.scheduler",
+    title: t("Open scheduled tasks"),
+    group: "Modal",
+    keywords: ["scheduler", "cron", "schedule", "timer", "tasks", "定时", "任务", "定时任务"],
+    icon: <ClockIcon />,
+    run: () => ctx.openScheduler(),
   });
   cmds.push({
     id: "modal.payloads",
