@@ -233,12 +233,15 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
       }}
       style={{
         width: MINIMAP_WIDTH,
-        flexShrink: 0,
-        position: "relative",
+        position: "absolute",
+        right: 0,
+        top: 0,
+        bottom: 0,
         cursor: "default",
         userSelect: "none",
         background: "transparent",
         overflow: "visible",
+        zIndex: 5,
       }}
     >
       {/* Message lines — compact centered stack, click to jump */}
