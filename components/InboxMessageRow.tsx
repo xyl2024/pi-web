@@ -21,6 +21,55 @@ function safeStr(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
+interface DigestArticle {
+  title?: unknown;
+  link?: unknown;
+}
+
+interface DigestFeed {
+  unreadCount?: unknown;
+  feedTitle?: unknown;
+  articles?: unknown;
+}
+
+interface DigestPayload {
+  totalUnread?: unknown;
+  feedCount?: unknown;
+  feeds?: unknown;
+}
+
+function safeNumber(v: unknown): number | undefined {
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
+function safeArray<T>(v: unknown): T[] | undefined {
+  return Array.isArray(v) ? (v as T[]) : undefined;
+}
+
+function parseDigest(payload: unknown): {
+  feeds: Array<{ unreadCount: number; feedTitle: string | null; articles: Array<{ title: string; link: string }> }>;
+} | null {
+  if (!payload || typeof payload !== "object") return null;
+  const obj = payload as DigestPayload;
+  const feedsRaw = safeArray<DigestFeed>(obj.feeds);
+  if (!feedsRaw) return null;
+  const feeds = feedsRaw.map((f) => {
+    const articlesRaw = safeArray<DigestArticle>(f.articles) ?? [];
+    const articles = articlesRaw
+      .map((a) => ({
+        title: safeStr(a.title) ?? "",
+        link: safeStr(a.link) ?? "",
+      }))
+      .filter((a) => a.link.length > 0);
+    return {
+      unreadCount: safeNumber(f.unreadCount) ?? 0,
+      feedTitle: safeStr(f.feedTitle) ?? null,
+      articles,
+    };
+  });
+  return { feeds };
+}
+
 export function InboxMessageRow({
   message,
   onDelete,
@@ -32,6 +81,7 @@ export function InboxMessageRow({
   const payload = message.payload ?? {};
   const body = safeStr(payload.body);
   const href = safeStr(payload.href);
+  const digest = parseDigest(payload.digest);
 
   return (
     <div
@@ -107,6 +157,70 @@ export function InboxMessageRow({
             }}
           >
             {body}
+          </div>
+        )}
+        {digest && digest.feeds.length > 0 && (
+          <div
+            style={{
+              marginTop: 6,
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+            }}
+          >
+            {digest.feeds.map((feed, i) => (
+              <div
+                key={i}
+                style={{
+                  fontSize: 12,
+                  color: "var(--text)",
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: 600,
+                    marginBottom: 2,
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  {feed.feedTitle ?? t("(untitled)")} · {feed.unreadCount}
+                </div>
+                <ul
+                  style={{
+                    listStyle: "none",
+                    padding: 0,
+                    margin: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 2,
+                  }}
+                >
+                  {feed.articles.map((art, j) => (
+                    <li key={j}>
+                      <a
+                        href={art.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          color: "var(--text)",
+                          textDecoration: "none",
+                          display: "block",
+                          padding: "2px 0",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.textDecoration = "underline";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.textDecoration = "none";
+                        }}
+                      >
+                        · {art.title || art.link}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         )}
       </div>

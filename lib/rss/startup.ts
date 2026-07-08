@@ -8,6 +8,7 @@
  */
 
 import { ensureLoop } from "./loop";
+import { ensureDigestLoop } from "./digest";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("rss/startup");
@@ -19,4 +20,5 @@ export function bootstrap(): void {
   bootstrapped = true;
   log.info("rss bootstrap");
   ensureLoop();
+  ensureDigestLoop();
 }

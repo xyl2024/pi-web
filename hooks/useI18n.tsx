@@ -831,6 +831,14 @@ const ZH_TRANSLATIONS = {
   "Article not found": "未找到文章",
   "Invalid feed URL": "无效的订阅地址",
   "Already subscribed": "已订阅",
+  // RSS daily digest (top-bar status + inline settings form)
+  "Daily digest": "每日摘要",
+  "Daily digest is off": "每日摘要已关闭",
+  "Next digest at {time}": "下次推送 {time}",
+  "Enable daily digest": "启用每日摘要",
+  "Time": "时间",
+  "Minimum unread": "最低未读数",
+  "Invalid digest settings": "摘要设置无效",
 
   // Command palette — titles for ⌘K commands (commands.tsx)
   "Compact session": "压缩会话",
