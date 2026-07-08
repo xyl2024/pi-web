@@ -6,6 +6,7 @@ import { useI18n } from "@/hooks/useI18n";
 import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
 import { useToast } from "./Toast";
 import { WeChatSettingsSection } from "./WeChatSettingsSection";
+import { InboxTestSection } from "./InboxTestSection";
 import type { PiWebConfig } from "@/lib/config";
 
 export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void; onProfileSaved?: () => void }) {
@@ -673,6 +674,8 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
               </button>
             </div>
           </div>
+
+          <InboxTestSection />
         </div>
       </div>
     </div>
