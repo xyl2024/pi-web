@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { Tooltip } from "./Tooltip";
+import { InboxBell } from "./InboxBell";
 
 interface Props {
   onOpenSettings?: () => void;
@@ -10,6 +11,8 @@ interface Props {
   onOpenSkills?: () => void;
   onOpenPrompts?: () => void;
   onOpenScheduler?: () => void;
+  onOpenInbox?: () => void;
+  inboxUnread?: number;
   refreshKey?: number;
 }
 
@@ -33,7 +36,7 @@ const itemBaseStyle: React.CSSProperties = {
   fontWeight: 500,
 };
 
-export function ProfileBlock({ onOpenSettings, onOpenModels, onOpenSkills, onOpenPrompts, onOpenScheduler, refreshKey }: Props) {
+export function ProfileBlock({ onOpenSettings, onOpenModels, onOpenSkills, onOpenPrompts, onOpenScheduler, onOpenInbox, inboxUnread, refreshKey }: Props) {
   const { t } = useI18n();
   const [username, setUsername] = useState<string | null>(null);
   const [avatarAttempted, setAvatarAttempted] = useState(0);
@@ -178,6 +181,10 @@ export function ProfileBlock({ onOpenSettings, onOpenModels, onOpenSkills, onOpe
           {loading ? "…" : (username ?? t("Guest"))}
         </span>
       </button>
+
+      {onOpenInbox && (
+        <InboxBell unread={inboxUnread ?? 0} onClick={onOpenInbox} />
+      )}
 
       {onOpenSettings && (
         <Tooltip content={t("Settings")}>

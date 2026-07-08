@@ -29,6 +29,8 @@ interface Props {
   onOpenPrompts?: () => void;
   onOpenScheduler?: () => void;
   onOpenSettings?: () => void;
+  onOpenInbox?: () => void;
+  inboxUnread?: number;
   profileRefreshKey?: number;
 }
 
@@ -207,7 +209,7 @@ function PiAgentTitle() {
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, favoriteIds = [], onToggleFavorite, onOpenModels, onOpenSkills, onOpenPrompts, onOpenScheduler, onOpenSettings, profileRefreshKey }: Props) {
+export function SessionSidebar({ selectedSessionId, onSelectSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, favoriteIds = [], onToggleFavorite, onOpenModels, onOpenSkills, onOpenPrompts, onOpenScheduler, onOpenSettings, onOpenInbox, inboxUnread, profileRefreshKey }: Props) {
   const { t } = useI18n();
   const toast = useToast();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
@@ -1103,6 +1105,8 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
           onOpenSkills={onOpenSkills}
           onOpenPrompts={onOpenPrompts}
           onOpenScheduler={onOpenScheduler}
+          onOpenInbox={onOpenInbox}
+          inboxUnread={inboxUnread}
           refreshKey={profileRefreshKey}
         />
       )}

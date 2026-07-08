@@ -33,7 +33,7 @@ npm install @earendil-works/pi-ai@<version> \
 node_modules/.bin/tsc --noEmit
 
 # 3. lint
-node node_modules/.bin/next lint
+npm run lint   # = eslint . — the `next lint` subcommand was removed in Next 16
 
 # 4. 手动冒烟测试
 npm run dev  # http://localhost:30141

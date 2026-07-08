@@ -43,8 +43,10 @@ import { SchedulerModal } from "./SchedulerModal";
 import { BranchNavigator } from "./BranchNavigator";
 import { CommandPalette } from "./CommandPalette";
 import { CollapsiblePanel } from "./CollapsiblePanel";
+import { InboxModal } from "./InboxModal";
 import { useI18n } from "@/hooks/useI18n";
 import { useTheme } from "@/hooks/useTheme";
+import { useInboxUnreadCount } from "@/hooks/useInboxUnreadCount";
 import { useToast } from "./Toast";
 import { useContextMenu, type ContextMenuItem } from "./ContextMenu";
 import type { SessionInfo, SessionSearchResult } from "@/lib/types";
@@ -84,6 +86,7 @@ export function AppShell() {
   const toast = useToast();
   const cm = useContextMenu();
   const { addNote } = useNotes();
+  const { unread: inboxUnread, markAllSeen: markInboxSeen } = useInboxUnreadCount();
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
   // When user clicks +, we only store the cwd — no fake session id
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
@@ -97,6 +100,7 @@ export function AppShell() {
   const [promptsConfigOpen, setPromptsConfigOpen] = useState(false);
   const [settingsConfigOpen, setSettingsConfigOpen] = useState(false);
   const [schedulerOpen, setSchedulerOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const [profileRefreshKey, setProfileRefreshKey] = useState(0);
   const [payloadsOpen, setPayloadsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -141,6 +145,7 @@ export function AppShell() {
     setSettingsConfigOpen(false);
     setPayloadsOpen(false);
     setSchedulerOpen(false);
+    setInboxOpen(false);
     setActiveTopPanel(null);
     setPaletteOpen(true);
   }, []);
@@ -854,6 +859,8 @@ export function AppShell() {
       onOpenPrompts={() => setPromptsConfigOpen(true)}
       onOpenScheduler={() => setSchedulerOpen(true)}
       onOpenSettings={() => setSettingsConfigOpen(true)}
+      onOpenInbox={() => setInboxOpen(true)}
+      inboxUnread={inboxUnread}
       profileRefreshKey={profileRefreshKey}
     />
   );
@@ -1653,6 +1660,13 @@ export function AppShell() {
         open={schedulerOpen}
         onClose={() => setSchedulerOpen(false)}
         onOpenSession={handleOpenScheduledSession}
+      />
+    )}
+    {inboxOpen && (
+      <InboxModal
+        open={inboxOpen}
+        onClose={() => setInboxOpen(false)}
+        onMarkAllSeen={markInboxSeen}
       />
     )}
     <CommandPalette

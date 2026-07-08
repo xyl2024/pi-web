@@ -17,6 +17,7 @@ import { existsSync } from "fs";
 import { startRpcSession } from "@/lib/rpc-manager";
 import type { AgentEvent } from "@/lib/rpc-manager";
 import { recordRunEnd, type ScheduledTask } from "@/lib/scheduler-store";
+import { pushMessage } from "@/lib/inbox-store";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("scheduler/runner");
@@ -35,6 +36,19 @@ interface AssistantMsg {
 /** Per-task FIFO chain so two overlapping triggers don't run concurrently. */
 const taskChains = new Map<string, Promise<void>>();
 
+/**
+ * Inbox is a side channel — pushMessage can throw InboxValidationError on
+ * malformed input. The scheduler must never be poisoned by inbox failures,
+ * so we swallow the error and log it.
+ */
+function safePush(taskId: string, input: Parameters<typeof pushMessage>[0]): void {
+  try {
+    pushMessage(input);
+  } catch (err) {
+    log.warn("inbox push failed", { taskId, error: String(err) });
+  }
+}
+
 export function runTask(task: ScheduledTask, runId: string): Promise<void> {
   const prev = taskChains.get(task.id) ?? Promise.resolve();
   const next = prev
@@ -52,6 +66,12 @@ async function executeRun(task: ScheduledTask, runId: string): Promise<void> {
     const msg = `cwd missing: ${task.cwd}`;
     log.error("run aborted", { taskId: task.id, runId, error: msg });
     recordRunEnd(runId, { status: "error", error: msg, durationMs: Date.now() - startedAt });
+    safePush(task.id, {
+      source: "scheduler",
+      level: "error",
+      title: task.name,
+      payload: { body: `cwd missing: ${task.cwd}` },
+    });
     return;
   }
 
@@ -86,6 +106,12 @@ async function executeRun(task: ScheduledTask, runId: string): Promise<void> {
       sessionId,
       durationMs,
     });
+    safePush(task.id, {
+      source: "scheduler",
+      level: "info",
+      title: task.name,
+      payload: { body: reply ? reply.slice(0, 200) : "Task completed" },
+    });
   } catch (err) {
     const errorStr = err instanceof Error ? err.message : String(err);
     const isTimeout = /timed out/i.test(errorStr);
@@ -93,6 +119,12 @@ async function executeRun(task: ScheduledTask, runId: string): Promise<void> {
     const durationMs = Date.now() - startedAt;
     log.error("run failed", { taskId: task.id, runId, sessionId, status, error: errorStr });
     recordRunEnd(runId, { status, error: errorStr, sessionId, durationMs });
+    safePush(task.id, {
+      source: "scheduler",
+      level: isTimeout ? "warn" : "error",
+      title: task.name,
+      payload: { body: errorStr.slice(0, 200) },
+    });
   }
 }
 

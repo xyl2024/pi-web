@@ -24,6 +24,7 @@ import {
   pickStaleFeedIds,
   RSS_DEFAULT_INTERVAL_MS,
 } from "@/lib/rss-store";
+import { pushMessage } from "@/lib/inbox-store";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("rss/loop");
@@ -94,6 +95,25 @@ async function tick(): Promise<void> {
           const result = await fetchAndRefreshFeed(id);
           if (!result.ok) {
             log.warn("rss fetch failed", { feedId: id, error: result.error });
+            continue;
+          }
+          if (result.inserted > 0) {
+            try {
+              pushMessage({
+                source: "rss",
+                level: "info",
+                title: result.channelTitle ?? "RSS feed",
+                payload: {
+                  body:
+                    result.inserted === 1
+                      ? "1 new article"
+                      : `${result.inserted} new articles`,
+                },
+              });
+            } catch (inboxErr) {
+              // Inbox is a side channel — never poison the RSS loop on push failure.
+              log.warn("inbox push failed", { feedId: id, error: String(inboxErr) });
+            }
           }
         } catch (err) {
           // Defensive: fetchAndRefreshFeed should never throw — it records

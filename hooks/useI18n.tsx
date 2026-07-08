@@ -900,6 +900,21 @@ const ZH_TRANSLATIONS = {
   "# to pick a category": "输入 # 选择分类",
   "Details, # for category": "备注（输入 # 选择分类）",
   "No matching categories": "没有匹配的分类",
+  // Inbox message center
+  "Inbox": "消息中心",
+  "Open inbox": "打开消息中心",
+  "No messages": "暂无消息",
+  "{n} messages": "{n} 条消息",
+  "Auto-refresh every 5s": "每 5 秒自动刷新",
+  "Clear older than 7 days": "清空 7 天前的消息",
+  "Clear all": "全部清空",
+  "Cleared": "已清空",
+  "Clear all messages?": "清空全部消息？",
+  "This will permanently delete all inbox messages.": "这将永久删除全部收件箱消息。",
+  "Clear messages from {source}?": "清空来自 {source} 的消息？",
+  "This will permanently delete all messages from this source.": "这将永久删除来自该来源的全部消息。",
+  "Clear messages older than 7 days?": "清空 7 天前的消息？",
+  "This will permanently delete old messages.": "这将永久删除旧消息。",
 } as const;
 
 const I18nContext = createContext<I18nContextValue | null>(null);

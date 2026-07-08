@@ -105,7 +105,7 @@ npm run dev   # port 30141
 ```
 
 Typecheck: `node_modules/.bin/tsc --noEmit`
-Lint: `node node_modules/.bin/next lint`
+Lint: `npm run lint` (= `eslint .`, the `next lint` subcommand was removed in Next 16)
 **Never run `next build` during dev** — pollutes `.next/` and breaks `npm run dev`.
 
 ## Production startup
