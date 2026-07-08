@@ -248,8 +248,6 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
       {nodes.map((node) => {
         const color = getNodeColor(node.msg);
         const isActive = activeIndex === node.index;
-        const isNearest = minimapHovered && nearestIndex === node.index;
-        const highlight = isActive || isNearest;
 
         return (
           <div
@@ -269,17 +267,17 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
               zIndex: 2,
             }}
           >
-            {/* Horizontal line: equal length, click to jump */}
+            {/* Horizontal line: shorter and dimmer when inactive, full size when active */}
             <div
               style={{
-                width: 14,
+                width: isActive ? 14 : 9,
                 height: 3,
                 borderRadius: 1.5,
                 background: color.bg,
-                opacity: highlight ? 1 : 0.5,
-                boxShadow: highlight ? `0 0 0 1px ${color.border}` : "none",
+                opacity: isActive ? 1 : 0.28,
+                boxShadow: isActive ? `0 0 0 1px ${color.border}` : "none",
                 flexShrink: 0,
-                transition: "opacity 0.1s, box-shadow 0.1s",
+                transition: "opacity 0.1s, box-shadow 0.1s, width 0.1s",
               }}
             />
           </div>
