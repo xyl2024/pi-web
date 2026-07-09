@@ -61,9 +61,9 @@ interface ToolInfo {
   active: boolean;
 }
 
-// Fixed panel widths (drag-resize removed). Widths are in CSS pixels.
-const DEFAULT_LEFT_WIDTH = 260;
-const DEFAULT_RIGHT_WIDTH = 600;
+// Fixed panel ratios (drag-resize removed). Center column takes the remainder.
+const LEFT_PANEL_RATIO = 0.18;
+const RIGHT_PANEL_RATIO = 0.32;
 
 export function AppShell() {
   const router = useRouter();
@@ -228,9 +228,9 @@ export function AppShell() {
     }
   }, [favoriteIds, t, toast]);
 
-  // Fixed panel widths — drag-resize was removed.
-  const leftWidth = DEFAULT_LEFT_WIDTH;
-  const rightWidth = DEFAULT_RIGHT_WIDTH;
+  // Panel widths are derived from the fixed ratios above.
+  const leftWidth = `${LEFT_PANEL_RATIO * 100}%`;
+  const rightWidth = `${RIGHT_PANEL_RATIO * 100}%`;
 
   const handleAtMention = useCallback((filePath: string) => {
     chatInputRef.current?.insertText("`" + filePath + "`");
