@@ -7,6 +7,7 @@ import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { Tooltip } from "@/components/Tooltip";
 import { DatePicker } from "./DatePicker";
 import { extractImagesFromHtml, ImageLightbox } from "./ImageLightbox";
 import { TodoDescriptionView } from "./TodoDescriptionView";
@@ -2538,31 +2539,33 @@ function TodoItem({
             }}
           />
         ) : (
-          <span
-            onClick={() => setDetailsVisible((v) => !v)}
-            onDoubleClick={() => { setTitleDraft(todo.title); setEditingTitle(true); }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setDetailsVisible((v) => !v);
-              }
-            }}
-            role="button"
-            tabIndex={editingTitle ? -1 : 0}
-            aria-expanded={detailsVisible}
-            style={{
-              flex: 1, minWidth: 0,
-              fontSize: 13, fontWeight: 500,
-              color: todo.done ? "var(--text-muted)" : "var(--accent)",
-              textDecoration: todo.done ? "line-through" : "none",
-              cursor: "pointer",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {highlightMatch(todo.title, searchTerm)}
-          </span>
+          <Tooltip content={todo.title}>
+            <span
+              onClick={() => setDetailsVisible((v) => !v)}
+              onDoubleClick={() => { setTitleDraft(todo.title); setEditingTitle(true); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setDetailsVisible((v) => !v);
+                }
+              }}
+              role="button"
+              tabIndex={editingTitle ? -1 : 0}
+              aria-expanded={detailsVisible}
+              style={{
+                flex: 1, minWidth: 0,
+                fontSize: 13, fontWeight: 500,
+                color: todo.done ? "var(--text-muted)" : "var(--accent)",
+                textDecoration: todo.done ? "line-through" : "none",
+                cursor: "pointer",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {highlightMatch(todo.title, searchTerm)}
+            </span>
+          </Tooltip>
         )}
         <DeadlineControl
           todo={todo}
