@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { SessionInfo } from "@/lib/types";
 import { FileExplorer } from "./FileExplorer";
 import { ProfileBlock } from "./ProfileBlock";
@@ -1391,16 +1392,87 @@ function SessionItem({
   const { t } = useI18n();
   const toast = useToast();
   const [hovered, setHovered] = useState(false);
+  const [triggerHovered, setTriggerHovered] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelMenuClose = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleMenuClose = useCallback(() => {
+    cancelMenuClose();
+    closeTimerRef.current = setTimeout(() => setMenuOpen(false), 140);
+  }, [cancelMenuClose]);
+
+  const openMenu = useCallback(() => {
+    cancelMenuClose();
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setMenuPos({ top: rect.top, left: rect.right + 6 });
+    setMenuOpen(true);
+  }, [cancelMenuClose]);
+
+  const handleMenuItem = useCallback((fn?: () => void) => {
+    cancelMenuClose();
+    setMenuOpen(false);
+    fn?.();
+  }, [cancelMenuClose]);
+
+  // Close on outside mousedown / ESC / scroll / resize while open
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (menuRef.current?.contains(target)) return;
+      if (triggerRef.current?.contains(target)) return;
+      cancelMenuClose();
+      setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cancelMenuClose();
+        setMenuOpen(false);
+      }
+    };
+    const onScroll = () => {
+      cancelMenuClose();
+      setMenuOpen(false);
+    };
+    const onResize = () => {
+      cancelMenuClose();
+      setMenuOpen(false);
+    };
+    window.addEventListener("mousedown", onMouseDown, true);
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown, true);
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [menuOpen, cancelMenuClose]);
+
+  useEffect(() => () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current); }, []);
 
   const title = session.name || session.firstMessage.slice(0, 50) || session.id.slice(0, 12);
 
-  const startRename = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const beginRename = useCallback(() => {
     setRenameValue(session.name ?? "");
     setRenaming(true);
     setTimeout(() => inputRef.current?.select(), 0);
@@ -1630,132 +1702,174 @@ function SessionItem({
             </Tooltip>
           )}
 
-          {/* Action buttons — shown on hover */}
-          {hovered && (
+          {/* "..." trigger — shown on hover; opens an action menu */}
+          {(hovered || triggerHovered || menuOpen) && (
             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-              {onTogglePin && (
-                <Tooltip content={isPinned ? t("Unpin session") : t("Pin session")}>
+              <Tooltip content={t("More actions")}>
                 <button
-                  onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
-                  aria-label={isPinned ? t("Unpin session") : t("Pin session")}
+                  ref={triggerRef}
+                  aria-label={t("More actions")}
+                  onClick={(e) => { e.stopPropagation(); if (menuOpen) { cancelMenuClose(); setMenuOpen(false); } else { openMenu(); } }}
+                  onMouseEnter={() => { setTriggerHovered(true); cancelMenuClose(); if (!menuOpen) openMenu(); }}
+                  onMouseLeave={() => { setTriggerHovered(false); if (menuOpen) scheduleMenuClose(); }}
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 32, height: 32, padding: 0,
-                    background: "var(--bg-hover)", border: "1px solid var(--border)",
+                    width: 26, height: 26, padding: 0,
+                    background: menuOpen ? "var(--bg-selected)" : "none",
+                    border: menuOpen ? "1px solid rgba(37,99,235,0.35)" : "1px solid transparent",
                     borderRadius: 7,
-                    color: isPinned ? "var(--accent)" : "var(--text-muted)",
+                    color: menuOpen ? "var(--accent)" : "var(--text-muted)",
                     cursor: "pointer", flexShrink: 0,
                     transition: "background 0.12s, color 0.12s, border-color 0.12s",
                   }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--bg-selected)";
-                    e.currentTarget.style.color = "var(--accent)";
-                    e.currentTarget.style.borderColor = "rgba(37,99,235,0.35)";
-                  }}
-                  onMouseLeave={(e) => {
+                  onMouseOver={(e) => {
+                    if (menuOpen) return;
                     e.currentTarget.style.background = "var(--bg-hover)";
-                    e.currentTarget.style.color = isPinned ? "var(--accent)" : "var(--text-muted)";
-                    e.currentTarget.style.borderColor = "var(--border)";
+                    e.currentTarget.style.color = "var(--text)";
+                  }}
+                  onMouseOut={(e) => {
+                    if (menuOpen) return;
+                    e.currentTarget.style.background = "none";
+                    e.currentTarget.style.color = "var(--text-muted)";
                   }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill={isPinned ? "var(--accent)" : "currentColor"} stroke="none" style={{ opacity: isPinned ? 1 : 0.7 }}>
-                    <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2Z" />
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{ opacity: menuOpen ? 1 : 0.85 }}>
+                    <circle cx="5" cy="12" r="2" />
+                    <circle cx="12" cy="12" r="2" />
+                    <circle cx="19" cy="12" r="2" />
                   </svg>
                 </button>
-                </Tooltip>
-              )}
-              {onToggleFavorite && (
-                <Tooltip content={isFavorited ? t("Unfavorite session") : t("Favorite session")}>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
-                  aria-label={isFavorited ? t("Unfavorite session") : t("Favorite session")}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 32, height: 32, padding: 0,
-                    background: "var(--bg-hover)", border: "1px solid var(--border)",
-                    borderRadius: 7,
-                    color: isFavorited ? "var(--accent)" : "var(--text-muted)",
-                    cursor: "pointer", flexShrink: 0,
-                    transition: "background 0.12s, color 0.12s, border-color 0.12s",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--bg-selected)";
-                    e.currentTarget.style.color = "var(--accent)";
-                    e.currentTarget.style.borderColor = "rgba(37,99,235,0.35)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "var(--bg-hover)";
-                    e.currentTarget.style.color = isFavorited ? "var(--accent)" : "var(--text-muted)";
-                    e.currentTarget.style.borderColor = "var(--border)";
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill={isFavorited ? "var(--accent)" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: isFavorited ? 1 : 0.85 }}>
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                  </svg>
-                </button>
-                </Tooltip>
-              )}
-              <Tooltip content={t("Rename")}>
-              <button
-                onClick={startRename}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 32, height: 32, padding: 0,
-                  background: "var(--bg-hover)", border: "1px solid var(--border)",
-                  borderRadius: 7, color: "var(--text-muted)",
-                  cursor: "pointer", flexShrink: 0,
-                  transition: "background 0.12s, color 0.12s, border-color 0.12s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "var(--bg-selected)";
-                  e.currentTarget.style.color = "var(--accent)";
-                  e.currentTarget.style.borderColor = "rgba(37,99,235,0.35)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "var(--bg-hover)";
-                  e.currentTarget.style.color = "var(--text-muted)";
-                  e.currentTarget.style.borderColor = "var(--border)";
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                </svg>
-              </button>
-              </Tooltip>
-              <Tooltip content={t("Delete")}>
-              <button
-                onClick={handleDeleteClick}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 32, height: 32, padding: 0,
-                  background: "var(--bg-hover)", border: "1px solid var(--border)",
-                  borderRadius: 7, color: "var(--text-muted)",
-                  cursor: "pointer", flexShrink: 0,
-                  transition: "background 0.12s, color 0.12s, border-color 0.12s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(239,68,68,0.08)";
-                  e.currentTarget.style.color = "#ef4444";
-                  e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "var(--bg-hover)";
-                  e.currentTarget.style.color = "var(--text-muted)";
-                  e.currentTarget.style.borderColor = "var(--border)";
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                  <path d="M10 11v6M14 11v6" />
-                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                </svg>
-              </button>
               </Tooltip>
             </div>
           )}
         </>
       )}
+      {menuOpen && menuPos && createPortal(
+        <div
+          ref={menuRef}
+          onMouseEnter={cancelMenuClose}
+          onMouseLeave={scheduleMenuClose}
+          role="menu"
+          style={{
+            position: "fixed",
+            top: menuPos.top,
+            left: menuPos.left,
+            zIndex: 9999,
+            minWidth: 168,
+            background: "var(--bg-panel)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            boxShadow: "0 6px 20px rgba(0,0,0,0.32)",
+            padding: 4,
+            display: "flex",
+            flexDirection: "column",
+            gap: 1,
+            fontSize: 12,
+            color: "var(--text)",
+          }}
+        >
+          {onTogglePin && (
+            <MenuRow
+              icon={<PinIcon filled={isPinned} />}
+              label={isPinned ? t("Unpin session") : t("Pin session")}
+              onClick={() => handleMenuItem(onTogglePin)}
+            />
+          )}
+          {onToggleFavorite && (
+            <MenuRow
+              icon={<StarIcon filled={isFavorited} />}
+              label={isFavorited ? t("Unfavorite session") : t("Favorite session")}
+              onClick={() => handleMenuItem(onToggleFavorite)}
+            />
+          )}
+          <MenuRow
+            icon={<PencilIcon />}
+            label={t("Rename")}
+            onClick={() => handleMenuItem(beginRename)}
+          />
+          <MenuRow
+            icon={<TrashIcon />}
+            label={t("Delete")}
+            destructive
+            onClick={() => handleMenuItem(() => handleDeleteClick({ stopPropagation: () => {} } as React.MouseEvent))}
+          />
+        </div>,
+        document.body
+      )}
     </div>
+  );
+}
+
+function MenuRow({
+  icon,
+  label,
+  destructive,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  destructive?: boolean;
+  onClick: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      role="menuitem"
+      tabIndex={-1}
+      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onClick(); }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "6px 9px",
+        borderRadius: 5,
+        cursor: "pointer",
+        userSelect: "none",
+        color: destructive ? (hover ? "#fca5a5" : "#f87171") : "var(--text)",
+        background: hover ? (destructive ? "rgba(239,68,68,0.10)" : "var(--bg-hover)") : "transparent",
+      }}
+    >
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 14, height: 14, color: destructive ? "#ef4444" : "var(--text-muted)", opacity: destructive ? 0.95 : 0.85 }}>
+        {icon}
+      </span>
+      <span style={{ flex: 1 }}>{label}</span>
+    </div>
+  );
+}
+
+function PinIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2Z" />
+    </svg>
+  );
+}
+
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
   );
 }

@@ -757,6 +757,7 @@ const ZH_TRANSLATIONS = {
   "Delete collection": "删除集合",
   "Delete collection?": "删除集合？",
   "More": "更多",
+  "More actions": "更多操作",
   "Edit item": "编辑请求",
   "Delete item": "删除请求",
   "Delete item?": "删除请求？",
