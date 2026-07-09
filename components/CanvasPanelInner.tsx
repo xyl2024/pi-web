@@ -313,7 +313,10 @@ export function CanvasPanelInner() {
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", minHeight: 0 }}>
+    <div
+      data-pi-canvas-panel="true"
+      style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", minHeight: 0 }}
+    >
       <Excalidraw {...excalidrawProps} />
     </div>
   );

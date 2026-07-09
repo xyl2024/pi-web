@@ -650,14 +650,19 @@ export function AppShell() {
         }
         return;
       }
-      // Space — focus chat input when not already focused
+      // Space — focus chat input when not already focused. Skip when focus
+      // is inside the canvas panel: Excalidraw uses Space as its pan-tool
+      // gesture, and stealing focus would break that.
       if (
         e.key === " " &&
         !e.ctrlKey && !e.metaKey && !e.altKey &&
         !paletteOpen &&
         chatInputRef.current
       ) {
-        if (!isEditable) {
+        if (
+          !isEditable &&
+          !(active instanceof HTMLElement && active.closest("[data-pi-canvas-panel]"))
+        ) {
           e.preventDefault();
           chatInputRef.current.focus();
         }
