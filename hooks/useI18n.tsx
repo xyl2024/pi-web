@@ -504,17 +504,6 @@ const ZH_TRANSLATIONS = {
   "session": "个会话",
   "sessions": "个会话",
   "+{n} more": "还有 {n} 条",
-  // GitHub heatmap (new-session page)
-  "GitHub": "GitHub",
-  "GitHub username": "GitHub 用户名",
-  "Used to render your contribution graph on the new-session page.": "用于在新会话页面展示你的贡献热力图。",
-  "No contribution data": "暂无贡献数据",
-  "Couldn't load GitHub activity": "无法加载 GitHub 活动数据",
-  "contribution": "次贡献",
-  "contributions": "次贡献",
-  "View on GitHub": "在 GitHub 上查看",
-  "Set your GitHub username in Settings to see your activity here.": "请在设置中填写 GitHub 用户名以在此显示你的活动。",
-  "stale": "stale",
   // Common-operation toasts (success / error feedback for daily actions)
   "Failed to send message": "发送消息失败",
   "Failed to stop agent": "停止会话失败",

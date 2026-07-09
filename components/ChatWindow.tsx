@@ -6,7 +6,6 @@ import { AGENT_TODO_TOOL_NAME } from "@/lib/agent-todo-tool-types";
 import { MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { Tooltip } from "./Tooltip";
-import { GithubHeatmap, GithubHeatmapPlaceholder } from "./GithubHeatmap";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { AgentTodoPanel } from "./AgentTodoPanel";
 import { ReplayBar } from "./ReplayBar";
@@ -155,20 +154,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   // Tool call stats hook — snapshot is published to the module store so the
   // right-panel tab + vertical button (in AppShell) can render it.
   const { snapshot } = useToolCallStats(messages);
-
-  // ── GitHub username from ~/.pi-web/config.yaml (one-shot fetch on mount) ──
-  const [githubUsername, setGithubUsername] = useState<string>("");
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/settings")
-      .then((r) => r.ok ? r.json() : null)
-      .then((d: { github_username?: string } | null) => {
-        if (cancelled || !d) return;
-        setGithubUsername((d.github_username ?? "").trim());
-      })
-      .catch(() => { /* ignore — heatmap hides itself if username is empty */ });
-    return () => { cancelled = true; };
-  }, []);
 
   // ── Register agent controls with the palette store ──
   // The ⌘K command palette in AppShell reads these via useAgentControls().
@@ -605,11 +590,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       {isEmptyNew ? (
         <div className="flex flex-1 flex-col items-center justify-center overflow-hidden px-4 py-8">
           <div className="w-full max-w-[820px]">
-            {newSessionCwd && (
-              githubUsername
-                ? <GithubHeatmap username={githubUsername} />
-                : <GithubHeatmapPlaceholder />
-            )}
             <div
               className="mb-3"
               style={{

@@ -36,7 +36,6 @@ export interface ExtensionsConfig {
 
 export interface PiWebConfig {
   system_prompt_replacements: SystemPromptReplacements;
-  github_username: string;
   dangerous_patterns: DangerousPatternsConfig;
   extensions: ExtensionsConfig;
 }
@@ -51,7 +50,6 @@ const DEFAULT_CONFIG: PiWebConfig = {
     enabled: false,
     rules: [],
   },
-  github_username: "",
   dangerous_patterns: DEFAULT_DANGEROUS_PATTERNS,
   extensions: {
     clawd_on_desk: { enabled: false },
@@ -153,7 +151,6 @@ export function readConfig(): PiWebConfig {
         enabled: sprObj.enabled as boolean,
         rules,
       },
-      github_username: typeof cfg.github_username === "string" ? cfg.github_username : "",
       dangerous_patterns: parseDangerousPatterns(cfg.dangerous_patterns),
       extensions: {
         clawd_on_desk: { enabled: clawdOnDeskEnabled },

@@ -254,7 +254,6 @@ app/api/
   create-space/route.ts             POST { dir_name } — mkdir ~/.pi-web/workspace/<dir>
   default-cwd/route.ts              POST — ensure ~/.pi-web/workspace/pi-cwd-default exists
   home/route.ts                     GET { home } — homedir for the UI
-  github/contributions/route.ts     GET GitHub contribution heatmap data
   pinned-cwds/route.ts              GET/PUT pinned project list (~/.pi-web/pinned.json)
   pinned-sessions/route.ts          GET/PUT pinned session list
   prompts/route.ts                  GET/POST slash-command prompt templates
@@ -299,7 +298,7 @@ lib/
   types.ts                  shared frontend types (AgentMessage, SessionEntry, etc.)
   pi-types.ts               narrowed shapes for the pi SDK objects we touch
   normalize.ts              normalizeToolCalls() — field name mismatch between file format and our types
-  config.ts                 read/write ~/.pi-web/config.yaml (system_prompt_replacements, github_username, dangerous_patterns)
+  config.ts                 read/write ~/.pi-web/config.yaml (system_prompt_replacements, dangerous_patterns)
   db.ts                     SQLite handle for ~/.pi-web/todos.db (+ one-shot JSON→DB migration)
   todo-store.ts             CRUD + validation on top of db.ts
   todo-tools.ts             pi customTools that expose the todo store to the agent
@@ -355,7 +354,7 @@ components/
   ModelsConfig.tsx          modal for editing ~/.pi/agent/models.json
   SkillsConfig.tsx          modal for installing / browsing / toggling skills
   PromptsConfig.tsx         modal for managing slash-command prompts
-  SettingsModal.tsx         modal for ~/.pi-web/config.yaml (replacements, github username, dangerous patterns)
+  SettingsModal.tsx         modal for ~/.pi-web/config.yaml (replacements, dangerous patterns)
   PayloadsModal.tsx         modal for inspecting captured provider payloads
   PayloadChip.tsx + PayloadPopover.tsx  inline payload badges inside MessageView
   ProviderIcon.tsx          @lobehub/icons wrapper (one Mono or Color per provider, used in chat header + models modal)
@@ -391,7 +390,6 @@ components/
   CodeBlock.tsx             shared syntax-highlighted code block (Prism, copy, line numbers)
   PermissionDialog.tsx      portal'd permission prompt (Esc/Enter/backdrop-click defaults)
   SessionSearch.tsx         in-session and cross-session keyword search UI
-  GithubHeatmap.tsx         GitHub contribution heatmap
   AudioPlayer.tsx           audio file viewer (vinyl-disc aesthetic, 0.5x–2x speed)
   CommandPalette.tsx        ⌘K Raycast-style palette (reads commands + session results)
   CollapsiblePanel.tsx      CSS-grid-based height-animating wrapper
