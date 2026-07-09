@@ -161,6 +161,9 @@ html, body {
   font-family: var(--font-sans);
   font-size: 14px;
   overscroll-behavior: none;
+  /* WenKai ships only a 400 weight; stroke-pad to give the CJK glyphs a
+     slightly heavier feel. Reset on pre/code so monospace doesn't blur. */
+  -webkit-text-stroke: 0.2px currentColor;
 }
 
 body {
@@ -189,6 +192,7 @@ body {
 
 pre, code {
   font-family: var(--font-mono);
+  -webkit-text-stroke: 0;
 }
 
 /* react-markdown output styles */
