@@ -12,7 +12,7 @@ import { ReplayBar } from "./ReplayBar";
 import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
 import { useAudio } from "@/hooks/useAudio";
 import { useDragDrop } from "@/hooks/useDragDrop";
-import { useI18n, type Locale } from "@/hooks/useI18n";
+import { useI18n } from "@/hooks/useI18n";
 import type { SlashResource } from "./ChatInput";
 import { ToolCallStatsProvider, useToolCallStatsEmit } from "@/hooks/ToolCallStatsContext";
 import { useToolCallStats } from "@/hooks/useToolCallStats";
@@ -47,85 +47,8 @@ function phaseLabel(phase: AgentPhase, t: ReturnType<typeof useI18n>["t"]): stri
   return t("Thinking...");
 }
 
-const TYPEWRITER_PHRASES: Record<Locale, string[]> = {
-  en: [
-    "ready when you are.",
-    "ask me anything.",
-    "let's build something cool.",
-    "explore your codebase.",
-    "draft an email.",
-    "summarize that paper.",
-    "plan your weekend.",
-    "explain it like I'm five.",
-    "pair-program with me.",
-    "fix that pesky bug.",
-    "translate to Chinese.",
-    "write a haiku.",
-    "brainstorm ideas.",
-    "review my pull request.",
-    "what should we cook tonight?",
-    "ship it.",
-    "make it pretty.",
-    "talk it through with me.",
-  ],
-  zh: [
-    "我准备好了。",
-    "随时问我任何问题。",
-    "一起做点有趣的东西。",
-    "探索你的代码库。",
-    "帮你起草一封邮件。",
-    "总结那篇论文。",
-    "规划你的周末。",
-    "像讲给五岁小孩一样解释。",
-    "和我一起结对编程。",
-    "修掉那个烦人的 bug。",
-    "翻译成中文。",
-    "写一首俳句。",
-    "一起头脑风暴。",
-    "帮我 review 这个 PR。",
-    "今晚吃什么？",
-    "发版吧。",
-    "把它变好看。",
-    "陪我梳理一下思路。",
-  ],
-};
-
-function Typewriter({ phrases }: { phrases: string[] }) {
-  const [phraseIdx, setPhraseIdx] = useState(() => Math.floor(Math.random() * phrases.length));
-  const [text, setText] = useState("");
-  const [deleting, setDeleting] = useState(false);
-  const [caretOn, setCaretOn] = useState(true);
-
-  useEffect(() => {
-    const blink = setInterval(() => setCaretOn((v) => !v), 530);
-    return () => clearInterval(blink);
-  }, []);
-
-  useEffect(() => {
-    const current = phrases[phraseIdx];
-    let timeout: ReturnType<typeof setTimeout>;
-    if (!deleting && text === current) {
-      timeout = setTimeout(() => setDeleting(true), 1800);
-    } else if (deleting && text === "") {
-      setDeleting(false);
-      setPhraseIdx((i) => (i + 1) % phrases.length);
-    } else {
-      const next = deleting ? current.slice(0, text.length - 1) : current.slice(0, text.length + 1);
-      timeout = setTimeout(() => setText(next), deleting ? 28 : 55);
-    }
-    return () => clearTimeout(timeout);
-  }, [text, deleting, phraseIdx, phrases]);
-
-  return (
-    <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>
-      {text}
-      <span style={{ opacity: caretOn ? 1 : 0, color: "var(--accent)", marginLeft: 1 }}>▍</span>
-    </span>
-  );
-}
-
 function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest }: Props) {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
 
   // Tool call stats: wire the context emit into useAgentSession
@@ -605,9 +528,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
               <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, flex: 1, lineHeight: 1.4 }}>
                 <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--text)" }}>π</span>
                 <span style={{ fontSize: 22, color: "var(--text)", fontWeight: 700, letterSpacing: "-0.01em" }}>Pi Work</span>
-                <span style={{ fontSize: 14, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                  <Typewriter phrases={TYPEWRITER_PHRASES[locale]} />
-                </span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
                 <span style={{ fontSize: 11, color: "var(--text-muted)" }}>

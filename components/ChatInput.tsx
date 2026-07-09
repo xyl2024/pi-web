@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useCallback, useEffect, useImperativeHandle, forwardRef, KeyboardEvent, useMemo } from "react";
-import { useI18n } from "@/hooks/useI18n";
+import { useI18n, type Locale } from "@/hooks/useI18n";
 import { Tooltip } from "./Tooltip";
 import { ProviderIcon } from "./ProviderIcon";
 
@@ -81,6 +81,83 @@ const BUILTIN_NEW_SESSION: SlashResource = {
   path: "",
   content: "",
 };
+
+const TYPEWRITER_PHRASES: Record<Locale, string[]> = {
+  en: [
+    "ready when you are.",
+    "ask me anything.",
+    "let's build something cool.",
+    "explore your codebase.",
+    "draft an email.",
+    "summarize that paper.",
+    "plan your weekend.",
+    "explain it like I'm five.",
+    "pair-program with me.",
+    "fix that pesky bug.",
+    "translate to Chinese.",
+    "write a haiku.",
+    "brainstorm ideas.",
+    "review my pull request.",
+    "what should we cook tonight?",
+    "ship it.",
+    "make it pretty.",
+    "talk it through with me.",
+  ],
+  zh: [
+    "我准备好了。",
+    "随时问我任何问题。",
+    "一起做点有趣的东西。",
+    "探索你的代码库。",
+    "帮你起草一封邮件。",
+    "总结那篇论文。",
+    "规划你的周末。",
+    "像讲给五岁小孩一样解释。",
+    "和我一起结对编程。",
+    "修掉那个烦人的 bug。",
+    "翻译成中文。",
+    "写一首俳句。",
+    "一起头脑风暴。",
+    "帮我 review 这个 PR。",
+    "今晚吃什么？",
+    "发版吧。",
+    "把它变好看。",
+    "陪我梳理一下思路。",
+  ],
+};
+
+function Typewriter({ phrases }: { phrases: string[] }) {
+  const [phraseIdx, setPhraseIdx] = useState(() => Math.floor(Math.random() * phrases.length));
+  const [text, setText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [caretOn, setCaretOn] = useState(true);
+
+  useEffect(() => {
+    const blink = setInterval(() => setCaretOn((v) => !v), 530);
+    return () => clearInterval(blink);
+  }, []);
+
+  useEffect(() => {
+    const current = phrases[phraseIdx];
+    let timeout: ReturnType<typeof setTimeout>;
+    if (!deleting && text === current) {
+      timeout = setTimeout(() => setDeleting(true), 1800);
+    } else if (deleting && text === "") {
+      setDeleting(false);
+      setPhraseIdx((i) => (i + 1) % phrases.length);
+    } else {
+      const next = deleting ? current.slice(0, text.length - 1) : current.slice(0, text.length + 1);
+      timeout = setTimeout(() => setText(next), deleting ? 28 : 55);
+    }
+    return () => clearTimeout(timeout);
+  }, [text, deleting, phraseIdx, phrases]);
+
+  return (
+    <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>
+      {text}
+      <span style={{ opacity: caretOn ? 1 : 0, color: "var(--accent)", marginLeft: 1 }}>▍</span>
+    </span>
+  );
+}
 
 function getSlashQuery(value: string, cursor: number): { start: number; query: string } | null {
   if (cursor === 0 || value[0] !== "/") return null;
@@ -177,9 +254,10 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   onOpenReplay,
   replayAvailable,
 }: Props, ref) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [value, setValue] = useState("");
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [isFocused, setIsFocused] = useState(false);
   const [selectedSlashResource, setSelectedSlashResource] = useState<SlashResource | null>(null);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashActiveIndex, setSlashActiveIndex] = useState(0);
@@ -693,8 +771,27 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             padding: "10px 10px 10px 14px",
             boxShadow: "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -12px rgba(15,23,42,0.10)",
             transition: "border-color 0.15s, background 0.15s, box-shadow 0.15s",
+            position: "relative",
           } as React.CSSProperties}
         >
+          {!value && !isFocused && !isStreaming && (
+            <span
+              aria-hidden
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: 14,
+                transform: "translateY(-50%)",
+                pointerEvents: "none",
+                color: "var(--text-muted)",
+                fontSize: 14,
+                lineHeight: 1.6,
+                fontWeight: 400,
+              }}
+            >
+              <Typewriter phrases={TYPEWRITER_PHRASES[locale]} />
+            </span>
+          )}
           <textarea
             ref={textareaRef}
             value={value}
@@ -715,12 +812,19 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               const pos = e.currentTarget.selectionStart ?? value.length;
               setCursorPosition(pos);
               setSlashMenuOpen(Boolean(getSlashQuery(value, pos)));
+              setIsFocused(true);
             }}
+            onBlur={() => setIsFocused(false)}
             placeholder={
-              isStreaming && (onSteer || onFollowUp)
-                ? t("Steer immediately / queue follow-up...")
-                : isStreaming ? t("Agent is running...")
-                : t("Message...")
+              isFocused
+                ? ""
+                : isStreaming && (onSteer || onFollowUp)
+                  ? t("Steer immediately / queue follow-up...")
+                  : isStreaming
+                    ? t("Agent is running...")
+                    : !value
+                      ? ""
+                      : t("Message...")
             }
             rows={1}
             style={{
