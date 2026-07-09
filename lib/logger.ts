@@ -11,7 +11,7 @@ const LEVEL_WEIGHT: Record<LogLevel, number> = {
   error: 40,
 };
 
-const DEFAULT_LEVEL: LogLevel = process.env.NODE_ENV === "production" ? "info" : "debug";
+const DEFAULT_LEVEL: LogLevel = process.env.NODE_ENV === "production" ? "warn" : "debug";
 let fileLogPathBase: string | null | undefined;
 let fileLoggingFailed = false;
 
