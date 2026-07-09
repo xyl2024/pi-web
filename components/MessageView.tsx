@@ -120,8 +120,24 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
   isSearchMatch?: boolean;
 }) {
   const { t } = useI18n();
-  const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
+  const [avatarOk, setAvatarOk] = useState(true);
+  const [avatarLoaded, setAvatarLoaded] = useState(false);
+  const [avatarCacheKey] = useState(() => `${Date.now()}`);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { username?: string | null } | null) => {
+        if (!cancelled && d && typeof d.username === "string") setUsername(d.username);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const content =
     typeof message.content === "string"
@@ -139,6 +155,7 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
   const time = formatTime(message.timestamp);
   const canFork = !!entryId && !!onFork;
   const canNavigate = !!prevAssistantEntryId && !!onNavigate;
+  const hasMetadata = !!time || canFork || canNavigate || !!content;
 
   const copyContent = () => {
     copyText(content).then(() => {
@@ -147,33 +164,76 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
     });
   };
 
+  const avatarSrc = `/api/profile/avatar?k=${encodeURIComponent(avatarCacheKey)}`;
+  const showAvatarImg = avatarOk;
+  const showAvatarPlaceholder = !avatarOk || !avatarLoaded;
+
   return (
     <div
-      style={{ marginBottom: 16, display: "flex", flexDirection: "column", alignItems: "flex-end" }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      style={{ marginBottom: 16 }}
     >
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, maxWidth: "85%" }}>
+      {/* Label row: avatar + username/You — mirrors AssistantMessageView's provider icon + model name */}
+      <div
+        style={{
+          fontSize: 13,
+          color: "var(--text-dim)",
+          marginBottom: 8,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
         <div
           style={{
-            flex: 1,
-            minWidth: 0,
+            width: 26, height: 26, flexShrink: 0,
+            borderRadius: "50%", overflow: "hidden",
+            background: "var(--bg-hover)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            border: "1px solid var(--border)",
+          }}
+        >
+          {showAvatarImg && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={avatarSrc}
+              src={avatarSrc}
+              alt=""
+              onLoad={() => setAvatarLoaded(true)}
+              onError={() => { setAvatarOk(false); setAvatarLoaded(false); }}
+              style={{
+                width: "100%", height: "100%", objectFit: "cover",
+                display: avatarLoaded ? "block" : "none",
+              }}
+            />
+          )}
+          {showAvatarPlaceholder && (
+            <svg
+              width="14" height="14" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"
+              style={{ color: "var(--text-muted)" }}
+            >
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          )}
+        </div>
+        <span>{username ?? t("You")}</span>
+      </div>
+
+      {/* Bubble: image attachments + plain text body */}
+      {(imageBlocks.length > 0 || content) && (
+        <div
+          style={{
             background: "var(--user-bg)",
             border: "1px solid rgba(59,130,246,0.2)",
             borderRadius: 12,
             padding: "8px 12px",
-            fontSize: 14,
-            lineHeight: 1.6,
-            color: "var(--text)",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
           }}
         >
           {imageBlocks.length > 0 && (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: content ? 8 : 0 }}>
               {imageBlocks.map((img, i) => {
-                // lib/types.ts ImageContent uses {source:{type,data,media_type,url}}
-                // pi-ai on-disk format uses flat {data, mimeType} — handle both
                 const flat = img as unknown as { data?: string; mimeType?: string };
                 const src = img.source
                   ? img.source.type === "base64"
@@ -188,125 +248,126 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
                     key={i}
                     src={src}
                     alt=""
-                    style={{ maxWidth: 240, maxHeight: 240, borderRadius: 6, objectFit: "contain", display: "block", border: "1px solid rgba(59,130,246,0.15)" }}
+                    style={{ maxWidth: 240, maxHeight: 240, borderRadius: 6, objectFit: "contain", display: "block", border: "1px solid var(--border)" }}
                   />
                 );
               })}
             </div>
           )}
-          {highlightKeywords(content, keywords, isSearchMatch)}
-        </div>
 
-      </div>
-
-      {/* Bottom row: action buttons + timestamp */}
-      {(time || canFork || canNavigate || true) && (
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "flex-end",
-          gap: 6, marginTop: 3,
-        }}>
-          <div style={{
-            display: "flex", gap: 3,
-            opacity: hovered ? 1 : 0,
-            pointerEvents: hovered ? "auto" : "none",
-            transition: "opacity 0.12s",
-          }}>
-            <Tooltip content={t("Copy message")}>
-            <button
-              onClick={copyContent}
+          {content && (
+            <div
               style={{
-                display: "flex", alignItems: "center", gap: 4,
-                padding: "3px 8px", height: 22,
-                background: "none", border: "none",
-                borderRadius: 5,
-                color: copied ? "var(--accent)" : "var(--text-dim)",
-                cursor: "pointer",
-                fontSize: 11, fontWeight: 400,
-                whiteSpace: "nowrap",
-                transition: "color 0.12s",
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: "var(--text)",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
               }}
-              onMouseEnter={(e) => { if (!copied) e.currentTarget.style.color = "var(--accent)"; }}
-              onMouseLeave={(e) => { if (!copied) e.currentTarget.style.color = "var(--text-dim)"; }}
             >
-              {copied ? (
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : (
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-              )}
-              {copied ? t("Copied") : t("Copy")}
-            </button>
-            </Tooltip>
-          </div>
-          {(canFork || canNavigate) && (
-            <div style={{
-              display: "flex", gap: 3,
-              opacity: (hovered || forking) ? 1 : 0,
-              pointerEvents: (hovered || forking) ? "auto" : "none",
-              transition: "opacity 0.12s",
-            }}>
-              {canNavigate && (
-                <Tooltip content={t("Edit from here title")}>
+              {highlightKeywords(content, keywords, isSearchMatch)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bottom metadata row: action buttons (hover) + timestamp (always, right) */}
+      {hasMetadata && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+          {content && (
+            <div style={{ display: "flex", gap: 3 }}>
+              <Tooltip content={t("Copy message")}>
                 <button
-                  onClick={() => { onNavigate!(prevAssistantEntryId!); onEditContent?.(content); }}
+                  onClick={copyContent}
                   style={{
                     display: "flex", alignItems: "center", gap: 4,
                     padding: "3px 8px", height: 22,
                     background: "none", border: "none",
                     borderRadius: 5,
-                    color: "var(--text-dim)",
+                    color: copied ? "var(--accent)" : "var(--text-dim)",
                     cursor: "pointer",
                     fontSize: 11, fontWeight: 400,
                     whiteSpace: "nowrap",
                     transition: "color 0.12s",
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; }}
+                  onMouseEnter={(e) => { if (!copied) e.currentTarget.style.color = "var(--accent)"; }}
+                  onMouseLeave={(e) => { if (!copied) e.currentTarget.style.color = "var(--text-dim)"; }}
                 >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="15 10 20 15 15 20" />
-                    <path d="M4 4v7a4 4 0 0 0 4 4h12" />
-                  </svg>
-                  {t("Edit from here")}
+                  {copied ? (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  ) : (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  )}
+                  {copied ? t("Copied") : t("Copy")}
                 </button>
+              </Tooltip>
+            </div>
+          )}
+          {(canFork || canNavigate) && (
+            <div style={{ display: "flex", gap: 3 }}>
+              {canNavigate && (
+                <Tooltip content={t("Edit from here title")}>
+                  <button
+                    onClick={() => { onNavigate!(prevAssistantEntryId!); onEditContent?.(content); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 4,
+                      padding: "3px 8px", height: 22,
+                      background: "none", border: "none",
+                      borderRadius: 5,
+                      color: "var(--text-dim)",
+                      cursor: "pointer",
+                      fontSize: 11, fontWeight: 400,
+                      whiteSpace: "nowrap",
+                      transition: "color 0.12s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="15 10 20 15 15 20" />
+                      <path d="M4 4v7a4 4 0 0 0 4 4h12" />
+                    </svg>
+                    {t("Edit from here")}
+                  </button>
                 </Tooltip>
               )}
               {canFork && (
                 <Tooltip content={forking ? t("Creating new session") : t("New session title")}>
-                <button
-                  onClick={() => { onFork!(entryId!); }}
-                  disabled={forking}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 4,
-                    padding: "3px 8px", height: 22,
-                    background: "none", border: "none",
-                    borderRadius: 5,
-                    color: forking ? "var(--accent)" : "var(--text-dim)",
-                    cursor: forking ? "not-allowed" : "pointer",
-                    fontSize: 11, fontWeight: 400,
-                    whiteSpace: "nowrap",
-                    transition: "color 0.12s",
-                  }}
-                  onMouseEnter={(e) => { if (!forking) e.currentTarget.style.color = "var(--accent)"; }}
-                  onMouseLeave={(e) => { if (!forking) e.currentTarget.style.color = "var(--text-dim)"; }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="6" y1="3" x2="6" y2="15" />
-                    <circle cx="18" cy="6" r="3" />
-                    <circle cx="6" cy="18" r="3" />
-                    <path d="M18 9a9 9 0 0 1-9 9" />
-                  </svg>
-                  {forking ? t("Creating...") : t("New session")}
-                </button>
+                  <button
+                    onClick={() => { onFork!(entryId!); }}
+                    disabled={forking}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 4,
+                      padding: "3px 8px", height: 22,
+                      background: "none", border: "none",
+                      borderRadius: 5,
+                      color: forking ? "var(--accent)" : "var(--text-dim)",
+                      cursor: forking ? "not-allowed" : "pointer",
+                      fontSize: 11, fontWeight: 400,
+                      whiteSpace: "nowrap",
+                      transition: "color 0.12s",
+                    }}
+                    onMouseEnter={(e) => { if (!forking) e.currentTarget.style.color = "var(--accent)"; }}
+                    onMouseLeave={(e) => { if (!forking) e.currentTarget.style.color = "var(--text-dim)"; }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="6" y1="3" x2="6" y2="15" />
+                      <circle cx="18" cy="6" r="3" />
+                      <circle cx="6" cy="18" r="3" />
+                      <path d="M18 9a9 9 0 0 1-9 9" />
+                    </svg>
+                    {forking ? t("Creating...") : t("New session")}
+                  </button>
                 </Tooltip>
               )}
             </div>
           )}
-          {time && <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{time}</span>}
+          {time && <span style={{ fontSize: 10, color: "var(--text-dim)", marginLeft: "auto" }}>{time}</span>}
         </div>
       )}
     </div>
@@ -455,18 +516,18 @@ function AssistantMessageView({
       {/* Model label */}
       <div
         style={{
-          fontSize: 11,
+          fontSize: 13,
           color: "var(--text-dim)",
-          marginBottom: 4,
+          marginBottom: 8,
           display: "flex",
           alignItems: "center",
-          gap: 6,
+          gap: 10,
         }}
       >
         {message.provider && (
           <>
             {hasProviderIcon(message.provider) && (
-              <ProviderIcon id={message.provider} size={12} />
+              <ProviderIcon id={message.provider} size={16} />
             )}
             <span>{modelNames?.[`${message.provider}:${message.model}`] ?? modelNames?.[message.model] ?? message.model}</span>
           </>
@@ -515,7 +576,7 @@ function AssistantMessageView({
       </div>
 
       <div style={{
-        display: "flex", alignItems: "center", gap: 8, marginTop: 4,
+        display: "flex", alignItems: "center", gap: 8, marginTop: 8,
       }}>
         {message.usage && !isStreaming && (
           <div style={{ fontSize: 11, color: "var(--text-dim)" }}>

@@ -587,6 +587,7 @@ const ZH_TRANSLATIONS = {
   "Avatar removed": "头像已移除",
   "Failed to remove avatar": "移除头像失败",
   "Guest": "访客",
+  "You": "你",
   "Only PNG images are supported": "仅支持 PNG 格式",
   "File too large (max 5MB)": "文件过大（最大 5MB）",
   "Avatar and display name shown at the bottom of the sidebar.": "设置侧边栏底部显示的头像和显示名。",
