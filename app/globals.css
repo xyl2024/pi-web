@@ -478,33 +478,7 @@ span.linenumber {
   }
 }
 
-/* Drag handle between panels — desktop only; mobile renders as overlay */
-@media (min-width: 641px) {
-  .resize-handle {
-    width: 6px;
-    flex-shrink: 0;
-    cursor: col-resize;
-    background: transparent;
-    transition: background 0.12s;
-    position: relative;
-    z-index: 5;
-  }
-  .resize-handle::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 50%;
-    width: 1px;
-    transform: translateX(-50%);
-    background: var(--border);
-    transition: background 0.12s;
-  }
-  .resize-handle:hover::before,
-  .resize-handle.dragging::before {
-    background: var(--accent);
-  }
-}
+/* Drag handles were removed — sidebar and right panel widths are now fixed. */
 
 /* Mobile sidebar: slide in/out as overlay */
 @media (max-width: 640px) {
