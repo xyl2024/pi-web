@@ -454,6 +454,20 @@ export function getRpcSession(sessionId: string): AgentSessionWrapper | undefine
 }
 
 /**
+ * Snapshot of which registered sessions are currently running.
+ * Reads `globalThis.__piSessions` only — no disk I/O — so callers can poll
+ * this cheaply (the SessionSidebar uses it every 3s to render a spinner on
+ * the active row).
+ */
+export function listRunningRpcSessions(): { id: string; running: boolean }[] {
+  const out: { id: string; running: boolean }[] = [];
+  for (const [id, wrapper] of getRegistry()) {
+    out.push({ id, running: wrapper.isRunning() });
+  }
+  return out;
+}
+
+/**
  * Get or create an AgentSession for the given session.
  * For new sessions (sessionFile === ""), pi generates its own id.
  * Pass toolNames to pre-configure active tools (empty array = all tools disabled, "all" = every available tool).

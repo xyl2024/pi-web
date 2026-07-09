@@ -270,11 +270,13 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     loadSessions(isFirst);
   }, [loadSessions, refreshKey]);
 
-  // Poll /api/sessions every 3s for the `running` flag on each row. We only
-  // merge that single field into the existing list — name/modified/etc. are
-  // owned by loadSessions() so polling preserves scroll position, expanded
-  // parents, and hover state. Pauses while the tab is hidden; resumes on
-  // visibilitychange.
+  // Poll /api/sessions/running every 3s for the `running` flag on each row.
+  // This endpoint only walks the in-memory AgentSessionWrapper registry — no
+  // disk reads, so it's safe to poll at high frequency even with thousands
+  // of session files. We only merge that single field into the existing list
+  // — name/modified/etc. are owned by loadSessions() so polling preserves
+  // scroll position, expanded parents, and hover state. Pauses while the tab
+  // is hidden; resumes on visibilitychange.
   useEffect(() => {
     const POLL_INTERVAL_MS = 3000;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -282,9 +284,9 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
 
     const fetchRunning = async () => {
       try {
-        const res = await fetch("/api/sessions");
+        const res = await fetch("/api/sessions/running");
         if (!res.ok) return;
-        const data = (await res.json()) as { sessions: SessionInfo[] };
+        const data = (await res.json()) as { sessions: { id: string; running: boolean }[] };
         if (cancelled) return;
         const byRunning = new Map(data.sessions.map((s) => [s.id, s.running] as const));
         setAllSessions((prev) => prev.map((s) =>
