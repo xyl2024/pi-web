@@ -7,12 +7,17 @@
  * never opens the panel — incoming WeChat messages would sit in the
  * upstream queue unconsumed.
  *
- * `bootstrap()` is invoked from app/page.tsx (the SSR entry) so it runs
- * exactly once per server-process, as soon as the home page is requested.
- * It also schedules a periodic re-check so a future login from another
- * tab/process is picked up without a server restart.
+ * `bootstrap()` is invoked from instrumentation.ts so it runs once per
+ * server-process boot. It also schedules a periodic re-check so a future
+ * login from another tab/process is picked up without a server restart.
+ *
+ * When multiple pi-web processes run on the same machine (e.g. `next
+ * start` on port 14514 + `next dev` on port 30141), only the lock holder
+ * from `monitor-lock.ts` actually runs the monitor — the others stay
+ * silent so the inbound poller is never duplicated.
  */
 import { state, monitor, api } from "./index";
+import { tryBecomeMonitorHost } from "./monitor-lock";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("wechat/startup");
@@ -22,16 +27,23 @@ const RESCAN_INTERVAL_MS = 30_000;
 
 let rescanTimer: ReturnType<typeof setInterval> | null = null;
 let bootstrapped = false;
+let lastSeenAccountId: string | null = null;
 
 export function bootstrap(): void {
   if (bootstrapped) return;
   bootstrapped = true;
+
+  if (!tryBecomeMonitorHost()) {
+    log.debug("another process hosts the wechat monitor; this process stays silent");
+    return;
+  }
 
   // First-pass: if a previous run left an account on disk, kick the
   // monitor immediately. This is the bug-fix case — user has logged in
   // before, server restarts, monitor would otherwise sit idle.
   const account = state.loadAccount();
   if (account) {
+    lastSeenAccountId = account.accountId;
     log.info("existing account detected, starting monitor", { accountId: account.accountId });
     // Re-announce "bot online" to iLink. notifyStart is normally fired
     // once on QR-login, but iLink treats a long-idle bot process as
@@ -49,12 +61,18 @@ export function bootstrap(): void {
   // Periodic rescan: a user might log in from a different process (e.g.
   // a /api/weixin/login POST) without reloading this module. The monitor
   // itself has its own auto-stop when the account is cleared, so we only
-  // need to worry about the boot-to-logged-in transition.
+  // need to worry about the boot-to-logged-in transition. The
+  // `lastSeenAccountId` dedupe keeps the "account appeared" log line
+  // from re-firing every rescan tick (the underlying `ensureMonitor`
+  // is still cheap, but the log was drowning out every other channel).
   rescanTimer = setInterval(() => {
     const cur = state.loadAccount();
-    if (cur && !monitor.isMonitorRunning()) {
+    if (cur && cur.accountId !== lastSeenAccountId) {
+      lastSeenAccountId = cur.accountId;
       log.info("account appeared, starting monitor", { accountId: cur.accountId });
       monitor.ensureMonitor();
+    } else if (!cur && lastSeenAccountId !== null) {
+      lastSeenAccountId = null;
     }
     // No explicit "stop" branch — monitor.stopMonitor is called by
     // /api/weixin/logout, and the monitor's tick loop self-terminates
