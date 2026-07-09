@@ -5,6 +5,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import {
   resolveSessionPath,
   invalidateSessionPathCache,
+  invalidateSessionListCache,
   buildSessionContext,
   listAllSessions,
 } from "@/lib/session-reader";
@@ -115,6 +116,7 @@ export async function PATCH(
     }
     const sm = SessionManager.open(filePath);
     sm.appendSessionInfo(name.trim());
+    invalidateSessionListCache();
     log.info("rename session completed", {
       id,
       filePath,
@@ -177,6 +179,7 @@ export async function DELETE(
     getRpcSession(id)?.destroy();
     unlinkSync(filePath);
     invalidateSessionPathCache(id);
+    invalidateSessionListCache();
     deletePayloadCapture(id);
     deleteAgentTodoFile(id);
     log.info("delete session completed", {

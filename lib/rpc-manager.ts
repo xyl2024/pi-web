@@ -1,5 +1,5 @@
 import { createAgentSession, DefaultResourceLoader, SessionManager, isToolCallEventType } from "@earendil-works/pi-coding-agent";
-import { cacheSessionPath } from "./session-reader";
+import { cacheSessionPath, invalidateSessionListCache } from "./session-reader";
 import type { AgentSessionLike, ToolInfo } from "./pi-types";
 import { createLogger, elapsedMs } from "./logger";
 import { readConfig, applyReplacements } from "./config";
@@ -507,6 +507,7 @@ export async function startRpcSession(
     const sessionManager = sessionFile
       ? SessionManager.open(sessionFile, undefined)
       : SessionManager.create(cwd, undefined);
+    const isNewSession = !sessionFile;
 
     // Inline extension that mirrors every outgoing provider request and
     // its response headers into our in-memory ring buffer. Each session
@@ -585,6 +586,13 @@ export async function startRpcSession(
       customTools: [...buildTodoTools(readEnabledTodoTools()), ...buildShowFileTool(), ...buildAgentTodoTool()],
     });
     capturedSessionId = inner.sessionId as string;
+
+    // Drop the cached /api/sessions list so the sidebar sees this new session
+    // on its next refresh. Only needed when we actually created a new file —
+    // re-opening an existing one doesn't change the set of sessions.
+    if (isNewSession) {
+      invalidateSessionListCache();
+    }
 
     // Keep pi's full tool registry available so later switches to "all" can include
     // extension/custom tools, then set the active subset before the first prompt.

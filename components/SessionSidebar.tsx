@@ -48,21 +48,6 @@ function formatRelativeTime(dateStr: string, t: ReturnType<typeof useI18n>["t"])
   return date.toLocaleDateString();
 }
 
-/** Return the 5 most recently active cwds across all sessions */
-function getRecentCwds(sessions: SessionInfo[]): string[] {
-  const latestByCwd = new Map<string, string>(); // cwd -> most recent modified
-  for (const s of sessions) {
-    if (!s.cwd) continue;
-    const prev = latestByCwd.get(s.cwd);
-    if (!prev || s.modified > prev) {
-      latestByCwd.set(s.cwd, s.modified);
-    }
-  }
-  return [...latestByCwd.entries()]
-    .sort((a, b) => b[1].localeCompare(a[1]))
-    .map(([cwd]) => cwd);
-}
-
 function shortenCwd(cwd: string, homeDir?: string): string {
   const path = (homeDir && cwd.startsWith(homeDir)) ? "~" + cwd.slice(homeDir.length) : cwd;
   const sep = path.includes("/") ? "/" : "\\";
@@ -70,7 +55,6 @@ function shortenCwd(cwd: string, homeDir?: string): string {
   if (parts.length <= 2) return path;
   return "…/" + parts.slice(-2).join(sep);
 }
-
 
 
 interface SessionTreeNode {
@@ -209,12 +193,21 @@ function PiAgentTitle() {
   );
 }
 
+const PAGE_SIZE = 50;
+
 export function SessionSidebar({ selectedSessionId, onSelectSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, favoriteIds = [], onToggleFavorite, onOpenModels, onOpenSkills, onOpenPrompts, onOpenScheduler, onOpenSettings, onOpenInbox, inboxUnread, profileRefreshKey }: Props) {
   const { t } = useI18n();
   const toast = useToast();
-  const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
+
+  // Paginated session list (replaces the old "load all then hold" design).
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [recentCwds, setRecentCwds] = useState<string[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [selectedCwd, setSelectedCwd] = useState<string | null>(null);
   const [homeDir, setHomeDir] = useState<string>("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -235,6 +228,9 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
   const [explorerRefreshDone, setExplorerRefreshDone] = useState(false);
   const sessionRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const explorerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadListAbortRef = useRef<AbortController | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
 
   const triggerExplorerRefresh = useCallback(() => {
     setExplorerKey((k) => k + 1);
@@ -243,40 +239,87 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     explorerRefreshTimerRef.current = setTimeout(() => setExplorerRefreshDone(false), 2000);
   }, []);
 
-  const loadSessions = useCallback(async (showLoading = false) => {
+  // Fetch a single page. Pass `mode: "reset"` to start over (cursor=null,
+  // replace list), `mode: "append"` to extend the loaded list with the
+  // page that follows `cursor` (or the start if cursor is null — first
+  // page after a reset+refresh). Aborts any in-flight request so the
+  // previous page's response can't land after a cwd switch / refresh.
+  const fetchPage = useCallback(async (
+    cursor: string | null,
+    mode: "reset" | "append",
+  ) => {
+    loadListAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadListAbortRef.current = controller;
+    if (mode === "reset") setLoading(true);
+    else setLoadingMore(true);
+    setLoadError(null);
     try {
-      if (showLoading) setLoading(true);
-      const res = await fetch("/api/sessions");
+      const params = new URLSearchParams();
+      params.set("limit", String(PAGE_SIZE));
+      if (cursor) params.set("cursor", cursor);
+      if (selectedCwd) params.set("cwd", selectedCwd);
+      const res = await fetch(`/api/sessions?${params.toString()}`, { signal: controller.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as { sessions: SessionInfo[] };
-      setAllSessions(data.sessions);
-      setError(null);
-      if (!showLoading) {
+      const data = (await res.json()) as {
+        sessions: SessionInfo[];
+        recentCwds: string[];
+        nextCursor: string | null;
+      };
+      if (controller.signal.aborted) return;
+      if (mode === "reset") {
+        setSessions(data.sessions);
+      } else {
+        setSessions((prev) => {
+          const seen = new Set(prev.map((s) => s.id));
+          const incoming = data.sessions.filter((s) => !seen.has(s.id));
+          return incoming.length === 0 ? prev : [...prev, ...incoming];
+        });
+      }
+      setRecentCwds(data.recentCwds);
+      setNextCursor(data.nextCursor);
+      setHasMore(data.nextCursor !== null);
+      if (mode === "reset") {
         setSessionRefreshDone(true);
         if (sessionRefreshTimerRef.current) clearTimeout(sessionRefreshTimerRef.current);
         sessionRefreshTimerRef.current = setTimeout(() => setSessionRefreshDone(false), 2000);
       }
     } catch (e) {
-      setError(String(e));
+      if (controller.signal.aborted) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      setLoadError(msg);
+      if (mode === "reset") {
+        toast.show({ kind: "error", message: msg });
+      }
     } finally {
-      if (showLoading) setLoading(false);
+      if (!controller.signal.aborted) {
+        if (mode === "reset") setLoading(false);
+        else setLoadingMore(false);
+      }
     }
-  }, []);
+  }, [selectedCwd, toast]);
 
-  const initialLoadDone = useRef(false);
+  // Initial / refresh / cwd-change: reset to page 1.
   useEffect(() => {
-    const isFirst = !initialLoadDone.current;
-    initialLoadDone.current = true;
-    loadSessions(isFirst);
-  }, [loadSessions, refreshKey]);
+    void fetchPage(null, "reset");
+  }, [fetchPage, refreshKey]);
+
+  // Back-compat alias for inline rename/delete handlers that pre-date pagination.
+  // They treat a successful mutation as "the sidebar should reflect the new
+  // state", which maps cleanly to "go back to page 1 and show a green check".
+  const loadSessions = useCallback(() => {
+    void fetchPage(null, "reset");
+  }, [fetchPage]);
 
   // Poll /api/sessions/running every 3s for the `running` flag on each row.
   // This endpoint only walks the in-memory AgentSessionWrapper registry — no
   // disk reads, so it's safe to poll at high frequency even with thousands
-  // of session files. We only merge that single field into the existing list
-  // — name/modified/etc. are owned by loadSessions() so polling preserves
-  // scroll position, expanded parents, and hover state. Pauses while the tab
-  // is hidden; resumes on visibilitychange.
+  // of session files. We only merge that single field into the loaded pages
+  // — name/modified/etc. are owned by fetchPage() so polling preserves
+  // scroll position, expanded parents, and hover state. Sessions that have
+  // not been paginated in won't show a spinner until the user scrolls to
+  // them (intentional — see design notes). Pauses while the tab is hidden;
+  // resumes on visibilitychange.
   useEffect(() => {
     const POLL_INTERVAL_MS = 3000;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -289,7 +332,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
         const data = (await res.json()) as { sessions: { id: string; running: boolean }[] };
         if (cancelled) return;
         const byRunning = new Map(data.sessions.map((s) => [s.id, s.running] as const));
-        setAllSessions((prev) => prev.map((s) =>
+        setSessions((prev) => prev.map((s) =>
           byRunning.has(s.id) ? { ...s, running: byRunning.get(s.id)! } : s
         ));
       } catch {
@@ -322,6 +365,28 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     };
   }, []);
 
+  // Infinite scroll: IntersectionObserver attached to the bottom sentinel
+  // fetches the next page when it scrolls into view inside the list's own
+  // overflow:auto scroller. Re-attaches whenever hasMore / nextCursor /
+  // loading flags change so the closure stays current. `loadingMore` and
+  // `loadError` prevent double-fires.
+  useEffect(() => {
+    const node = sentinelRef.current;
+    const root = listScrollRef.current;
+    if (!node || !root || !hasMore || loadError) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry?.isIntersecting) return;
+        if (loadingMore || loading) return;
+        if (nextCursor) void fetchPage(nextCursor, "append");
+      },
+      { root, rootMargin: "120px 0px" }
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [hasMore, nextCursor, loadingMore, loading, loadError, fetchPage]);
+
   useEffect(() => {
     if (explorerRefreshKey !== undefined) setExplorerKey((k) => k + 1);
   }, [explorerRefreshKey]);
@@ -348,27 +413,41 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     onCwdChange?.(selectedCwd);
   }, [selectedCwd, onCwdChange]);
 
-  // Auto-select cwd and restore session from URL on first load
+  // Auto-select cwd and restore session from URL on first load.
+  // In paged mode the initial-session restore is best-effort: if the target
+  // session is on a page we haven't fetched yet, fetch it via the lite info
+  // endpoint and merge into the local list before resolving the cwd.
   useEffect(() => {
-    if (allSessions.length === 0) return;
+    if (sessions.length === 0 && !initialSessionId) return;
+    if (selectedCwd !== null) return;
 
-    if (selectedCwd === null) {
-      // If restoring a session, set cwd to match that session
-      if (initialSessionId && !restoredRef.current) {
-        restoredRef.current = true;
-        const target = allSessions.find((s) => s.id === initialSessionId);
-        if (target) {
-          setSelectedCwd(target.cwd);
-          onSelectSession(target, true);
-          return;
-        }
-        // Session not found — notify parent so it can show the placeholder
-        onInitialRestoreDone?.();
+    if (initialSessionId && !restoredRef.current) {
+      restoredRef.current = true;
+      const target = sessions.find((s) => s.id === initialSessionId);
+      if (target) {
+        setSelectedCwd(target.cwd);
+        onSelectSession(target, true);
+        return;
       }
-      const cwds = getRecentCwds(allSessions);
-      if (cwds.length > 0) setSelectedCwd(cwds[0]);
+      // Not on a loaded page — one-shot lite lookup.
+      void (async () => {
+        try {
+          const res = await fetch(`/api/sessions/${encodeURIComponent(initialSessionId)}/info`);
+          if (res.ok) {
+            const data = (await res.json()) as { session: SessionInfo };
+            setSessions((prev) => prev.find((s) => s.id === data.session.id) ? prev : [data.session, ...prev]);
+            setSelectedCwd(data.session.cwd);
+            onSelectSession(data.session, true);
+            return;
+          }
+        } catch { /* fall through */ }
+        onInitialRestoreDone?.();
+      })();
+      return;
     }
-  }, [allSessions, selectedCwd, initialSessionId, onSelectSession, onInitialRestoreDone]);
+
+    if (recentCwds.length > 0) setSelectedCwd(recentCwds[0]);
+  }, [sessions, recentCwds, selectedCwd, initialSessionId, onSelectSession, onInitialRestoreDone]);
 
   const commitCustomPath = useCallback(() => {
     const path = customPathValue.trim();
@@ -498,19 +577,19 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const recentCwds = getRecentCwds(allSessions);
+  const recentCwdsList = recentCwds;
   const pinnedSet = new Set(pinnedCwds);
-  const unpinnedRecentCwds = recentCwds.filter((c) => !pinnedSet.has(c));
+  const unpinnedRecentCwds = recentCwdsList.filter((c) => !pinnedSet.has(c));
   const filteredSessions = selectedCwd
-    ? allSessions.filter((s) => s.cwd === selectedCwd)
-    : allSessions;
+    ? sessions.filter((s) => s.cwd === selectedCwd)
+    : sessions;
 
   // Pinned sessions in the current workspace, preserving insertion order.
   // find() returns undefined for stale ids (deleted sessions) or pins from other cwds — filtered out.
   const pinnedSessionSet = new Set(pinnedSessions);
   const pinnedSessionRows = selectedCwd
     ? pinnedSessions
-        .map((id) => allSessions.find((s) => s.id === id && s.cwd === selectedCwd))
+        .map((id) => sessions.find((s) => s.id === id && s.cwd === selectedCwd))
         .filter((s): s is SessionInfo => s !== undefined)
     : [];
 
@@ -538,7 +617,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
           <div style={{ display: "flex", gap: 6 }}>
             <Tooltip content={t("Refresh")}>
             <button
-              onClick={() => loadSessions(false)}
+              onClick={() => loadSessions()}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
                 background: sessionRefreshDone ? "rgba(74,222,128,0.18)" : "var(--bg-hover)",
@@ -1006,18 +1085,18 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
       </div>
 
       {/* Session list */}
-      <div style={{ flex: explorerOpen && (selectedCwdProp || selectedCwd) ? "1 1 0" : "1 1 auto", overflowY: "auto", padding: "0", minHeight: 80 }}>
+      <div ref={listScrollRef} style={{ flex: explorerOpen && (selectedCwdProp || selectedCwd) ? "1 1 0" : "1 1 auto", overflowY: "auto", padding: "0", minHeight: 80 }}>
         {loading && (
           <div style={{ padding: "16px 14px", color: "var(--text-muted)", fontSize: 12 }}>
             {t("Loading...")}
           </div>
         )}
-        {error && (
+        {loadError && !loading && (
           <div style={{ padding: "12px 14px", color: "#f87171", fontSize: 12 }}>
-            {error}
+            {loadError}
           </div>
         )}
-        {!loading && !error && filteredSessions.length === 0 && (
+        {!loading && !loadError && sessions.length === 0 && (
           <div style={{ padding: "16px 14px", color: "var(--text-muted)", fontSize: 12 }}>
             {t("No sessions found")}
           </div>
@@ -1062,6 +1141,41 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
             onToggleFavorite={onToggleFavorite}
           />
         ))}
+
+        {/* Pagination footer: end-of-list marker, in-flight spinner, or
+            load-more retry button on a failed page fetch. */}
+        {!loading && sessions.length > 0 && !hasMore && (
+          <div style={{ padding: "10px 14px", color: "var(--text-dim)", fontSize: 11, textAlign: "center" }}>
+            {t("End of sessions")}
+          </div>
+        )}
+        {loadingMore && (
+          <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 11, textAlign: "center" }}>
+            {t("Loading more...")}
+          </div>
+        )}
+        {loadError && !loading && !loadingMore && (
+          <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <span style={{ color: "#f87171", fontSize: 11 }}>{loadError}</span>
+            <button
+              onClick={() => { setLoadError(null); void fetchPage(nextCursor, "append"); }}
+              style={{
+                fontSize: 11,
+                padding: "3px 8px",
+                border: "1px solid var(--border)",
+                borderRadius: 5,
+                background: "var(--bg-hover)",
+                color: "var(--text)",
+                cursor: "pointer",
+              }}
+            >
+              {t("Retry")}
+            </button>
+          </div>
+        )}
+        {/* IntersectionObserver sentinel — kept always rendered so the
+            observer stays attached across page-append renders. */}
+        {hasMore && <div ref={sentinelRef} style={{ height: 1 }} aria-hidden="true" />}
       </div>
 
       {/* File Explorer section */}

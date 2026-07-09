@@ -13,10 +13,29 @@ function getSessionsDir(): string {
 }
 
 export async function listAllSessions(cwd?: string): Promise<SessionInfo[]> {
-  // When cwd is provided, delegate to pi-mono's per-dir scanner so we reuse its
-  // header/message parsing. Falls back to scanning every workspace otherwise.
-  const targetDir = cwd ? path.join(getSessionsDir(), workspaceSlug(cwd)) : undefined;
-  const piSessions: PiSessionInfo[] = await SessionManager.listAll(targetDir);
+  const all = await loadAllSessionsCached();
+  if (!cwd) return all;
+  return all.filter((s) => s.cwd === cwd);
+}
+
+// ============================================================================
+// In-memory list cache (TTL 5s)
+// `SessionManager.listAll` scans every JSONL header across the disk, which is
+// expensive on machines with thousands of session files. Multiple pagination
+// requests landing within the same TTL window share one scan.
+//
+// Mutations (rename / delete / new session) call `invalidateSessionListCache`
+// explicitly so user-initiated changes are immediately visible.
+// ============================================================================
+
+const LIST_CACHE_TTL_MS = 5_000;
+
+declare global {
+  var __piSessionListCache: { list: SessionInfo[]; loadedAt: number } | undefined;
+  var __piSessionListInflight: Promise<SessionInfo[]> | undefined;
+}
+
+function toSessionInfo(piSessions: PiSessionInfo[]): SessionInfo[] {
   const pathToId = new Map<string, string>();
   for (const s of piSessions) pathToId.set(s.path, s.id);
 
@@ -38,6 +57,42 @@ export async function listAllSessions(cwd?: string): Promise<SessionInfo[]> {
       running: false,
     };
   });
+}
+
+/** Internal: return the cached full-list, refreshing if TTL elapsed. */
+async function loadAllSessionsCached(): Promise<SessionInfo[]> {
+  const now = Date.now();
+  const cached = globalThis.__piSessionListCache;
+  if (cached && now - cached.loadedAt < LIST_CACHE_TTL_MS) {
+    return cached.list;
+  }
+
+  // Coalesce concurrent cold loads
+  if (globalThis.__piSessionListInflight) {
+    return globalThis.__piSessionListInflight;
+  }
+
+  const loadPromise = (async () => {
+    const piSessions = await SessionManager.listAll();
+    return toSessionInfo(piSessions);
+  })();
+
+  globalThis.__piSessionListInflight = loadPromise;
+  try {
+    const list = await loadPromise;
+    globalThis.__piSessionListCache = { list, loadedAt: Date.now() };
+    return list;
+  } finally {
+    globalThis.__piSessionListInflight = undefined;
+  }
+}
+
+/**
+ * Drop the cached full-list. Call after any mutation that changes the set or
+ * metadata of sessions (rename / delete / new session creation).
+ */
+export function invalidateSessionListCache(): void {
+  globalThis.__piSessionListCache = undefined;
 }
 
 // ============================================================================
