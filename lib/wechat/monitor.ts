@@ -30,26 +30,38 @@ const POLL_INTERVAL_MS = 1_000;
 
 const syncBufs = new Map<string, string>();
 let timer: ReturnType<typeof setTimeout> | null = null;
+/**
+ * True while a monitor session is alive, separate from the `timer`
+ * field. `timer` is nulled at the top of every `tick()` for the
+ * duration of the upstream getUpdates await, so reading `timer`
+ * alone races with the periodic rescan in lib/wechat/startup.ts.
+ * `runningStartedAt` is only flipped on real start/stop transitions
+ * and is the source of truth for `isMonitorRunning()`.
+ */
+let runningStartedAt: number | null = null;
 let inFlight = false;
 
 export function isMonitorRunning(): boolean {
-  return timer !== null;
+  return runningStartedAt !== null;
 }
 
 /** Start the poller. No-op if already running. */
 export function startMonitor(): void {
-  if (timer !== null) return;
+  if (runningStartedAt !== null) return;
+  runningStartedAt = Date.now();
   log.info("monitor starting");
   scheduleNext(0);
 }
 
 /** Stop the poller. Safe to call when not running. */
 export function stopMonitor(): void {
+  if (runningStartedAt === null) return;
+  runningStartedAt = null;
   if (timer !== null) {
     clearTimeout(timer);
     timer = null;
-    log.info("monitor stopped");
   }
+  log.info("monitor stopped");
 }
 
 /** Auto-start if logged in, no-op otherwise. Called from the contacts API. */
@@ -78,6 +90,7 @@ async function tick(): Promise<void> {
     if (!account) {
       // Account was cleared (logout) — shut down.
       syncBufs.delete(accountStateId());
+      runningStartedAt = null;
       return;
     }
 
