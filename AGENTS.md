@@ -281,7 +281,6 @@ app/api/
   scheduled-tasks/[id]/runs/route.ts GET last N runs for one task
   scheduled-tasks/[id]/runs/mark-all-read/route.ts POST mark all runs as read
   scheduled-tasks/runs/[runId]/route.ts GET one run detail
-  dashboard/status/route.ts         GET playwright-cli dashboard status (lazy-spawn child)
   favorites/route.ts                GET/PUT pinned session list (~/.pi-web/favorites.json)
   translate/route.ts                POST { text, provider, modelId, target } — in-memory LLM call, no disk
   weixin/{login,login/verify-code,logout,status,contacts,test-send,inbound,workspace}
@@ -338,7 +337,6 @@ lib/
   scheduler-store.ts        CRUD + validation for scheduled tasks + runs
   scheduler/                loop.ts (self-rescheduling setTimeout) + runner.ts (per-task FIFO chain)
                             + startup.ts (instrumentation bootstrap)
-  playwright-dashboard.ts   lazy-spawn + health-probe for playwright-cli show
   wechat/                   WeChat client + workspace push utilities + inbound monitor + state
   fonts/                    vendored LXGW WenKai webfonts (woff2, subsetted) + OFL + README
   finance-{db,schema,store,preset-categories}.ts + notes-{db,store} + rss-{db,schema,sanitize,store}.ts
@@ -392,7 +390,6 @@ components/
   SvgBlock.tsx              sanitized inline <svg> renderer for assistant output
   CodeBlock.tsx             shared syntax-highlighted code block (Prism, copy, line numbers)
   PermissionDialog.tsx      portal'd permission prompt (Esc/Enter/backdrop-click defaults)
-  PlaywrightDashboardPanel.tsx  sidebar panel hosting the spawned playwright-cli dashboard iframe
   SessionSearch.tsx         in-session and cross-session keyword search UI
   GithubHeatmap.tsx         GitHub contribution heatmap
   AudioPlayer.tsx           audio file viewer (vinyl-disc aesthetic, 0.5x–2x speed)
@@ -455,7 +452,6 @@ scripts/
 docs/
   agent-todo/                        design + implementation plan for the agent_todo tool
   subagent-design.md                 exploration doc for pi subagent support (not yet implemented)
-  playwright-dashboard/              design + implementation plan for the playwright-cli sidebar panel
   beautiful-mermaid-examples.md      diagram examples that render in beautiful-mermaid
   SKILL_find_skills.md               notes on the marketplace skill discovery flow
   openclaw-weixin-integration.md     reference for the WeChat (openclaw) integration

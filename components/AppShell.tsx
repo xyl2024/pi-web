@@ -10,7 +10,6 @@ import { TabBar, type Tab } from "./TabBar";
 import { TodoPanel } from "./TodoPanel";
 import { NotesPanel } from "./NotesPanel";
 import { useNotes } from "@/hooks/useNotes";
-import { PlaywrightDashboardPanel } from "./PlaywrightDashboardPanel";
 import { CollectionPanel } from "./CollectionPanel";
 import { TranslatePanel } from "./TranslatePanel";
 import { ToolCallStatsPanel } from "./ToolCallStatsPanel";
@@ -174,10 +173,10 @@ export function AppShell() {
   }, [sessionKey, selectedSession?.id, fetchTools]);
 
   // Single active panel — only one dropdown open at a time
-  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "context" | "tools" | "dashboard" | null>(null);
+  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "context" | "tools" | null>(null);
   const [topPanelPos, setTopPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  const toggleTopPanel = useCallback((panel: "branches" | "system" | "context" | "tools" | "dashboard") => {
+  const toggleTopPanel = useCallback((panel: "branches" | "system" | "context" | "tools") => {
     setActiveTopPanel((cur) => cur === panel ? null : panel);
   }, []);
 
@@ -908,32 +907,6 @@ export function AppShell() {
                 )}
               </button>
               </Tooltip>
-              <Tooltip content={activeTopPanel === "dashboard" ? t("Hide dashboard") : t("Open dashboard")}>
-              <button
-                onClick={() => toggleTopPanel("dashboard")}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  height: "100%", padding: "0 12px",
-                  background: activeTopPanel === "dashboard" ? "var(--bg-selected)" : "none",
-                  border: "none",
-                  borderTop: activeTopPanel === "dashboard" ? "2px solid var(--accent)" : "2px solid transparent",
-                  borderRight: "1px solid var(--border)",
-                  cursor: "pointer",
-                  color: activeTopPanel === "dashboard" ? "var(--text)" : "var(--text-muted)",
-                  fontSize: 11, whiteSpace: "nowrap", transition: "color 0.1s, background 0.1s",
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = activeTopPanel === "dashboard" ? "var(--text)" : "var(--text-muted)"; }}
-              >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                  <circle cx="8" cy="8" r="6" />
-                  <line x1="2" y1="8" x2="14" y2="8" />
-                  <path d="M8 2a8 8 0 0 1 0 12" />
-                  <path d="M8 2a8 8 0 0 0 0 12" />
-                </svg>
-                <span>{t("Browser")}</span>
-              </button>
-              </Tooltip>
               {selectedSession?.id && (
                 <Tooltip content={t("View raw provider API requests captured for this session")}>
                 <button
@@ -1093,16 +1066,6 @@ export function AppShell() {
                       </div>
                     );
                   })()}
-                </div>
-              )}
-              {activeTopPanel === "dashboard" && (
-                <div style={{
-                  background: "var(--bg-panel)",
-                  borderBottom: "1px solid var(--border)",
-                  height: "min(600px, 75vh)",
-                  overflow: "hidden",
-                }}>
-                  <PlaywrightDashboardPanel />
                 </div>
               )}
           </CollapsiblePanel>

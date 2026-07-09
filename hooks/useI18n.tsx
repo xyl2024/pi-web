@@ -664,19 +664,8 @@ const ZH_TRANSLATIONS = {
   "Copy as ASCII": "复制为 ASCII",
   "View source": "查看源码",
   "View diagram": "查看图表",
-  // Playwright dashboard panel (sidebar bottom)
-  "Playwright Dashboard": "Playwright Dashboard",
-  "Open in new tab": "在新标签页打开",
-  "Starting...": "启动中...",
-  "Ready": "已就绪",
   "Expand": "展开",
   "Collapse": "收起",
-  "Starting": "启动中",
-  // Playwright dashboard toggle button (right-panel tab)
-  "Open dashboard": "打开 Dashboard",
-  "Hide dashboard": "隐藏 Dashboard",
-  "Dashboard": "Dashboard",
-  "Browser": "浏览器",
   // Translate panel (right-panel tab)
   "Translate": "翻译",
   "Translate (⌘+Enter)": "翻译 (⌘+Enter)",
