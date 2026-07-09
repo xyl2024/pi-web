@@ -34,6 +34,8 @@ export async function listAllSessions(cwd?: string): Promise<SessionInfo[]> {
       messageCount: s.messageCount,
       firstMessage: s.firstMessage || "(no messages)",
       parentSessionId: s.parentSessionPath ? pathToId.get(s.parentSessionPath) : undefined,
+      // Read layer has no RPC context; the /api/sessions route enriches from the wrapper registry.
+      running: false,
     };
   });
 }

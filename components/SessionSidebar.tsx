@@ -270,6 +270,56 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     loadSessions(isFirst);
   }, [loadSessions, refreshKey]);
 
+  // Poll /api/sessions every 3s for the `running` flag on each row. We only
+  // merge that single field into the existing list — name/modified/etc. are
+  // owned by loadSessions() so polling preserves scroll position, expanded
+  // parents, and hover state. Pauses while the tab is hidden; resumes on
+  // visibilitychange.
+  useEffect(() => {
+    const POLL_INTERVAL_MS = 3000;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+
+    const fetchRunning = async () => {
+      try {
+        const res = await fetch("/api/sessions");
+        if (!res.ok) return;
+        const data = (await res.json()) as { sessions: SessionInfo[] };
+        if (cancelled) return;
+        const byRunning = new Map(data.sessions.map((s) => [s.id, s.running] as const));
+        setAllSessions((prev) => prev.map((s) =>
+          byRunning.has(s.id) ? { ...s, running: byRunning.get(s.id)! } : s
+        ));
+      } catch {
+        // best-effort
+      }
+    };
+
+    const tick = () => {
+      if (cancelled || document.hidden) return;
+      fetchRunning().finally(() => {
+        if (cancelled || document.hidden) return;
+        timer = setTimeout(tick, POLL_INTERVAL_MS);
+      });
+    };
+
+    const onVisibility = () => {
+      if (document.hidden || cancelled) return;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      tick();
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    timer = setTimeout(tick, POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
   useEffect(() => {
     if (explorerRefreshKey !== undefined) setExplorerKey((k) => k + 1);
   }, [explorerRefreshKey]);
@@ -1401,6 +1451,24 @@ function SessionItem({
               <svg width="10" height="10" viewBox="0 0 24 24" fill="var(--accent)" stroke="none">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
+            </span>
+          )}
+          {/* Running indicator — pulses while the agent is between agent_start and agent_end */}
+          {session.running && (
+            <span
+              aria-label={t("running")}
+              title={t("running")}
+              style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
+            >
+              <span
+                className="animate-[pulse_1.5s_infinite]"
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: "var(--accent)",
+                }}
+              />
             </span>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>

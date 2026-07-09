@@ -170,6 +170,10 @@ export interface SessionInfo {
   messageCount: number;
   firstMessage: string;
   parentSessionId?: string; // set if this session was forked from another
+  // True while the agent is between agent_start and agent_end (or compacting).
+  // Set by the read layer to false; the /api/sessions route enriches from the
+  // wrapper registry.
+  running: boolean;
 }
 
 export interface SessionContext {

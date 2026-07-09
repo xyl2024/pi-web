@@ -418,6 +418,7 @@ export function AppShell() {
       modified: result.modified,
       messageCount: 0,
       firstMessage: "",
+      running: false,
     };
     setPendingScrollEntryId(result.firstMatchEntryId ?? null);
     handleSelectSession(sessionInfo);
@@ -478,7 +479,7 @@ export function AppShell() {
     setSessionKey((k) => k + 1);
     setNewSessionCwd(null);
     setSelectedSession((prev) => ({
-      ...(prev ?? { path: "", cwd: "", created: "", modified: "", messageCount: 0, firstMessage: "" }),
+      ...(prev ?? { path: "", cwd: "", created: "", modified: "", messageCount: 0, firstMessage: "", running: false }),
       id: newSessionId,
     }));
     router.replace(`?session=${encodeURIComponent(newSessionId)}`, { scroll: false });

@@ -451,6 +451,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           modified: new Date().toISOString(),
           messageCount: 1,
           firstMessage: message,
+          running: false,
         });
       } else if (session) {
         connectEvents(session.id);

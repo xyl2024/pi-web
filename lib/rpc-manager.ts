@@ -55,6 +55,10 @@ export class AgentSessionWrapper {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private onDestroyCallback: (() => void) | null = null;
   private _alive = true;
+  // True between agent_start and agent_end (and during compaction). Spans the
+  // whole turn including tool calls so the sidebar dot covers the full
+  // "agent is busy" window, not just the model streaming phase.
+  private _running = false;
   private pendingPermissions: Map<string, PendingPermission> = new Map();
   private allowedThisSession: Set<string> = new Set();
   // entryId (session-file entry id of an assistant message) → payload index.
@@ -103,6 +107,11 @@ export class AgentSessionWrapper {
     return this._alive;
   }
 
+  /** True while the agent is between agent_start and agent_end (or compacting). */
+  isRunning(): boolean {
+    return this._running;
+  }
+
   start(): void {
     log.info("agent wrapper started", {
       sessionId: this.sessionId,
@@ -110,9 +119,25 @@ export class AgentSessionWrapper {
     });
     this.unsubscribe = this.inner.subscribe((event: AgentEvent) => {
       this.resetIdleTimer();
+      this.updateRunningState(event);
       for (const l of this.listeners) l(event);
     });
     this.resetIdleTimer();
+  }
+
+  private updateRunningState(event: AgentEvent): void {
+    switch (event.type) {
+      case "agent_start":
+      case "compaction_start":
+      case "auto_compaction_start":
+        this._running = true;
+        break;
+      case "agent_end":
+      case "compaction_end":
+      case "auto_compaction_end":
+        this._running = false;
+        break;
+    }
   }
 
   private resetIdleTimer(): void {
@@ -382,6 +407,7 @@ export class AgentSessionWrapper {
   destroy(): void {
     if (!this._alive) return;
     this._alive = false;
+    this._running = false;
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.unsubscribe?.();
     this.onDestroyCallback?.();
