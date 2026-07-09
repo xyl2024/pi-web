@@ -160,7 +160,12 @@ function Typewriter({ phrases }: { phrases: string[] }) {
       timeout = setTimeout(() => setDeleting(true), 1800);
     } else if (deleting && text === "") {
       setDeleting(false);
-      setPhraseIdx((i) => (i + 1) % phrases.length);
+      setPhraseIdx((i) => {
+        if (phrases.length <= 1) return i;
+        let next = Math.floor(Math.random() * phrases.length);
+        while (next === i) next = Math.floor(Math.random() * phrases.length);
+        return next;
+      });
     } else {
       const next = deleting ? current.slice(0, text.length - 1) : current.slice(0, text.length + 1);
       timeout = setTimeout(() => setText(next), deleting ? 28 : 55);
