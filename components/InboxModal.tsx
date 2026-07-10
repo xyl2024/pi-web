@@ -10,7 +10,6 @@ import { InboxMessageRow } from "./InboxMessageRow";
 interface Props {
   open: boolean;
   onClose: () => void;
-  onMarkAllSeen: () => void;
 }
 
 const TOOLBAR_BTN: React.CSSProperties = {
@@ -35,7 +34,7 @@ const CLOSE_BTN: React.CSSProperties = {
 
 type ClearMode = "all" | "source" | "older7d";
 
-export function InboxModal({ open, onClose, onMarkAllSeen }: Props) {
+export function InboxModal({ open, onClose }: Props) {
   const { t } = useI18n();
   const toast = useToast();
   const confirm = useConfirm();
@@ -53,9 +52,8 @@ export function InboxModal({ open, onClose, onMarkAllSeen }: Props) {
   }, [messages]);
 
   const handleClose = useCallback(() => {
-    onMarkAllSeen();
     onClose();
-  }, [onClose, onMarkAllSeen]);
+  }, [onClose]);
 
   const handleDelete = useCallback(
     async (id: string) => {

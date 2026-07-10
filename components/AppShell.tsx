@@ -72,7 +72,7 @@ export function AppShell() {
   const toast = useToast();
   const cm = useContextMenu();
   const { addNote } = useNotes();
-  const { unread: inboxUnread, markAllSeen: markInboxSeen } = useInboxUnreadCount();
+  const { unread: inboxUnread } = useInboxUnreadCount();
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
   // When user clicks +, we only store the cwd — no fake session id
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
@@ -1463,7 +1463,6 @@ export function AppShell() {
       <InboxModal
         open={inboxOpen}
         onClose={() => setInboxOpen(false)}
-        onMarkAllSeen={markInboxSeen}
       />
     )}
     <CommandPalette

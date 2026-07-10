@@ -18,7 +18,7 @@
 
 - **写入**：推送源 `import { pushMessage } from "@/lib/inbox-store"` → SQLite（`~/.pi-web/inbox.db`，可用 `PI_WEB_INBOX_DB` 覆盖）
 - **读取**：
-  - 铃铛 badge：30s 轮询 `?since=<lastSeenTs>`，已读水位线存 `localStorage.inbox.lastSeenTs`
+  - 铃铛 badge：30s 轮询 `?limit=500`，返回的消息总数即 badge 数字（消息清空后下次轮询归零）
   - 模态列表：5s 轮询 `?limit=200`（仅模态打开时挂载定时器，关闭即卸载）
 - **删除**：单条 / 全部 / 按 source / 7 天前 — 全部走 `DELETE /api/inbox/messages` 加查询参数
 
@@ -168,7 +168,7 @@ listSources(): Array<{ source: string; count: number }>
 - `source` 大写 + 相对时间（just now / Xm ago / Xh ago / Xd ago）
 - 标题（有 `href` 时包成 `<a target="_blank">`）
 - body（`whiteSpace: pre-wrap`）
-- 关闭模态时自动 `markAllSeen()`，badge 归零
+- 关闭模态不修改 badge：消息还在就继续显示实际数量，仅在消息被清掉后下次轮询才归零
 
 ### 底部状态行
 `{n} messages · Auto-refresh every 5s`
@@ -176,7 +176,7 @@ listSources(): Array<{ source: string; count: number }>
 ### 轮询节奏
 | 组件              | 间隔  | URL                                | 触发条件                |
 |-------------------|-------|------------------------------------|-------------------------|
-| `useInboxUnreadCount` | 30s | `?since=<lastSeenTs>&limit=500`    | AppShell mount，常驻     |
+| `useInboxUnreadCount` | 30s | `?limit=500`                       | AppShell mount，常驻     |
 | `useInbox`            | 5s  | `?limit=200`                       | 模态打开，关闭即卸载     |
 
 ---
