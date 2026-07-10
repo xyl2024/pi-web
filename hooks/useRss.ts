@@ -15,8 +15,10 @@
  * the articles view) and cached in `articlesByFeed` for instant back/forward
  * navigation within a single feed.
  *
- * View state is owned by the hook so back/forward within the panel doesn't
- * require re-fetching.
+ * View state (feeds / articles / reader + selection) is sourced from
+ * `hooks/rssStore.ts` so it survives both tab switches inside the right panel
+ * and full page refreshes; data (feeds list + articles cache) stays local to
+ * this hook because it is server-driven and re-fetched lazily.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -25,11 +27,9 @@ import type {
   RssArticle,
   RssFeed,
 } from "@/lib/rss-schema";
+import { setRssView, useRssViewState, type RssViewKey } from "@/hooks/rssStore";
 
-export type RssView =
-  | { kind: "feeds" }
-  | { kind: "articles"; feedId: string }
-  | { kind: "reader"; feedId: string; articleId: string };
+export type RssView = RssViewKey;
 
 export interface UseRssState {
   feeds: RssFeed[];
@@ -63,7 +63,7 @@ export function useRss(): UseRssState {
   const [articlesByFeed, setArticlesByFeed] = useState<Record<string, RssArticle[]>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [view, setView] = useState<RssView>({ kind: "feeds" });
+  const view = useRssViewState().view;
 
   // Guard against overlapping feed-list fetches (rapid focus events).
   const inFlightRef = useRef<Promise<void> | null>(null);
@@ -107,7 +107,7 @@ export function useRss(): UseRssState {
   }, [refresh]);
 
   const navigate = useCallback((next: RssView) => {
-    setView(next);
+    setRssView(next);
   }, []);
 
   const addFeed = useCallback(
@@ -138,17 +138,11 @@ export function useRss(): UseRssState {
         delete next[id];
         return next;
       });
-      setView((prev) => {
-        if (prev.kind === "articles" && prev.feedId === id) {
-          return { kind: "feeds" };
-        }
-        if (prev.kind === "reader" && prev.feedId === id) {
-          return { kind: "feeds" };
-        }
-        return prev;
-      });
+      if (view.kind !== "feeds" && view.feedId === id) {
+        setRssView({ kind: "feeds" });
+      }
     },
-    [refresh],
+    [refresh, view],
   );
 
   const renameFeed = useCallback(

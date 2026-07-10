@@ -16,13 +16,14 @@
  * store keeps the raw HTML).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import parseHtml, { domToReact, type DOMNode, type Element, type HTMLReactParserOptions } from "html-react-parser";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useRss } from "@/hooks/useRss";
 import { useRssDigestSettings } from "@/hooks/useRssDigestSettings";
+import { clearRssScrollForFeed, flushRssScroll, scrollTopForView, setRssScroll } from "@/hooks/rssStore";
 import { sanitizeRssHtml } from "@/lib/rss-sanitize";
 import { ImageLightbox, extractImagesFromHtml, type ImageItem } from "@/components/ImageLightbox";
 import type { RssArticle, RssFeed } from "@/lib/rss-schema";
@@ -57,6 +58,89 @@ export function RssPanel(): ReactElement {
   const [adding, setAdding] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Single scroll ancestor for all three views (RssPanel.tsx:184-ish).
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // ── View + scroll persistence (see hooks/rssStore.ts) ─────────────────
+  // Survives right-panel tab switches (module store) and full page refreshes
+  // (localStorage hydration in useRssViewState).
+
+  // Throttled scroll save: every scroll event queues the latest (view,
+  // scrollTop); rssStore coalesces these into at most one localStorage write
+  // per animation frame. `setRssView` itself flushes pending writes so a fast
+  // scroll + immediate navigation never loses the previous view's position.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      setRssScroll(rss.view, el.scrollTop);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, [rss.view]);
+
+  // Restore scroll position after every view change AND after async article
+  // loads complete. Runs in useLayoutEffect so the browser paints the
+  // restored position in the same frame, avoiding a visible jump from 0 → N.
+  // Guards against applying to a too-short container (e.g. during the brief
+  // window between view change and articles load).
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const target = scrollTopForView(rss.view);
+    if (target === undefined || target === 0) return;
+    if (el.scrollHeight <= el.clientHeight) return;
+    el.scrollTop = target;
+  }, [rss.view, rss.articlesByFeed]);
+
+  // pagehide / visibilitychange flush so the LAST scroll write lands on disk
+  // even if the user closes the tab while a throttled rAF is still in flight.
+  useEffect(() => {
+    const flush = () => flushRssScroll();
+    window.addEventListener("pagehide", flush);
+    const onVis = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+
+  // Stale-data fallback: if the saved view points at a feed / article that
+  // no longer exists (deleted from another tab, or article pruned server
+  // side), bounce out with a one-shot toast and clean up orphaned scroll keys.
+  useEffect(() => {
+    const v = rss.view;
+    if (v.kind === "feeds") return;
+    if (rss.feeds.length === 0) return; // wait for the feed list to load
+    if (!rss.feeds.some((f) => f.id === v.feedId)) {
+      toast.show({
+        kind: "info",
+        message: t("This feed no longer exists, returning to feed list"),
+      });
+      rss.navigate({ kind: "feeds" });
+      clearRssScrollForFeed(v.feedId);
+      return;
+    }
+    if (v.kind === "reader") {
+      const list = rss.articlesByFeed[v.feedId];
+      // Only validate once the article list has been fetched at least once;
+      // otherwise we'd bounce on every remount before the lazy load lands.
+      if (list && !list.some((a) => a.id === v.articleId)) {
+        toast.show({
+          kind: "info",
+          message: t("This article no longer exists, returning to article list"),
+        });
+        rss.navigate({ kind: "articles", feedId: v.feedId });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rss.view, rss.feeds, rss.articlesByFeed]);
 
   // When we land in the reader view, lazily ensure articles for that feed are
   // loaded so the cache is warm when the user clicks Back.
@@ -181,7 +265,7 @@ export function RssPanel(): ReactElement {
         </div>
       )}
 
-      <div style={{ flex: 1, overflow: "auto", padding: "0 0 16px" }}>
+      <div ref={containerRef} style={{ flex: 1, overflow: "auto", padding: "0 0 16px" }}>
         {rss.view.kind === "feeds" && (
           <FeedsView
             feeds={rss.feeds}

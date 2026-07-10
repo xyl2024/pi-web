@@ -809,6 +809,8 @@ const ZH_TRANSLATIONS = {
   "Article not found": "未找到文章",
   "Invalid feed URL": "无效的订阅地址",
   "Already subscribed": "已订阅",
+  "This feed no longer exists, returning to feed list": "该订阅源已不存在，已回到订阅列表",
+  "This article no longer exists, returning to article list": "该文章已不存在，已回到文章列表",
   // RSS daily digest (top-bar status + inline settings form)
   "Daily digest": "每日摘要",
   "Daily digest is off": "每日摘要已关闭",
