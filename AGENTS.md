@@ -105,7 +105,13 @@ npm run dev   # port 30141
 ```
 
 Typecheck: `node_modules/.bin/tsc --noEmit`
-Lint: `npm run lint` (= `eslint .`, the `next lint` subcommand was removed in Next 16)
+Lint (targeted — fast, ~4s): `node_modules/.bin/eslint <files-you-changed>`
+Lint (full — use before commit / in CI): `npm run lint` (= `eslint .`)
+
+`tsc --noEmit` is mandatory after every change. Targeted `eslint <files>` is
+fast enough to run alongside it; full `npm run lint` lints the whole 1100+-file
+tree and surfaces a long tail of pre-existing warnings, so skip it locally
+unless you want to gate on it. The `next lint` subcommand was removed in Next 16.
 **Never run `next build` during dev** — pollutes `.next/` and breaks `npm run dev`.
 
 ## Production startup
