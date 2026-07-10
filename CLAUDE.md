@@ -345,7 +345,6 @@ components/
   SkillsConfig.tsx          modal for installing / browsing / toggling skills
   PromptsConfig.tsx         modal for managing slash-command prompts
   SettingsModal.tsx         modal for ~/.pi-web/config.yaml (replacements, dangerous patterns)
-  PayloadsModal.tsx         modal for inspecting captured provider payloads
   PayloadChip.tsx + PayloadPopover.tsx  inline payload badges inside MessageView
   ProviderIcon.tsx          @lobehub/icons wrapper (one Mono or Color per provider, used in chat header + models modal)
   FileExplorer.tsx          file tree inside sidebar

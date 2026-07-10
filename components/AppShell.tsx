@@ -37,7 +37,7 @@ import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
 import { PromptsConfig } from "./PromptsConfig";
 import { SettingsModal } from "./SettingsModal";
-import { PayloadsModal } from "./PayloadsModal";
+
 import { SchedulerModal } from "./SchedulerModal";
 import { BranchNavigator } from "./BranchNavigator";
 import { CommandPalette } from "./CommandPalette";
@@ -88,7 +88,7 @@ export function AppShell() {
   const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [profileRefreshKey, setProfileRefreshKey] = useState(0);
-  const [payloadsOpen, setPayloadsOpen] = useState(false);
+  
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Focus mode — hides the left sidebar and forces the right panel into a
@@ -129,7 +129,6 @@ export function AppShell() {
     setSkillsConfigOpen(false);
     setPromptsConfigOpen(false);
     setSettingsConfigOpen(false);
-    setPayloadsOpen(false);
     setSchedulerOpen(false);
     setInboxOpen(false);
     setActiveTopPanel(null);
@@ -687,7 +686,6 @@ export function AppShell() {
     openSkills: () => setSkillsConfigOpen(true),
     openPrompts: () => setPromptsConfigOpen(true),
     openScheduler: () => setSchedulerOpen(true),
-    openPayloads: () => { if (selectedSession?.id) setPayloadsOpen(true); },
     openTodosTab: handleOpenTodoTab,
     openNotesTab: handleOpenNotesTab,
     openFavoritesTab: handleOpenFavoritesTab,
@@ -907,33 +905,7 @@ export function AppShell() {
                 )}
               </button>
               </Tooltip>
-              {selectedSession?.id && (
-                <Tooltip content={t("View raw provider API requests captured for this session")}>
-                <button
-                  onClick={() => setPayloadsOpen(true)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 6,
-                    height: "100%", padding: "0 12px",
-                    background: "none", border: "none",
-                    borderTop: "2px solid transparent",
-                    borderRight: "1px solid var(--border)",
-                    cursor: "pointer",
-                    color: "var(--text-muted)",
-                    fontSize: 11, whiteSpace: "nowrap", transition: "color 0.1s, background 0.1s",
-                    fontFamily: "var(--font-mono)",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                    <polyline points="16 18 22 12 16 6" />
-                    <polyline points="8 6 2 12 8 18" />
-                  </svg>
-                  <span>{t("API")}</span>
-                </button>
-                </Tooltip>
-              )}
-            </div>
+              </div>
           )}
           {/* Top panel dropdown — shared, only one active at a time */}
           <CollapsiblePanel
@@ -1480,9 +1452,6 @@ export function AppShell() {
       <PromptsConfig cwd={(activeCwd ?? selectedSession?.cwd ?? newSessionCwd)!} onClose={() => setPromptsConfigOpen(false)} />
     )}
     {settingsConfigOpen && <SettingsModal onClose={() => setSettingsConfigOpen(false)} onProfileSaved={() => setProfileRefreshKey((k) => k + 1)} />}
-    {payloadsOpen && selectedSession?.id && (
-      <PayloadsModal sessionId={selectedSession.id} onClose={() => setPayloadsOpen(false)} />
-    )}
     {schedulerOpen && (
       <SchedulerModal
         open={schedulerOpen}
