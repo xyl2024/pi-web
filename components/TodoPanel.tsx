@@ -2555,7 +2555,9 @@ function TodoItem({
               style={{
                 flex: 1, minWidth: 0,
                 fontSize: 13, fontWeight: 500,
-                color: todo.done ? "var(--text-muted)" : "var(--accent)",
+                color: todo.done
+                  ? "var(--text-muted)"
+                  : (todo.tags.find((t) => t.color)?.color ?? "var(--text)"),
                 textDecoration: todo.done ? "line-through" : "none",
                 cursor: "pointer",
                 overflow: "hidden",
