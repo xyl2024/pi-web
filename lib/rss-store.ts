@@ -534,6 +534,7 @@ export function upsertArticlesFromFeedXml(
       updated: 0,
       totalSeen: 0,
       error: err instanceof Error ? err.message : String(err),
+      insertedArticles: [],
     };
   }
 
@@ -543,7 +544,7 @@ export function upsertArticlesFromFeedXml(
       .prepare(`SELECT id FROM rss_feeds WHERE id = ?`)
       .get(feedId) as { id: string } | undefined;
     if (!feedRow) {
-      return { inserted: 0, updated: 0, totalSeen: parsed.articles.length };
+      return { inserted: 0, updated: 0, totalSeen: parsed.articles.length, insertedArticles: [] };
     }
 
     const findExisting = db.prepare(
@@ -564,6 +565,11 @@ export function upsertArticlesFromFeedXml(
 
     let inserted = 0;
     let updated = 0;
+    const insertedArticles: Array<{
+      title: string | null;
+      link: string | null;
+      pubDate: number | null;
+    }> = [];
     for (const art of parsed.articles) {
       const existing = findExisting.get(feedId, art.guid) as
         | { id: string }
@@ -592,6 +598,11 @@ export function upsertArticlesFromFeedXml(
           now,
         );
         inserted++;
+        insertedArticles.push({
+          title: art.title,
+          link: art.link,
+          pubDate: art.pubDate,
+        });
       }
     }
 
@@ -606,7 +617,7 @@ export function upsertArticlesFromFeedXml(
         WHERE id = ?`,
     ).run(parsed.channelTitle, now, feedId);
 
-    return { inserted, updated, totalSeen: parsed.articles.length };
+    return { inserted, updated, totalSeen: parsed.articles.length, insertedArticles };
   });
 
   const stats = apply();
@@ -618,6 +629,7 @@ export function upsertArticlesFromFeedXml(
     updated: stats.updated,
     totalSeen: stats.totalSeen,
     error: null,
+    insertedArticles: stats.insertedArticles,
   };
 }
 
@@ -684,6 +696,7 @@ export async function fetchAndRefreshFeed(feedId: string): Promise<FetchResult> 
       updated: 0,
       totalSeen: 0,
       error: result.message,
+      insertedArticles: [],
     };
   }
 
@@ -702,6 +715,7 @@ export async function fetchAndRefreshFeed(feedId: string): Promise<FetchResult> 
       updated: 0,
       totalSeen: 0,
       error: null,
+      insertedArticles: [],
     };
   }
 
@@ -719,6 +733,7 @@ export async function fetchAndRefreshFeed(feedId: string): Promise<FetchResult> 
       updated: 0,
       totalSeen: 0,
       error: `HTTP ${result.status} ${result.statusText}`,
+      insertedArticles: [],
     };
   }
 

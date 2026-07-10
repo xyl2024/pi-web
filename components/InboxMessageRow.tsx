@@ -21,19 +21,19 @@ function safeStr(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
-interface DigestArticle {
+interface ArticlesArticle {
   title?: unknown;
   link?: unknown;
 }
 
-interface DigestFeed {
+interface ArticlesFeed {
   unreadCount?: unknown;
   feedTitle?: unknown;
   articles?: unknown;
 }
 
-interface DigestPayload {
-  totalUnread?: unknown;
+interface ArticlesPayload {
+  totalNew?: unknown;
   feedCount?: unknown;
   feeds?: unknown;
 }
@@ -46,15 +46,21 @@ function safeArray<T>(v: unknown): T[] | undefined {
   return Array.isArray(v) ? (v as T[]) : undefined;
 }
 
-function parseDigest(payload: unknown): {
+/**
+ * Parse the `payload.articles` field attached to per-tick RSS Inbox pushes
+ * (see `lib/rss/loop.ts`). The shape is the same `feeds → articles`
+ * structure the old daily digest used, just renamed — the renderer is the
+ * one place that knows how to draw a structured article list inline.
+ */
+function parseArticlesPayload(payload: unknown): {
   feeds: Array<{ unreadCount: number; feedTitle: string | null; articles: Array<{ title: string; link: string }> }>;
 } | null {
   if (!payload || typeof payload !== "object") return null;
-  const obj = payload as DigestPayload;
-  const feedsRaw = safeArray<DigestFeed>(obj.feeds);
+  const obj = payload as ArticlesPayload;
+  const feedsRaw = safeArray<ArticlesFeed>(obj.feeds);
   if (!feedsRaw) return null;
   const feeds = feedsRaw.map((f) => {
-    const articlesRaw = safeArray<DigestArticle>(f.articles) ?? [];
+    const articlesRaw = safeArray<ArticlesArticle>(f.articles) ?? [];
     const articles = articlesRaw
       .map((a) => ({
         title: safeStr(a.title) ?? "",
@@ -81,7 +87,7 @@ export function InboxMessageRow({
   const payload = message.payload ?? {};
   const body = safeStr(payload.body);
   const href = safeStr(payload.href);
-  const digest = parseDigest(payload.digest);
+  const articlesList = parseArticlesPayload(payload.articles);
 
   return (
     <div
@@ -159,7 +165,7 @@ export function InboxMessageRow({
             {body}
           </div>
         )}
-        {digest && digest.feeds.length > 0 && (
+        {articlesList && articlesList.feeds.length > 0 && (
           <div
             style={{
               marginTop: 6,
@@ -168,7 +174,7 @@ export function InboxMessageRow({
               gap: 6,
             }}
           >
-            {digest.feeds.map((feed, i) => (
+            {articlesList.feeds.map((feed, i) => (
               <div
                 key={i}
                 style={{
