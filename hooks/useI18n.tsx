@@ -449,6 +449,8 @@ const ZH_TRANSLATIONS = {
   "Create tag": "创建标签",
   "Create tag #{tag}": "创建标签 #{tag}",
   "Tags": "标签",
+  "Edit tags": "编辑标签",
+  "Type a tag name…": "输入标签名称…",
   "Add tag…": "添加标签…",
   "Tag already added": "标签已存在",
   "Tag is too long": "标签过长",
