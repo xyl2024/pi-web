@@ -139,6 +139,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const eventSourceRef = useRef<EventSource | null>(null);
   const sessionIdRef = useRef<string | null>(session?.id ?? null);
   const agentRunningRef = useRef(false);
+  // Holds the most recent assistant error message during a turn, so
+  // agent_end can toast it. Cleared after the toast (or when the next
+  // message_start arrives). auto_retry_end with success=false also
+  // clears it to avoid double-toasting.
+  const pendingAssistantErrorRef = useRef<string | null>(null);
   const handleAgentEventRef = useRef<((event: AgentEvent) => void) | null>(null);
   const initialScrollDoneRef = useRef(false);
   const scrollToEntryIdRef = useRef(scrollToEntryId);
@@ -297,6 +302,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         setAgentPhase(null);
         setRetryInfo(null);
         dispatch({ type: "end" });
+        // Surface the final assistant error (if any) after retries gave up
+        // — auto_retry_end already toasts the same error on the success:false
+        // path, so the ref is normally null here.
+        if (pendingAssistantErrorRef.current) {
+          toast.show({ kind: "error", message: pendingAssistantErrorRef.current });
+          pendingAssistantErrorRef.current = null;
+        }
         if (sessionIdRef.current) {
           loadSession(sessionIdRef.current);
           fetch(`/api/agent/${encodeURIComponent(sessionIdRef.current)}`)
@@ -329,6 +341,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         }
         dispatch({ type: "reset" });
         setAgentPhase({ kind: "waiting_model" });
+        // Capture assistant errors for the upcoming agent_end toast. During
+        // retries the SDK emits a fresh message_end per attempt; only the
+        // last one wins, which is what we want for the final toast.
+        if (completed?.role === "assistant" && completed.stopReason === "error") {
+          pendingAssistantErrorRef.current = completed.errorMessage ?? "Model call failed";
+        }
         // Refresh context usage after each assistant message so the progress
         // bar tracks every model API call, not just turn end.
         if (completed?.role === "assistant" && sessionIdRef.current) {
@@ -366,8 +384,31 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       case "auto_retry_start":
         setRetryInfo({ attempt: event.attempt as number, maxAttempts: event.maxAttempts as number, errorMessage: event.errorMessage as string | undefined });
         break;
+      case "prompt_failed": {
+        // Emitted by rpc-manager when the inner prompt() rejects (missing
+        // API key, unregistered model, etc.) before agent_start fires.
+        // Reset local running state so the UI isn't stuck mid-turn.
+        setAgentRunning(false);
+        setAgentPhase(null);
+        setRetryInfo(null);
+        dispatch({ type: "end" });
+        const msg = event.error as string | undefined;
+        toast.show({ kind: "error", message: msg || t("Failed to send message") });
+        break;
+      }
       case "auto_retry_end":
         setRetryInfo(null);
+        // Exhausted retries (or non-retryable failure during a retry chain):
+        // the SDK has already finalised the failure here, so toast the
+        // finalError and clear the pending-error ref so agent_end doesn't
+        // double-toast.
+        if (event.success === false) {
+          const finalError = event.finalError as string | undefined;
+          if (finalError) {
+            toast.show({ kind: "error", message: finalError });
+            pendingAssistantErrorRef.current = null;
+          }
+        }
         break;
       case "permission_request": {
         const sid = sessionIdRef.current;
@@ -395,7 +436,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         }
         break;
     }
-  }, [loadSession, onAgentEnd, permissionsRef]);
+  }, [loadSession, onAgentEnd, permissionsRef, t, toast]);
   handleAgentEventRef.current = handleAgentEvent;
 
   const handleSend = useCallback(async (message: string, images?: AttachedImage[]) => {

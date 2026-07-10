@@ -228,9 +228,23 @@ export class AgentSessionWrapper {
 
     switch (type) {
       case "prompt": {
-        // Fire and forget — events come via subscribe
+        // Fire and forget — events come via subscribe. Rejections surface
+        // as a synthetic prompt_failed event so the client can react instead
+        // of silently hanging (e.g. missing API key, unregistered model).
         const promptImages = command.images as Array<{ type: "image"; data: string; mimeType: string }> | undefined;
-        this.inner.prompt(command.message as string, promptImages?.length ? { images: promptImages } : undefined).catch(() => {});
+        this.inner
+          .prompt(command.message as string, promptImages?.length ? { images: promptImages } : undefined)
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            log.warn("prompt failed", { sessionId: this.sessionId, error });
+            for (const l of this.listeners) {
+              try {
+                l({ type: "prompt_failed", error: message } as unknown as AgentEvent);
+              } catch {
+                // listener errors must not break the dispatch loop
+              }
+            }
+          });
         return null;
       }
 

@@ -569,6 +569,25 @@ function AssistantMessageView({
         })()}
       </div>
 
+      {!isStreaming && message.stopReason === "error" && (
+        <div
+          style={{
+            padding: "8px 12px",
+            borderRadius: 6,
+            border: "1px solid rgba(248,113,113,0.45)",
+            background: "rgba(248,113,113,0.06)",
+            color: "#f87171",
+            fontSize: 12,
+            fontFamily: "var(--font-mono)",
+            marginBottom: 8,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {t("Error")}: {message.errorMessage ?? "Model call failed"}
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {blocks.map((block, i) => (
           <BlockView key={i} block={block} toolResults={toolResults} isStreaming={isStreaming} streamingDuration={streamingDurations.get(i) ?? (block.type === "thinking" ? thinkingDurationFromFile : undefined)} toolCallDurations={toolCallDurations} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} />
