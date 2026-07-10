@@ -8,7 +8,6 @@ import { Tooltip } from "./Tooltip";
 export type Tab =
   | { kind: "file"; id: string; label: string; filePath: string }
   | { kind: "todo"; id: string; label: string }
-  | { kind: "notes"; id: string; label: string }
   | { kind: "favorites"; id: string; label: string }
   | { kind: "translate"; id: string; label: string }
   | { kind: "toolCalls"; id: string; label: string }
@@ -53,8 +52,6 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
         const icon =
           tab.kind === "todo" ? (
             <TodoTabIcon />
-          ) : tab.kind === "notes" ? (
-            <NotesTabIcon />
           ) : tab.kind === "favorites" ? (
             <FavoritesTabIcon />
           ) : tab.kind === "translate" ? (
@@ -160,22 +157,6 @@ function TodoTabIcon() {
     <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="2" width="12" height="12" rx="2" />
       <polyline points="5 8 7 10 11 6" />
-    </svg>
-  );
-}
-
-function NotesTabIcon() {
-  // Spiral notebook: outer page + 4 binding rings on the left.
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3.5 2.5h7.5l2.5 2.5v8.5a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z" />
-      <path d="M11 2.5v2.5h2.5" />
-      <line x1="2.5" y1="6" x2="2" y2="6" />
-      <line x1="2.5" y1="8" x2="2" y2="8" />
-      <line x1="2.5" y1="10" x2="2" y2="10" />
-      <line x1="2.5" y1="12" x2="2" y2="12" />
-      <line x1="5" y1="9" x2="12" y2="9" />
-      <line x1="5" y1="11.5" x2="12" y2="11.5" />
     </svg>
   );
 }

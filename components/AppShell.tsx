@@ -8,8 +8,6 @@ import { ChatWindow } from "./ChatWindow";
 import { FileViewer } from "./FileViewer";
 import { TabBar, type Tab } from "./TabBar";
 import { TodoPanel } from "./TodoPanel";
-import { NotesPanel } from "./NotesPanel";
-import { useNotes } from "@/hooks/useNotes";
 import { CollectionPanel } from "./CollectionPanel";
 import { TranslatePanel } from "./TranslatePanel";
 import { ToolCallStatsPanel } from "./ToolCallStatsPanel";
@@ -22,7 +20,6 @@ import { FinancePanel } from "./FinancePanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 
 const TODO_TAB_ID = "todo:global";
-const NOTES_TAB_ID = "notes:global";
 const FAVORITES_TAB_ID = "favorites:global";
 const TRANSLATE_TAB_ID = "translate:global";
 const TOOL_CALLS_TAB_ID = "toolCalls:global";
@@ -71,7 +68,6 @@ export function AppShell() {
   const theme = useTheme();
   const toast = useToast();
   const cm = useContextMenu();
-  const { addNote } = useNotes();
   const { unread: inboxUnread } = useInboxUnreadCount();
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
   // When user clicks +, we only store the cwd — no fake session id
@@ -466,19 +462,7 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [t]);
 
-  // Open the notes tab — same pattern as todos. Default is NOT to auto-open
-  // notes; user has to click the button or hit ⌘N (handled below).
-  const handleOpenNotesTab = useCallback(() => {
-    setFileTabs((prev) => {
-      if (prev.some((t) => t.kind === "notes")) return prev;
-      return [{ kind: "notes", id: NOTES_TAB_ID, label: t("Notes") }, ...prev];
-    });
-    setActiveFileTabId(NOTES_TAB_ID);
-    setRightPanelState("normal");
-  }, [t]);
-
-  // Global keyboard shortcuts. Registered here (not earlier in the
-  // component) so we can close over handleOpenNotesTab and addNote.
+  // Global keyboard shortcuts.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -513,18 +497,6 @@ export function AppShell() {
         }
         return;
       }
-      // Ctrl+N — open notes panel and create a blank note. Skipped when an
-      // editor is focused so the user can type a literal "n" without losing
-      // focus. The new note's auto-select happens inside NotesPanel via a
-      // count-based useEffect.
-      if (mod && !e.altKey && !e.shiftKey && e.key === "n") {
-        if (!isEditable) {
-          e.preventDefault();
-          handleOpenNotesTab();
-          void addNote();
-        }
-        return;
-      }
       // Space — focus chat input when not already focused. Skip when focus
       // is inside the canvas panel: Excalidraw uses Space as its pan-tool
       // gesture, and stealing focus would break that.
@@ -545,7 +517,7 @@ export function AppShell() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [paletteOpen, openPalette, handleOpenNotesTab, addNote]);
+  }, [paletteOpen, openPalette]);
 
   // Open the canvas tab — single global whiteboard, persisted in localStorage.
   const handleOpenCanvasTab = useCallback(() => {
@@ -687,7 +659,6 @@ export function AppShell() {
     openPrompts: () => setPromptsConfigOpen(true),
     openScheduler: () => setSchedulerOpen(true),
     openTodosTab: handleOpenTodoTab,
-    openNotesTab: handleOpenNotesTab,
     openFavoritesTab: handleOpenFavoritesTab,
     openCanvasTab: handleOpenCanvasTab,
     openTranslateTab: handleOpenTranslateTab,
@@ -704,7 +675,7 @@ export function AppShell() {
     hasCwd: !!(activeCwd ?? selectedSession?.cwd ?? newSessionCwd),
   }), [
     theme.setPreset, setLocale, handleSlashNew,
-    handleOpenTodoTab, handleOpenNotesTab, handleOpenFavoritesTab, handleOpenCanvasTab,
+    handleOpenTodoTab, handleOpenFavoritesTab, handleOpenCanvasTab,
     handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenHttpTab, handleOpenJsonTab,
     handleOpenDiffTab,
     handleOpenFinanceTab,
@@ -1113,8 +1084,6 @@ export function AppShell() {
         <div style={{ flex: 1, overflow: "hidden" }}>
           {activeFileTab?.kind === "todo" ? (
             <TodoPanel />
-          ) : activeFileTab?.kind === "notes" ? (
-            <NotesPanel />
           ) : activeFileTab?.kind === "favorites" ? (
             <CollectionPanel
               favoriteIds={favoriteIds}
@@ -1164,11 +1133,11 @@ export function AppShell() {
             display: "flex", alignItems: "center", justifyContent: "center",
             width: 36, height: 36, padding: 0,
             background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-            color: rightPanelState !== "closed" ? "var(--text)" : "var(--text-muted)",
+            color: rightPanelState !== "closed" ? "var(--accent)" : "var(--text-muted)",
             cursor: "pointer", transition: "color 0.12s",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = rightPanelState !== "closed" ? "var(--text)" : "var(--text-muted)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = rightPanelState !== "closed" ? "var(--accent)" : "var(--text-muted)"; }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="15" y1="3" x2="15" y2="21" />
@@ -1183,11 +1152,11 @@ export function AppShell() {
             display: "flex", alignItems: "center", justifyContent: "center",
             width: 36, height: 36, padding: 0,
             background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-            color: activeFileTab?.kind === "todo" ? "var(--text)" : "var(--text-muted)",
+            color: activeFileTab?.kind === "todo" ? "var(--accent)" : "var(--text-muted)",
             cursor: "pointer", transition: "color 0.12s",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "todo" ? "var(--text)" : "var(--text-muted)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "todo" ? "var(--accent)" : "var(--text-muted)"; }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -1203,11 +1172,11 @@ export function AppShell() {
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "finance" ? "var(--text)" : "var(--text-muted)",
+              color: activeFileTab?.kind === "finance" ? "var(--accent)" : "var(--text-muted)",
               cursor: "pointer", transition: "color 0.12s",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "finance" ? "var(--text)" : "var(--text-muted)"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "finance" ? "var(--accent)" : "var(--text-muted)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="2" y="4.5" width="12" height="9" rx="1.5" />
@@ -1215,31 +1184,6 @@ export function AppShell() {
               <circle cx="11.5" cy="10.5" r="0.8" fill="currentColor" stroke="none" />
             </svg>
           </button>
-        </Tooltip>
-        {/* Open notes — always visible */}
-        <Tooltip content={t("Open notes")}>
-        <button
-          onClick={handleOpenNotesTab}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            width: 36, height: 36, padding: 0,
-            background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-            color: activeFileTab?.kind === "notes" ? "var(--text)" : "var(--text-muted)",
-            cursor: "pointer", transition: "color 0.12s",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "notes" ? "var(--text)" : "var(--text-muted)"; }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 3.5h10.5L19 7v12.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z" />
-            <path d="M15.5 3.5V7H19" />
-            <line x1="3.5" y1="9" x2="3" y2="9" />
-            <line x1="3.5" y1="12" x2="3" y2="12" />
-            <line x1="3.5" y1="15" x2="3" y2="15" />
-            <line x1="7" y1="11.5" x2="16" y2="11.5" />
-            <line x1="7" y1="14.5" x2="16" y2="14.5" />
-          </svg>
-        </button>
         </Tooltip>
         {/* Open canvas — single global whiteboard */}
         <Tooltip content={activeFileTab?.kind === "canvas" ? t("Hide canvas") : t("Open canvas")}>
@@ -1249,11 +1193,11 @@ export function AppShell() {
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "canvas" ? "var(--text)" : "var(--text-muted)",
+              color: activeFileTab?.kind === "canvas" ? "var(--accent)" : "var(--text-muted)",
               cursor: "pointer", transition: "color 0.12s",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "canvas" ? "var(--text)" : "var(--text-muted)"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "canvas" ? "var(--accent)" : "var(--text-muted)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18.37 2.63a1.75 1.75 0 0 1 2.48 2.48L9 16.96l-4.5 1.04 1.04-4.5Z" />
@@ -1269,11 +1213,11 @@ export function AppShell() {
             display: "flex", alignItems: "center", justifyContent: "center",
             width: 36, height: 36, padding: 0,
             background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-            color: activeFileTab?.kind === "translate" ? "var(--text)" : "var(--text-muted)",
+            color: activeFileTab?.kind === "translate" ? "var(--accent)" : "var(--text-muted)",
             cursor: "pointer", transition: "color 0.12s",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "translate" ? "var(--text)" : "var(--text-muted)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "translate" ? "var(--accent)" : "var(--text-muted)"; }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 5h12" />
@@ -1293,11 +1237,11 @@ export function AppShell() {
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "http" ? "var(--text)" : "var(--text-muted)",
+              color: activeFileTab?.kind === "http" ? "var(--accent)" : "var(--text-muted)",
               cursor: "pointer", transition: "color 0.12s",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "http" ? "var(--text)" : "var(--text-muted)"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "http" ? "var(--accent)" : "var(--text-muted)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="22" y1="2" x2="11" y2="13" />
@@ -1313,11 +1257,11 @@ export function AppShell() {
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "json" ? "var(--text)" : "var(--text-muted)",
+              color: activeFileTab?.kind === "json" ? "var(--accent)" : "var(--text-muted)",
               cursor: "pointer", transition: "color 0.12s",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "json" ? "var(--text)" : "var(--text-muted)"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "json" ? "var(--accent)" : "var(--text-muted)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M8 3 H6 a2 2 0 0 0 -2 2 v3 a2 2 0 0 1 -2 2 a2 2 0 0 1 2 2 v3 a2 2 0 0 0 2 2 h2" />
@@ -1333,11 +1277,11 @@ export function AppShell() {
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "diff" ? "var(--text)" : "var(--text-muted)",
+              color: activeFileTab?.kind === "diff" ? "var(--accent)" : "var(--text-muted)",
               cursor: "pointer", transition: "color 0.12s",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "diff" ? "var(--text)" : "var(--text-muted)"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "diff" ? "var(--accent)" : "var(--text-muted)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="8" height="16" rx="1.5" />
@@ -1353,11 +1297,11 @@ export function AppShell() {
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "rss" ? "var(--text)" : "var(--text-muted)",
+              color: activeFileTab?.kind === "rss" ? "var(--accent)" : "var(--text-muted)",
               cursor: "pointer", transition: "color 0.12s",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "rss" ? "var(--text)" : "var(--text-muted)"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "rss" ? "var(--accent)" : "var(--text-muted)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="3.5" cy="12.5" r="1.2" fill="currentColor" stroke="none" />
@@ -1404,11 +1348,11 @@ export function AppShell() {
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "favorites" ? "var(--text)" : "var(--text-muted)",
+              color: activeFileTab?.kind === "favorites" ? "var(--accent)" : "var(--text-muted)",
               cursor: "pointer", transition: "color 0.12s",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "favorites" ? "var(--text)" : "var(--text-muted)"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "favorites" ? "var(--accent)" : "var(--text-muted)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill={activeFileTab?.kind === "favorites" ? "var(--accent)" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
@@ -1427,11 +1371,11 @@ export function AppShell() {
                 width: 36, height: 36, padding: 0,
                 background: focused ? "var(--bg-selected)" : "transparent",
                 border: "none",
-                color: focused ? "var(--text)" : "var(--text-muted)",
+                color: focused ? "var(--accent)" : "var(--text-muted)",
                 cursor: "pointer", transition: "color 0.12s, background 0.12s",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = focused ? "var(--text)" : "var(--text-muted)"; }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = focused ? "var(--accent)" : "var(--text-muted)"; }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="15 3 21 3 21 9" />
@@ -1501,12 +1445,12 @@ function ToolCallsVerticalButton({ active, onClick }: { active: boolean; onClick
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
           width: 36, height: 36, padding: 0,
           background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-          color: active ? "var(--text)" : "var(--text-muted)",
+          color: active ? "var(--accent)" : "var(--text-muted)",
           cursor: "pointer", transition: "color 0.12s",
           gap: 1,
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = active ? "var(--text)" : "var(--text-muted)"; }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = active ? "var(--accent)" : "var(--text-muted)"; }}
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <line x1="2" y1="14" x2="2" y2="9" />

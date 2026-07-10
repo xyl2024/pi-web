@@ -24,9 +24,7 @@ export interface RichTextEditorProps {
   placeholder?: string;
   minHeight?: number;
   className?: string;
-  /** Override the image upload endpoint. Defaults to the todo-images uploader
-   *  so existing callers (TodoPanel) keep working. NotesPanel passes in the
-   *  note-images uploader. */
+  /** Override the image upload endpoint. Defaults to the todo-images uploader. */
   uploadImages?: ImageUploader;
 }
 

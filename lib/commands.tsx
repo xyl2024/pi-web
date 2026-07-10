@@ -73,7 +73,6 @@ const ClockIcon = () => I(<><circle cx="12" cy="12" r="9" /><polyline points="12
 const LangIcon = () => I(<><path d="M5 8h14" /><path d="M8 5h7" /><path d="M11 12c0 4-3 7-6 7" /><path d="M11 12c0 4 3 7 6 7" /><path d="M9 19l3-7 3 7" /></>);
 const DiffIcon = () => I(<><rect x="3" y="4" width="8" height="16" rx="1.5" /><rect x="13" y="4" width="8" height="16" rx="1.5" /><line x1="7" y1="9" x2="7" y2="9" /><line x1="17" y1="13" x2="17" y2="13" /></>);
 const WalletIcon = () => I(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18" /><circle cx="16.5" cy="14" r="1.2" fill="currentColor" stroke="none" /></>);
-const NoteIcon = () => I(<><path d="M5 3.5h10.5L19 7v12.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z" /><path d="M15.5 3.5V7H19" /><line x1="7" y1="11.5" x2="16" y2="11.5" /><line x1="7" y1="14.5" x2="16" y2="14.5" /></>);
 
 // Theme icons picked from PRESET_IS_DARK to give the swatch a hint.
 const ThemeIcon = ({ preset }: { preset: ThemePreset }) => {
@@ -139,7 +138,6 @@ export interface CommandContext {
 
   // Right-panel tabs
   openTodosTab: () => void;
-  openNotesTab: () => void;
   openFavoritesTab: () => void;
   openCanvasTab: () => void;
   openTranslateTab: () => void;
@@ -347,14 +345,6 @@ export function buildCommands(ctx: CommandContext, opts: BuildOptions): Command[
     keywords: ["todo", "task", "待办", "任务"],
     icon: <CheckIcon />,
     run: () => ctx.openTodosTab(),
-  });
-  cmds.push({
-    id: "panel.notes",
-    title: t("Open notes"),
-    group: "Panel",
-    keywords: ["note", "memo", "笔记", "备忘"],
-    icon: <NoteIcon />,
-    run: () => ctx.openNotesTab(),
   });
   cmds.push({
     id: "panel.canvas",

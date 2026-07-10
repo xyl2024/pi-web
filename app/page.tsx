@@ -5,7 +5,6 @@ import { ToastProvider } from "@/components/Toast";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { ContextMenuProvider } from "@/components/ContextMenu";
 import { TodoProvider } from "@/hooks/useTodos";
-import { NotesProvider } from "@/hooks/useNotes";
 import { PermissionProvider } from "@/hooks/usePendingPermissions";
 
 export default function Home() {
@@ -17,9 +16,7 @@ export default function Home() {
             <PermissionProvider>
               <ContextMenuProvider>
                 <TodoProvider>
-                  <NotesProvider>
-                    <AppShell />
-                  </NotesProvider>
+                  <AppShell />
                 </TodoProvider>
               </ContextMenuProvider>
             </PermissionProvider>
