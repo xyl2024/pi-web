@@ -17,6 +17,7 @@ import { CanvasPanel } from "./CanvasPanel";
 import { DiffPanel } from "./DiffPanel";
 import { RssPanel } from "./RssPanel";
 import { FinancePanel } from "./FinancePanel";
+import { LogsPanel } from "./LogsPanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 
 const TODO_TAB_ID = "todo:global";
@@ -29,6 +30,7 @@ const CANVAS_TAB_ID = "canvas:global";
 const DIFF_TAB_ID = "diff:global";
 const RSS_TAB_ID = "rss:global";
 const FINANCE_TAB_ID = "finance:global";
+const LOGS_TAB_ID = "logs:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -559,6 +561,16 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [t]);
 
+  // Open the LogsCenter panel — same pattern as Finance.
+  const handleOpenLogsTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((tab) => tab.kind === "logs")) return prev;
+      return [{ kind: "logs", id: LOGS_TAB_ID, label: t("Logs") }, ...prev];
+    });
+    setActiveFileTabId(LOGS_TAB_ID);
+    setRightPanelState("normal");
+  }, [t]);
+
   const handleCloseFileTab = useCallback((tabId: string) => {
     setFileTabs((prev) => {
       const next = prev.filter((t) => t.id !== tabId);
@@ -667,6 +679,7 @@ export function AppShell() {
     openJsonTab: handleOpenJsonTab,
     openDiffTab: handleOpenDiffTab,
     openFinanceTab: handleOpenFinanceTab,
+    openLogsTab: handleOpenLogsTab,
     toggleSidebar: () => setSidebarOpen((v) => !v),
     toggleRightPanel: () => setRightPanelState((v) => v === "closed" ? "normal" : "closed"),
     toggleFocus,
@@ -679,6 +692,7 @@ export function AppShell() {
     handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenHttpTab, handleOpenJsonTab,
     handleOpenDiffTab,
     handleOpenFinanceTab,
+    handleOpenLogsTab,
     toggleFocus, agentControls,
     selectedSession, newSessionCwd, activeCwd,
   ]);
@@ -1108,6 +1122,8 @@ export function AppShell() {
             <RssPanel />
           ) : activeFileTab?.kind === "finance" ? (
             <FinancePanel />
+          ) : activeFileTab?.kind === "logs" ? (
+            <LogsPanel />
           ) : (
             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
               {t("No file open")}
@@ -1309,6 +1325,30 @@ export function AppShell() {
               <path d="M2 4a10 10 0 0 1 10 10" />
 </svg>
         </button>
+        </Tooltip>
+        {/* Open LogsCenter panel */}
+        <Tooltip content={t("Open logs")}>
+          <button
+            onClick={handleOpenLogsTab}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, padding: 0,
+              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+              color: activeFileTab?.kind === "logs" ? "var(--accent)" : "var(--text-muted)",
+              cursor: "pointer", transition: "color 0.12s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "logs" ? "var(--accent)" : "var(--text-muted)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="3" cy="4" r="0.7" fill="currentColor" stroke="none" />
+              <line x1="5.5" y1="4" x2="13.5" y2="4" />
+              <circle cx="3" cy="8" r="0.7" fill="currentColor" stroke="none" />
+              <line x1="5.5" y1="8" x2="13.5" y2="8" />
+              <circle cx="3" cy="12" r="0.7" fill="currentColor" stroke="none" />
+              <line x1="5.5" y1="12" x2="13.5" y2="12" />
+            </svg>
+          </button>
         </Tooltip>
         {/* Expand/collapse — only when panel is open and has tabs */}
         {rightPanelState !== "closed" && fileTabs.length > 0 && (

@@ -1,8 +1,13 @@
 import { appendFileSync, mkdirSync } from "fs";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "path";
 import { homedir } from "os";
+import type { LogEntry, LogLevel } from "./log-types";
+import { LOG_RING_CAPACITY } from "./log-types";
 
-type LogLevel = "debug" | "info" | "warn" | "error";
+// Re-export so existing server-side callers (e.g. the SSE route handler)
+// that import types / capacity from `@/lib/logger` keep working unchanged.
+export type { LogEntry, LogLevel };
+export { LOG_RING_CAPACITY };
 
 const LEVEL_WEIGHT: Record<LogLevel, number> = {
   debug: 10,
@@ -10,6 +15,43 @@ const LEVEL_WEIGHT: Record<LogLevel, number> = {
   warn: 30,
   error: 40,
 };
+
+// ── Ring buffer + fan-out ──────────────────────────────────────────────────
+// Powers the LogsCenter right-panel tab: keep the most recent N entries in
+// memory so the SSE endpoint can hand them to a new subscriber as a snapshot
+// on connect, then fan out every new entry to every active subscriber. State
+// lives on globalThis so it survives Next.js dev hot-reload, matching the
+// pattern used by `__piSessions` and `__piHttpInFlight` (see AGENTS.md).
+
+interface LogRingState {
+  ring: LogEntry[];
+  nextSeq: number;
+  subscribers: Set<(entry: LogEntry) => void>;
+}
+
+type LogRingGlobal = typeof globalThis & {
+  __piLogRing?: LogRingState;
+};
+
+function getLogRingState(): LogRingState {
+  const g = globalThis as LogRingGlobal;
+  if (!g.__piLogRing) {
+    g.__piLogRing = { ring: [], nextSeq: 1, subscribers: new Set() };
+  }
+  return g.__piLogRing;
+}
+
+export function getLogSnapshot(): LogEntry[] {
+  return getLogRingState().ring.slice();
+}
+
+export function subscribeLog(cb: (entry: LogEntry) => void): () => void {
+  const state = getLogRingState();
+  state.subscribers.add(cb);
+  return () => {
+    state.subscribers.delete(cb);
+  };
+}
 
 const DEFAULT_LEVEL: LogLevel = process.env.NODE_ENV === "production" ? "warn" : "debug";
 let fileLogPathBase: string | null | undefined;
@@ -39,6 +81,20 @@ function serializeFields(fields?: Record<string, unknown>): string {
     });
   } catch {
     return " " + JSON.stringify({ fields: "[unserializable]" });
+  }
+}
+
+function serializeFieldsJson(fields?: Record<string, unknown>): string | undefined {
+  if (!fields) return undefined;
+  try {
+    return JSON.stringify(fields, (_key, value) => {
+      if (value instanceof Error) {
+        return { name: value.name, message: value.message, stack: value.stack };
+      }
+      return value;
+    });
+  } catch {
+    return undefined;
   }
 }
 
@@ -122,6 +178,27 @@ function writeLog(level: LogLevel, scope: string, message: string, fields?: Reco
       break;
   }
   writeFileLog(line);
+
+  const state = getLogRingState();
+  const entry: LogEntry = {
+    seq: state.nextSeq++,
+    ts: new Date().toISOString(),
+    level,
+    scope,
+    message,
+    fieldsJson: serializeFieldsJson(fields),
+  };
+  state.ring.push(entry);
+  if (state.ring.length > LOG_RING_CAPACITY) {
+    state.ring.shift();
+  }
+  for (const cb of state.subscribers) {
+    try {
+      cb(entry);
+    } catch {
+      // A subscriber must never break the log pipeline.
+    }
+  }
 }
 
 export function createLogger(scope: string) {

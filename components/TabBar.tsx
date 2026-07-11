@@ -16,7 +16,8 @@ export type Tab =
   | { kind: "canvas"; id: string; label: string }
   | { kind: "diff"; id: string; label: string }
   | { kind: "rss"; id: string; label: string }
-  | { kind: "finance"; id: string; label: string };
+  | { kind: "finance"; id: string; label: string }
+  | { kind: "logs"; id: string; label: string };
 
 interface Props {
   tabs: Tab[];
@@ -68,6 +69,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
             <RssTabIcon />
           ) : tab.kind === "finance" ? (
             <FinanceTabIcon />
+          ) : tab.kind === "logs" ? (
+            <LogsTabIcon />
           ) : (
             getFileIcon(tab.label, 13)
           );
@@ -244,6 +247,20 @@ function FinanceTabIcon() {
       <rect x="2" y="4.5" width="12" height="9" rx="1.5" />
       <path d="M2 7h12" />
       <circle cx="11.5" cy="10.5" r="0.8" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function LogsTabIcon() {
+  // Three stacked lines with bullet dots — reads as "log entries".
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="3" cy="4" r="0.7" fill="currentColor" stroke="none" />
+      <line x1="5.5" y1="4" x2="13.5" y2="4" />
+      <circle cx="3" cy="8" r="0.7" fill="currentColor" stroke="none" />
+      <line x1="5.5" y1="8" x2="13.5" y2="8" />
+      <circle cx="3" cy="12" r="0.7" fill="currentColor" stroke="none" />
+      <line x1="5.5" y1="12" x2="13.5" y2="12" />
     </svg>
   );
 }
