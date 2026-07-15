@@ -428,7 +428,6 @@ scripts/
   test-http-collections-store.ts     smoke test for the collections CRUD
   deploy-systemd-user.sh             deploy to ~/.local/share/pi-web-fork + install user systemd unit
   copy-excalidraw-fonts.mjs          one-time Excalidraw font copy (postinstall-ish)
-  build-wenkai-fonts.ts              regenerate vendored LXGW WenKai woff2 (manual)
 
 docs/
   agent-todo/                        design + implementation plan for the agent_todo tool
@@ -536,7 +535,7 @@ Theme presets (`.theme-default`, `.theme-midnight`, `.theme-synthwave`, `.theme-
 --font-sans --font-mono
 ```
 
-The LXGW WenKai font (CJK, vendored in `lib/fonts/`) is loaded via `next/font/local` in `app/layout.tsx` and exposed as `--font-wenkai-sans`. Noto Sans Mono is loaded via `next/font/google` as `--font-noto-mono`.
+The LXGW WenKai font (CJK) was previously vendored but has been removed; CJK characters now fall through `--font-sans` to the system font stack (`PingFang SC`, `Microsoft YaHei`, etc.). Noto Sans Mono is loaded via `next/font/google` as `--font-noto-mono`.
 
 ---
 

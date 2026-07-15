@@ -1,21 +1,11 @@
 import type { Metadata } from "next";
 import { Noto_Sans_Mono } from "next/font/google";
-import localFont from "next/font/local";
 import "./globals.css";
 
 const notoSansMono = Noto_Sans_Mono({
   subsets: ["latin", "cyrillic"],
   variable: "--font-noto-mono",
   display: "swap",
-});
-
-// LXGW WenKai — vendored in lib/fonts/, see lib/fonts/README.md
-const wenkaiSans = localFont({
-  src: "../lib/fonts/wenkai-regular.woff2",
-  variable: "--font-wenkai-sans",
-  display: "swap",
-  weight: "400",
-  style: "normal",
 });
 
 export const metadata: Metadata = {
@@ -31,7 +21,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${notoSansMono.variable} ${wenkaiSans.variable}`}
+      className={notoSansMono.variable}
       suppressHydrationWarning
     >
       <head>
