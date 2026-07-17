@@ -17,17 +17,19 @@ import { TAG_COLOR_PRESETS, tagContrastText } from "@/lib/todo-color-presets";
 
 type StatusFilter = "all" | "active" | "done";
 type DeadlineFilter = "all" | "overdue" | "today" | "thisWeek" | "thisMonth" | "noDeadline";
+type SortKey = "createdAt" | "completedAt" | "deadline";
 
 type Filters = {
   status: StatusFilter;
   deadline: DeadlineFilter;
   dateRange: { from: number | null; to: number | null };
   tags: string[];
+  sort: SortKey;
 };
 
 type DeadlineTone = "overdue" | "today" | "future";
 
-const DEFAULT_FILTERS: Filters = { status: "all", deadline: "all", dateRange: { from: null, to: null }, tags: [] };
+const DEFAULT_FILTERS: Filters = { status: "all", deadline: "all", dateRange: { from: null, to: null }, tags: [], sort: "createdAt" };
 
 // Persists the user's filter preference across tab close/reopen and page reload.
 // Follows the i18n hydration pattern (hooks/useI18n.tsx) — lazy default + useEffect read.
@@ -42,6 +44,17 @@ const DEADLINE_VALUES: ReadonlySet<DeadlineFilter> = new Set([
   "thisMonth",
   "noDeadline",
 ]);
+const SORT_VALUES: ReadonlySet<SortKey> = new Set(["createdAt", "completedAt", "deadline"]);
+
+// Sort picker options. Direction is implicit per key (matches the well-known
+// intuition: deadlines ascending shows what's due soonest first; created /
+// completed timestamps descending shows "newest first"). Keeping these grouped
+// in one place so the comparator and the popover agree on the order and label.
+const SORT_OPTIONS: ReadonlyArray<{ key: SortKey; labelKey: string; direction: "asc" | "desc" }> = [
+  { key: "createdAt", labelKey: "Sort by created time", direction: "desc" },
+  { key: "completedAt", labelKey: "Sort by completed time", direction: "desc" },
+  { key: "deadline", labelKey: "Sort by due date", direction: "asc" },
+];
 
 /**
  * Read and validate a persisted Filters object from localStorage. Falls back to
@@ -67,7 +80,10 @@ function parsePersistedFilters(raw: string | null): Filters {
     const tags = Array.isArray(o.tags) && o.tags.every((t) => typeof t === "string")
       ? (o.tags as string[])
       : [];
-    return { status, deadline, dateRange: { from, to }, tags };
+    const sort = SORT_VALUES.has(o.sort as SortKey)
+      ? (o.sort as SortKey)
+      : DEFAULT_FILTERS.sort;
+    return { status, deadline, dateRange: { from, to }, tags, sort };
   } catch {
     return DEFAULT_FILTERS;
   }
@@ -304,6 +320,7 @@ export function TodoPanel() {
   const toast = useToast();
   const [viewFilters, setViewFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
   // Hydrate persisted filter preference after mount (SSR-safe: defaults above
@@ -364,7 +381,12 @@ export function TodoPanel() {
   }, [todos]);
 
   const visible = useMemo(() => {
-    const sortKey: keyof Todo = viewFilters.status === "done" ? "completedAt" : "createdAt";
+    // Direction comes from SORT_OPTIONS (defined alongside the picker so the
+    // comparator and the UI agree). Default to "desc" defensively — every
+    // valid SortKey is in SORT_OPTIONS, but a stale Filters shape from a
+    // future migration shouldn't crash the list.
+    const sortOption = SORT_OPTIONS.find((o) => o.key === viewFilters.sort) ?? SORT_OPTIONS[0];
+    const sortKey = sortOption.key;
     const wantedTags = viewFilters.tags.length > 0
       ? new Set(viewFilters.tags.map((t) => t.toLowerCase()))
       : null;
@@ -411,12 +433,30 @@ export function TodoPanel() {
         return x.tags.some((t) => wantedTags.has(t.name.toLowerCase()));
       })
       .sort((a, b) => {
+        // status="all" keeps the existing "active first, done last" partition
+        // regardless of the chosen sort key — see plan Q4. Items within the
+        // same partition get the user's chosen order below.
         if (viewFilters.status === "all" && a.done !== b.done) {
-          return a.done ? 1 : -1; // active first, done last
+          return a.done ? 1 : -1;
         }
-        const av = (a[sortKey] as number | undefined) ?? 0;
-        const bv = (b[sortKey] as number | undefined) ?? 0;
-        return bv - av;
+        // For deadline / completedAt, todos with no value float to the end so
+        // the user always sees the most actionable items on top; within that
+        // "unspecified" tail, secondary-order by createdAt desc so the order
+        // matches what the user sees when filtering "No deadline". The legacy
+        // `?? 0` fallback (which mishandled undefined as 1970-01-01) is gone.
+        if (sortKey === "deadline" || sortKey === "completedAt") {
+          const aVal = a[sortKey];
+          const bVal = b[sortKey];
+          if (aVal === undefined && bVal === undefined) {
+            return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+          }
+          if (aVal === undefined) return 1;
+          if (bVal === undefined) return -1;
+          return sortOption.direction === "asc" ? aVal - bVal : bVal - aVal;
+        }
+        const av = a[sortKey];
+        const bv = b[sortKey];
+        return sortOption.direction === "asc" ? av - bv : bv - av;
       });
   }, [todos, viewFilters, searchTerm, startOfToday, startOfTomorrow, endOfThisWeek, startOfThisMonth, endOfThisMonth]);
 
@@ -501,6 +541,8 @@ export function TodoPanel() {
         filterOpen={filterOpen}
         onFilterOpenChange={setFilterOpen}
         filterActive={filterActive}
+        sortOpen={sortOpen}
+        onSortOpenChange={setSortOpen}
         onCreate={handleCreate}
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
@@ -546,6 +588,8 @@ function FilterBar({
   filterOpen,
   onFilterOpenChange,
   filterActive,
+  sortOpen,
+  onSortOpenChange,
   onCreate,
   searchTerm,
   onSearchChange,
@@ -562,6 +606,8 @@ function FilterBar({
   filterOpen: boolean;
   onFilterOpenChange: (open: boolean) => void;
   filterActive: boolean;
+  sortOpen: boolean;
+  onSortOpenChange: (open: boolean) => void;
   onCreate: (input: { title: string; tags?: string[] }) => Promise<boolean>;
   searchTerm: string;
   onSearchChange: (v: string) => void;
@@ -674,6 +720,43 @@ function FilterBar({
             onChange={onFiltersChange}
             onClose={() => onFilterOpenChange(false)}
             tagSuggestions={tagSuggestions}
+          />
+        )}
+      </div>
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <button
+          onClick={() => onSortOpenChange(!sortOpen)}
+          aria-haspopup="dialog"
+          aria-expanded={sortOpen}
+          aria-label={t("Sort")}
+          title={t("Sort")}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 22, height: 22, padding: 0,
+            flexShrink: 0,
+            background: sortOpen ? "var(--bg-selected)" : "transparent",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            cursor: "pointer",
+            color: sortOpen ? "var(--text)" : "var(--text-muted)",
+            transition: "background 0.1s, color 0.1s",
+            fontFamily: "inherit",
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <line x1="2.5" y1="2" x2="7.5" y2="2" />
+            <polyline points="6,0.5 7.5,2 6,3.5" />
+            <line x1="2.5" y1="5" x2="7.5" y2="5" />
+            <polyline points="4,3.5 2.5,5 4,6.5" />
+            <line x1="2.5" y1="8" x2="7.5" y2="8" />
+            <polyline points="6,6.5 7.5,8 6,9.5" />
+          </svg>
+        </button>
+        {sortOpen && (
+          <SortPopover
+            value={filters.sort}
+            onChange={(key) => onFiltersChange({ ...filters, sort: key })}
+            onClose={() => onSortOpenChange(false)}
           />
         )}
       </div>
@@ -1437,6 +1520,115 @@ function FilterPopover({
         >
           {t("Reset filters")}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Sort picker. Mirrors FilterPopover's outside-click + ESC dismissal so a
+ * user can muscle-memory-bounce between the two. Each option carries an
+ * implicit `direction` from SORT_OPTIONS; we render a ↑/↓ marker inline so the
+ * "soonest first" / "newest first" semantic is visible without a separate
+ * toggle button.
+ */
+function SortPopover({
+  value,
+  onChange,
+  onClose,
+}: {
+  value: SortKey;
+  onChange: (next: SortKey) => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onMouseDown = (e: MouseEvent) => {
+      if (!ref.current) return;
+      if (e.target instanceof Node && ref.current.contains(e.target)) return;
+      onClose();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={t("Sort")}
+      style={{
+        position: "absolute",
+        top: "calc(100% + 4px)",
+        right: 0,
+        zIndex: 10,
+        minWidth: 168,
+        padding: 6,
+        background: "var(--bg-panel)",
+        border: "1px solid var(--border)",
+        borderRadius: 6,
+        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.25)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 1,
+      }}
+    >
+      <div style={{ fontSize: 10, color: "var(--text-dim)", padding: "2px 8px 4px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        {t("Sort")}
+      </div>
+      <div role="radiogroup" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        {SORT_OPTIONS.map((o) => {
+          const selected = value === o.key;
+          const arrow = o.direction === "asc" ? "↑" : "↓";
+          return (
+            <button
+              key={o.key}
+              role="radio"
+              aria-checked={selected}
+              onClick={() => onChange(o.key)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "4px 8px",
+                fontSize: 11,
+                textAlign: "left",
+                background: selected ? "var(--bg-selected)" : "transparent",
+                border: "none",
+                borderRadius: 4,
+                cursor: "pointer",
+                color: selected ? "var(--text)" : "var(--text-muted)",
+                fontFamily: "inherit",
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  width: 10, height: 10, flexShrink: 0,
+                  border: `1.2px solid ${selected ? "var(--accent)" : "var(--text-dim)"}`,
+                  borderRadius: "50%",
+                }}
+              >
+                {selected && (
+                  <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--accent)" }} />
+                )}
+              </span>
+              <span style={{ flex: 1 }}>{t(o.labelKey)}</span>
+              <span style={{ color: "var(--text-dim)", fontSize: 10 }}>{arrow}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
