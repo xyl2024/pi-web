@@ -13,24 +13,14 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { join } from "path";
 import { homedir } from "os";
 import {
-  createTodo,
-  updateTodo,
-  deleteTodo,
   listTodos,
-  TodoValidationError,
-  TodoNotFoundError,
   type Todo,
   type DeadlineFilter,
 } from "./todo-store";
 
 const TODOS_FILE = join(homedir(), ".pi-web", "todos.json");
 
-export const TODO_TOOL_NAMES = [
-  "todo_list",
-  "todo_create",
-  "todo_update",
-  "todo_delete",
-] as const;
+export const TODO_TOOL_NAMES = ["todo_list"] as const;
 
 export type TodoToolName = (typeof TODO_TOOL_NAMES)[number];
 
@@ -42,15 +32,6 @@ interface ListDetails {
   returned: number;
   truncated: boolean;
   todos: Todo[];
-}
-
-interface TodoDetails {
-  todo: Todo;
-}
-
-interface DeleteDetails {
-  id: string;
-  deleted: boolean;
 }
 
 function fmtDate(epochMs?: number): string {
@@ -109,55 +90,6 @@ const ListParams = Type.Object({
   ),
 });
 
-const CreateParams = Type.Object({
-  title: Type.String({ description: "Todo title (1-200 chars, trimmed)." }),
-  description: Type.Optional(
-    Type.String({
-      description:
-        "Optional HTML description. Supports standard HTML tags (<b>, <i>, <u>, <code>, <a href=\"...\">, <ul>, <ol>, <li>, <table>, <img src=\"https://...\">, <pre><code class=\"language-xxx\"> for code blocks, etc.). Stored verbatim and rendered with sanitization in the UI. Plain text is also fine and will be escaped.",
-    }),
-  ),
-  deadline: Type.Optional(
-    Type.Number({ description: "Optional deadline as ms since epoch (local end-of-day recommended)." }),
-  ),
-  tags: Type.Optional(
-    Type.Array(Type.String(), {
-      description: "Optional tag list. Trimmed, deduped case-insensitively.",
-    }),
-  ),
-});
-
-const UpdateParams = Type.Object({
-  id: Type.String({ description: "The id of the todo to update." }),
-  title: Type.Optional(Type.String({ description: "New title." })),
-  description: Type.Optional(
-    Type.Union(
-      [Type.String(), Type.Null()],
-      { description: "New description, or null to clear it." },
-    ),
-  ),
-  done: Type.Optional(
-    Type.Boolean({
-      description: "Mark completed (true) or active (false). Server manages completedAt.",
-    }),
-  ),
-  deadline: Type.Optional(
-    Type.Union(
-      [Type.Number(), Type.Null()],
-      { description: "New deadline as ms since epoch, or null to clear it." },
-    ),
-  ),
-  tags: Type.Optional(
-    Type.Union(
-      [Type.Array(Type.String()), Type.Null()],
-      { description: "Replace the tag list, or null to clear all tags." },
-    ),
-  ),
-});
-
-const DeleteParams = Type.Object({
-  id: Type.String({ description: "The id of the todo to delete." }),
-});
 
 // ---------------------------------------------------------------------------
 // Tool definitions — `defineTool` infers the params type from the schema, so
@@ -204,83 +136,8 @@ const todoListTool = defineTool<typeof ListParams, ListDetails>({
   },
 });
 
-const todoCreateTool = defineTool<typeof CreateParams, TodoDetails>({
-  name: "todo_create",
-  label: "Todo Create",
-  description:
-    "Create a new todo in the user's pi-web todo list. Returns the created todo with its assigned id. The `description` field is stored as HTML and rendered in the rich-text editor; pass sanitized HTML or plain text (which will be escaped).",
-  parameters: CreateParams,
-  executionMode: "sequential",
-  async execute(_toolCallId, params) {
-    try {
-      const todo = createTodo(TODOS_FILE, {
-        title: params.title,
-        description: params.description,
-        deadline: params.deadline,
-        tags: params.tags,
-      });
-      return result(`Created todo: ${fmtTodoLine(todo)}`, { todo });
-    } catch (error) {
-      const message = error instanceof TodoValidationError ? error.message : String(error);
-      return errResult(message, { todo: undefined as unknown as Todo });
-    }
-  },
-});
-
-const todoUpdateTool = defineTool<typeof UpdateParams, TodoDetails>({
-  name: "todo_update",
-  label: "Todo Update",
-  description:
-    "Update an existing todo in the user's pi-web todo list by id. Any subset of title / description / done / deadline may be provided. Pass null for description or deadline to clear them. Server manages the completedAt timestamp when 'done' changes. `description` is stored as HTML; pass sanitized HTML or plain text.",
-  parameters: UpdateParams,
-  executionMode: "sequential",
-  async execute(_toolCallId, params) {
-    try {
-      // Normalize "null" -> undefined for description (no clear semantics in our model).
-      const description = params.description === null
-        ? undefined
-        : params.description;
-      // For deadline and tags, null IS the clear signal — pass through unchanged.
-      const todo = updateTodo(TODOS_FILE, params.id, {
-        title: params.title,
-        description,
-        done: params.done,
-        deadline: params.deadline,
-        tags: params.tags,
-      });
-      return result(`Updated: ${fmtTodoLine(todo)}`, { todo });
-    } catch (error) {
-      let message: string;
-      if (error instanceof TodoValidationError) message = error.message;
-      else if (error instanceof TodoNotFoundError) message = `todo ${params.id} not found`;
-      else message = String(error);
-      return errResult(message, { todo: undefined as unknown as Todo });
-    }
-  },
-});
-
-const todoDeleteTool = defineTool<typeof DeleteParams, DeleteDetails>({
-  name: "todo_delete",
-  label: "Todo Delete",
-  description: "Delete a todo from the user's pi-web todo list by id. Returns an error if the id does not exist.",
-  parameters: DeleteParams,
-  executionMode: "sequential",
-  async execute(_toolCallId, params) {
-    try {
-      deleteTodo(TODOS_FILE, params.id);
-      return result(`Deleted todo ${params.id}`, { id: params.id, deleted: true });
-    } catch (error) {
-      let message: string;
-      if (error instanceof TodoNotFoundError) message = `todo ${params.id} not found`;
-      else if (error instanceof TodoValidationError) message = error.message;
-      else message = String(error);
-      return errResult(message, { id: params.id, deleted: false });
-    }
-  },
-});
-
 export function buildTodoTools(enabled?: readonly string[]) {
-  const all = [todoListTool, todoCreateTool, todoUpdateTool, todoDeleteTool];
+  const all = [todoListTool];
   if (enabled === undefined) return all;
   const set = new Set(enabled);
   return all.filter((t) => set.has(t.name));
