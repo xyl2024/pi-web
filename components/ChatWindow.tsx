@@ -10,7 +10,6 @@ import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { AgentTodoPanel } from "./AgentTodoPanel";
 import { ReplayBar } from "./ReplayBar";
 import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
-import { useAudio } from "@/hooks/useAudio";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "@/components/Toast";
@@ -68,7 +67,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     lastUserMsgRef,
     handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
     handleCompact, handleSteer, handleFollowUp, handleAbortCompaction,
-    handleToolPresetChange, handleThinkingLevelChange, handleAgentEventRef,
+    handleToolPresetChange, handleThinkingLevelChange,
     activeLeafId, currentSessionId,
   } = useAgentSession({
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
@@ -291,23 +290,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     return () => clearTimeout(timer);
   }, [pendingJumpEntryId, entryIds, messages]);
 
-  const { soundEnabled, onSoundToggle, playDoneSound } = useAudio();
-  const playDoneSoundRef = useRef(playDoneSound);
-  playDoneSoundRef.current = playDoneSound;
-  const soundEnabledRef = useRef(soundEnabled);
-  soundEnabledRef.current = soundEnabled;
-
-  // Wrap agent event handler to play sound on agent_end
-  const origHandler = handleAgentEventRef.current;
-  useEffect(() => {
-    handleAgentEventRef.current = (event) => {
-      if (event.type === "agent_end" && soundEnabledRef.current) {
-        playDoneSoundRef.current();
-      }
-      origHandler?.(event);
-    };
-  }, [origHandler, handleAgentEventRef]);
-
   // ── Auto-scroll to bottom during streaming ──
   const prevStreamingRef = useRef(false);
   useEffect(() => {
@@ -492,8 +474,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       availableThinkingLevels={availableThinkingLevels}
       thinkingLevelMap={currentThinkingLevelMap}
       retryInfo={retryInfo}
-      soundEnabled={soundEnabled}
-      onSoundToggle={onSoundToggle}
       contextUsage={contextUsage}
       slashResources={slashResources}
       slashResourceKey={slashResourceKey}
