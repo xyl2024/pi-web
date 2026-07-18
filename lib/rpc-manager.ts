@@ -6,6 +6,7 @@ import { readConfig, applyReplacements } from "./config";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { recordRequest, recordResponse } from "./payload-capture";
+import { recordCall } from "./token-audit-store";
 import { buildTodoTools } from "./todo-tools";
 import { readEnabledTodoTools } from "./todo-tools-config";
 import { buildShowFileTool } from "./show-file-tool";
@@ -490,7 +491,8 @@ export async function startRpcSession(
   sessionId: string,
   sessionFile: string,
   cwd: string,
-  toolNames: ToolSelection = "all"
+  toolNames: ToolSelection = "all",
+  source: "user" | "scheduled" = "user"
 ): Promise<{ session: AgentSessionWrapper; realSessionId: string }> {
   const registry = getRegistry();
   const locks = getLocks();
@@ -528,6 +530,9 @@ export async function startRpcSession(
     // gets its own loader/closure, so `capturedSessionId` only ever holds
     // the id for this wrapper.
     let capturedSessionId: string | null = null;
+    // Source of this session (user-driven tab vs scheduler-fired task).
+    // Captured once at construction so token-audit rows can attribute cost.
+    const capturedSource: "user" | "scheduled" = source;
     // Forward reference — the tool_call handler runs inside the agent's
     // extension context but needs to call back into the wrapper to surface
     // permission requests and resolve them. Set immediately after the
@@ -586,6 +591,78 @@ export async function startRpcSession(
             // 'allow_once' and 'allow_similar' both let the tool run.
             // 'allow_similar' was already recorded on the wrapper.
             return undefined;
+          });
+        },
+        // ── Token audit capture ──────────────────────────────────────────
+        // One row per assistant `message_end`. Uses `INSERT OR IGNORE` against
+        // UNIQUE(session_id, message_id) so retries / SSE reconnects / compaction
+        // replays never inflate the audit log.
+        //
+        // duration_ms = (Date.now() at hook time) − msg.timestamp. `msg.timestamp`
+        // is when the LLM finalized the message internally; `Date.now()` is when
+        // our hook fires immediately after — gap is just RPC event dispatch
+        // (~few ms), so this is a tight upper bound on real call latency.
+        //
+        // We deliberately do NOT use `before_provider_request` for the start
+        // stamp: in observed runs, that event can fire *after* `msg.timestamp`
+        // by a few ms (likely pi-internal preflight + a second dispatch), which
+        // produces negative durations after clamping. Computing duration from
+        // `msg.timestamp` + hook time is strictly non-negative and accurate.
+        (pi) => {
+          pi.on("message_end", (event) => {
+            const ev = event as { message?: { role?: string; provider?: string; model?: string; api?: string; usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; totalTokens?: number; cost?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number } }; timestamp?: number; stopReason?: string; errorMessage?: string } };
+            const msg = ev.message;
+            if (!msg || msg.role !== "assistant") return;
+            if (!capturedSessionId) return;
+            // AssistantMessage has no `id` field on the in-memory object — the
+            // JSONL entry id is on the OUTER entry, not available to extensions.
+            // Use `timestamp` (ms) as the dedup key; collisions only occur on
+            // SDK replays (compaction, SSE reconnect), which is what we want to
+            // dedupe via the UNIQUE(session_id, message_id) constraint.
+            const finalizedAt = msg.timestamp ?? Date.now();
+            const hookAt = Date.now();
+            const u = msg.usage ?? {};
+            const c = u.cost ?? {};
+            const input = u.input ?? 0;
+            const output = u.output ?? 0;
+            const read = u.cacheRead ?? 0;
+            const write = u.cacheWrite ?? 0;
+            const costIn = c.input ?? 0;
+            const costOut = c.output ?? 0;
+            const costRead = c.cacheRead ?? 0;
+            const costWrite = c.cacheWrite ?? 0;
+            const costTotal =
+              c.total ?? costIn + costOut + costRead + costWrite;
+            try {
+              recordCall({
+                sessionId: capturedSessionId,
+                messageId: String(finalizedAt),
+                source: capturedSource,
+                provider: msg.provider ?? "unknown",
+                modelId: msg.model ?? "unknown",
+                api: msg.api ?? null,
+                // Store `finalizedAt` as `ts` for sorting/filtering. It is the
+                // moment the LLM produced its final message — close enough to
+                // "when this call happened" for human-scale audit purposes.
+                ts: finalizedAt,
+                inputTokens: input,
+                outputTokens: output,
+                cacheReadTokens: read,
+                cacheWriteTokens: write,
+                costInput: costIn,
+                costOutput: costOut,
+                costRead,
+                costWrite,
+                costTotal,
+                durationMs: Math.max(0, hookAt - finalizedAt),
+                error: msg.stopReason === "error" ? (msg.errorMessage ?? "error") : null,
+              });
+            } catch (e) {
+              log.warn("token-audit record failed", {
+                sessionId: capturedSessionId,
+                error: String(e),
+              });
+            }
           });
         },
       ],

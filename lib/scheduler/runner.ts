@@ -83,6 +83,7 @@ async function executeRun(task: ScheduledTask, runId: string): Promise<void> {
       "",
       task.cwd,
       task.toolNames ?? "all",
+      "scheduled",
     );
     sessionId = realSessionId;
     recordRunEnd(runId, { sessionId, status: "running", durationMs: Date.now() - startedAt });
