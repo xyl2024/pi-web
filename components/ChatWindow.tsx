@@ -13,6 +13,7 @@ import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
 import { useAudio } from "@/hooks/useAudio";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { useI18n } from "@/hooks/useI18n";
+import { useToast } from "@/components/Toast";
 import type { SlashResource } from "./ChatInput";
 import { ToolCallStatsProvider, useToolCallStatsEmit } from "@/hooks/ToolCallStatsContext";
 import { useToolCallStats } from "@/hooks/useToolCallStats";
@@ -48,8 +49,10 @@ function phaseLabel(phase: AgentPhase, t: ReturnType<typeof useI18n>["t"]): stri
 }
 
 function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest }: Props) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const toast = useToast();
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Tool call stats: wire the context emit into useAgentSession
   const statsEmit = useToolCallStatsEmit();
@@ -66,6 +69,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
     handleCompact, handleSteer, handleFollowUp, handleAbortCompaction,
     handleToolPresetChange, handleThinkingLevelChange, handleAgentEventRef,
+    activeLeafId, currentSessionId,
   } = useAgentSession({
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
     modelsRefreshKey,
@@ -98,6 +102,52 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     // Handlers come from useAgentSession (stable useCallback refs); only
     // re-register when the bits that drive `when()` predicates change.
   }, [agentRunning, isCompacting]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Export the current session as a single-file HTML download. Mirrors the
+  // fetch → blob → object-URL → <a download> pattern in hooks/useTodos.tsx
+  // (which exports a todo as a zip).
+  const handleExport = useCallback(async () => {
+    if (!currentSessionId || isExporting) return;
+    setIsExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (activeLeafId) params.set("leafId", activeLeafId);
+      if (locale) params.set("locale", locale);
+      const qs = params.toString();
+      const url = `/api/sessions/${encodeURIComponent(currentSessionId)}/export${qs ? `?${qs}` : ""}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const { error } = (await res.json().catch(() => ({ error: "" }))) as { error?: string };
+        throw new Error(error || `status ${res.status}`);
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("content-disposition") ?? "";
+      let filename = `session-${currentSessionId.slice(0, 8)}.html`;
+      const mStar = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+      if (mStar) {
+        try { filename = decodeURIComponent(mStar[1]); } catch { /* keep fallback */ }
+      } else {
+        const mPlain = /filename="?([^";]+)"?/i.exec(cd);
+        if (mPlain) filename = mPlain[1];
+      }
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      toast.show({ kind: "success", message: t("Exported") });
+    } catch (error) {
+      toast.show({
+        kind: "error",
+        message: `${t("Export failed")}: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [currentSessionId, activeLeafId, locale, isExporting, t, toast]);
 
   // Running summary for the vertical toolbar badge
   const runningSummary = agentPhase?.kind === "running_tools" && agentPhase.tools.length > 0
@@ -451,6 +501,9 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       onNewSession={onNewSessionRequest}
       onOpenReplay={openReplay}
       replayAvailable={!streamState.isStreaming && !agentRunning && messages.length > 0}
+      onExport={session ? handleExport : undefined}
+      isExporting={isExporting}
+      sessionId={currentSessionId}
     />
   );
 

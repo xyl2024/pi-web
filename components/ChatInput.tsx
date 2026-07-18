@@ -48,6 +48,8 @@ interface Props {
   onThinkingLevelChange?: (level: "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh") => void;
   availableThinkingLevels?: string[] | null;
   thinkingLevelMap?: Record<string, string | null> | null;
+  onExport?: () => void;
+  isExporting?: boolean;
   retryInfo?: { attempt: number; maxAttempts: number; errorMessage?: string } | null;
   soundEnabled?: boolean;
   onSoundToggle?: () => void;
@@ -58,6 +60,7 @@ interface Props {
   onNewSession?: () => void;
   onOpenReplay?: () => void;
   replayAvailable?: boolean;
+  sessionId?: string | null;
 }
 
 export interface ChatInputHandle {
@@ -275,6 +278,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   onNewSession,
   onOpenReplay,
   replayAvailable,
+  onExport, isExporting, sessionId,
 }: Props, ref) {
   const { t, locale } = useI18n();
   const [value, setValue] = useState("");
@@ -1476,6 +1480,56 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" />
                       <line x1="10" y1="14" x2="3" y2="21" /><line x1="21" y1="3" x2="14" y2="10" />
+                    </svg>
+                  )}
+                </button>
+                </Tooltip>
+              </div>
+            )}
+
+            {onExport && sessionId && (
+              <div style={{ position: "relative" }}>
+                <Tooltip content={isExporting ? t("Exporting...") : t("Export session")}>
+                <button
+                  onClick={onExport}
+                  disabled={isStreaming && !isExporting}
+                  aria-label={isExporting ? t("Exporting...") : t("Export session")}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    padding: "0 10px",
+                    height: 32,
+                    background: "none",
+                    border: "none",
+                    borderRadius: 9,
+                    color: isExporting ? "var(--accent)" : "var(--text-muted)",
+                    cursor: (isStreaming && !isExporting) ? "not-allowed" : "pointer",
+                    opacity: (isStreaming && !isExporting) ? 0.5 : 1,
+                    transition: "background 0.12s, color 0.12s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (isStreaming && !isExporting) return;
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                    e.currentTarget.style.color = "var(--text)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "none";
+                    e.currentTarget.style.color = isExporting ? "var(--accent)" : "var(--text-muted)";
+                  }}
+                >
+                  {isExporting ? (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="2" x2="12" y2="6" />
+                      <line x1="12" y1="16" x2="12" y2="22" />
+                      <line x1="4.93" y1="4.93" x2="7.76" y2="7.76" />
+                      <line x1="16.24" y1="16.24" x2="19.07" y2="19.07" />
+                      <line x1="2" y1="12" x2="6" y2="12" />
+                      <line x1="16" y1="12" x2="22" y2="12" />
+                    </svg>
+                  ) : (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                   )}
                 </button>
