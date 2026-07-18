@@ -44,8 +44,8 @@
 
 | 维度       | 用户 todo                              | agent todo（本文档）                       |
 | ---------- | -------------------------------------- | ------------------------------------------ |
-| 工具名     | `todo_list` / `todo_create` / `todo_update` / `todo_delete` | `agent_todo`（单工具，action 区分）        |
-| `label`    | `Todo List` / `Todo Create` / …         | `Agent Todo`                               |
+| 工具名     | `user_todos_list` / `user_todo_description` | `agent_todo`（单工具，action 区分）        |
+| `label`    | `User Todos List` / `User Todo Description` | `Agent Todo`                               |
 | 存储       | `~/.pi-web/todos.db`（SQLite）          | `~/.pi-web/agent-todo/<sessionId>.jsonl`（JSONL 追加写） |
 | 作用域     | 跨会话、跨 pi-web                      | 单个会话分支                              |
 | 历史追溯   | 全部变更都在 DB 里可查                  | 每次 action 写一行 JSONL，含 `stateAfter`，可 `cat` / `grep` |

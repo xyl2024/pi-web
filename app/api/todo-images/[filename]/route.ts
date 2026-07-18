@@ -3,26 +3,10 @@ import { existsSync, readFileSync } from "fs";
 import { join, resolve } from "path";
 import { homedir } from "os";
 import { createLogger, elapsedMs } from "@/lib/logger";
+import { TODO_IMAGE_FILENAME_RE, mimeForTodoImageFilename } from "@/lib/todo-images-utils";
 
 const log = createLogger("api/todo-images/[filename]");
 const TODO_IMAGES_DIR = join(homedir(), ".pi-web", "todo_images");
-
-// Mirror app/api/files/[...path]/route.ts
-const IMAGE_EXT_TO_MIME: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  svg: "image/svg+xml",
-  bmp: "image/bmp",
-  ico: "image/x-icon",
-  avif: "image/avif",
-};
-
-// Strict whitelist: UUID v4 hex + limited image extensions. This is the
-// only thing standing between us and a path-traversal attack, so be picky.
-const FILENAME_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.(png|jpg|jpeg|gif|webp|svg|bmp|ico|avif)$/i;
 
 // GET /api/todo-images/[filename]
 export async function GET(
@@ -32,7 +16,7 @@ export async function GET(
   const startedAt = Date.now();
   try {
     const { filename } = await params;
-    if (!FILENAME_RE.test(filename)) {
+    if (!TODO_IMAGE_FILENAME_RE.test(filename)) {
       return NextResponse.json({ error: "invalid filename" }, { status: 400 });
     }
 
@@ -45,8 +29,7 @@ export async function GET(
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
 
-    const ext = filename.split(".").pop()!.toLowerCase();
-    const mime = IMAGE_EXT_TO_MIME[ext] ?? "application/octet-stream";
+    const mime = mimeForTodoImageFilename(filename);
     const buffer = readFileSync(filepath);
 
     log.info("todo image served", { filename, size: buffer.length, durationMs: elapsedMs(startedAt) });

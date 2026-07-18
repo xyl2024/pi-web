@@ -62,6 +62,28 @@ export interface TodoListOptions {
   tags?: string[];
   limit?: number;
   now?: number;
+  /**
+   * Inclusive lower bound on `createdAt` (epoch ms). Todos created before this
+   * are excluded.
+   */
+  createdAfter?: number;
+  /**
+   * Exclusive upper bound on `createdAt` (epoch ms). Todos created at-or-after
+   * this are excluded. Combine with `createdAfter` for a half-open
+   * `[start, end)` window.
+   */
+  createdBefore?: number;
+  /**
+   * Inclusive lower bound on `deadline` (epoch ms). Todos with no deadline
+   * (`deadline === undefined`) are excluded — they cannot satisfy a time
+   * bound.
+   */
+  deadlineAfter?: number;
+  /**
+   * Exclusive upper bound on `deadline` (epoch ms). Same `undefined`-exclusion
+   * rule as `deadlineAfter`.
+   */
+  deadlineBefore?: number;
 }
 
 export class TodoValidationError extends Error {
@@ -558,6 +580,19 @@ function startOfDay(ts: number): number {
  * List todos with optional filters. Filter and sort semantics mirror the UI
  * in components/TodoPanel.tsx so the agent sees the same buckets the user
  * does.
+ *
+ * Epoch-ms time windows (`createdAfter` / `createdBefore` / `deadlineAfter` /
+ * `deadlineBefore`) are half-open: `start` is inclusive, `end` is exclusive.
+ * The `deadline*` pair excludes todos without a deadline, since a todo with
+ * `deadline === undefined` cannot satisfy "due after X".
+ *
+ * Sort order when `done` is unspecified:
+ *   1. Active todos first, sorted by `deadline` ascending (soonest first;
+ *      todos without a deadline sink to the bottom).
+ *   2. Completed todos last, sorted by `completedAt` descending.
+ * When `done === true`, only completed todos are returned (by `completedAt`
+ * desc); when `done === false`, only active todos (by `deadline` asc, then
+ * by `createdAt` desc as a tiebreaker).
  */
 export function listTodos(_filePath: string, opts: TodoListOptions = {}): Todo[] {
   const db = getDb();
@@ -609,21 +644,46 @@ export function listTodos(_filePath: string, opts: TodoListOptions = {}): Todo[]
       const wanted = new Set(opts.tags.map((t) => t.toLowerCase()));
       if (!x.tags.some((t) => wanted.has(t.name.toLowerCase()))) return false;
     }
+    if (opts.createdAfter !== undefined && x.createdAt < opts.createdAfter) return false;
+    if (opts.createdBefore !== undefined && x.createdAt >= opts.createdBefore) return false;
+    // deadlineAfter/Before intentionally exclude todos with no deadline: a
+    // todo that has no deadline cannot satisfy "due after X" / "due before
+    // Y". Callers that want to include them must omit the deadline filter.
+    if (opts.deadlineAfter !== undefined) {
+      if (x.deadline === undefined || x.deadline < opts.deadlineAfter) return false;
+    }
+    if (opts.deadlineBefore !== undefined) {
+      if (x.deadline === undefined || x.deadline >= opts.deadlineBefore) return false;
+    }
     return true;
   });
 
-  const sortKey: keyof Todo = opts.done === true ? "completedAt" : "createdAt";
-  filtered.sort((a, b) => {
-    if (opts.done === undefined && a.done !== b.done) {
-      return a.done ? 1 : -1; // active first, done last
+  // Sort: group active vs done, then order within each group. `undefined`
+  // deadlines sink to the bottom of the active group so the agent sees the
+  // most-urgent items first.
+  const active = filtered.filter((x) => !x.done);
+  const done = filtered.filter((x) => x.done);
+  const cmpActive = (a: Todo, b: Todo): number => {
+    if (a.deadline === undefined && b.deadline === undefined) {
+      // Tiebreaker: most recently created first.
+      return b.createdAt - a.createdAt;
     }
-    const av = (a[sortKey] as number | undefined) ?? 0;
-    const bv = (b[sortKey] as number | undefined) ?? 0;
+    if (a.deadline === undefined) return 1;
+    if (b.deadline === undefined) return -1;
+    if (a.deadline !== b.deadline) return a.deadline - b.deadline;
+    return b.createdAt - a.createdAt;
+  };
+  const cmpDone = (a: Todo, b: Todo): number => {
+    const av = a.completedAt ?? 0;
+    const bv = b.completedAt ?? 0;
     return bv - av;
-  });
+  };
+  active.sort(cmpActive);
+  done.sort(cmpDone);
+  const ordered = [...active, ...done];
 
   if (typeof opts.limit === "number" && opts.limit >= 0) {
-    return filtered.slice(0, opts.limit);
+    return ordered.slice(0, opts.limit);
   }
-  return filtered;
+  return ordered;
 }

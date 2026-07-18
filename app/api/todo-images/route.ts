@@ -4,26 +4,14 @@ import { join } from "path";
 import { homedir } from "os";
 import { randomUUID } from "crypto";
 import { createLogger, elapsedMs } from "@/lib/logger";
+import { TODO_IMAGE_MIME_TO_EXT } from "@/lib/todo-images-utils";
 
 const log = createLogger("api/todo-images");
 const TODO_IMAGES_DIR = join(homedir(), ".pi-web", "todo_images");
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
-// Mirror the image ext set used by app/api/files/[...path]/route.ts
-// so generated filenames are recognised by the serve route's mime map.
-const MIME_TO_EXT: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/gif": "gif",
-  "image/webp": "webp",
-  "image/svg+xml": "svg",
-  "image/bmp": "bmp",
-  "image/x-icon": "ico",
-  "image/avif": "avif",
-};
-
 function pickExt(mime: string): string {
-  const known = MIME_TO_EXT[mime];
+  const known = TODO_IMAGE_MIME_TO_EXT[mime];
   if (known) return known;
   // Fallback: take the subtype verbatim, after a sanity filter.
   const subtype = mime.split("/")[1] ?? "";

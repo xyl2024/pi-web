@@ -222,7 +222,7 @@ latest list when removing by `toolCallId`.
 
 `lib/rpc-manager.ts` registers these as `customTools` on `createAgentSession`:
 
-- `todo_list` / `todo_create` / `todo_update` / `todo_delete` — CRUD against `~/.pi-web/todos.db` (`lib/todo-tools.ts`, gated by `~/.pi-web/todo-tools.json`).
+- `user_todos_list` / `user_todo_description` — read-only todo queries against `~/.pi-web/todos.db` (`lib/todo-tools.ts`, gated by `~/.pi-web/todo-tools.json`). The first returns a lightweight summary filterable by `status` / `tags` / `create_time_window` / `due_time_window`; the second fetches full description + image URLs by id. Set `PI_WEB_PUBLIC_BASE_URL` to control the image origin in the second tool's output.
 - `show_file` — inline-render one or more files below the tool call in chat (`lib/show-file-tool.ts` + `lib/show-file-tool-types.ts`). Path validation reuses `lib/file-access.ts` (same allowed roots as `/api/files`).
 - `agent_todo` — single-tool action-dispatched (`create | update | list | get | delete | clear`); persisted per-session to `~/.pi-web/agent-todo/<sessionId>.jsonl` as append-only snapshots (`lib/agent-todo-store.ts`). Full design in `docs/agent-todo/`.
 

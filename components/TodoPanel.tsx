@@ -1634,7 +1634,7 @@ function SortPopover({
   );
 }
 
-const TOOL_KEYS = ["todo_list", "todo_create", "todo_update", "todo_delete"] as const;
+const TOOL_KEYS = ["user_todos_list", "user_todo_description"] as const;
 
 function AgentToolsPopover({ onClose }: { onClose: () => void }) {
   const { t } = useI18n();
