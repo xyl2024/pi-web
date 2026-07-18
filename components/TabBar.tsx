@@ -17,7 +17,8 @@ export type Tab =
   | { kind: "diff"; id: string; label: string }
   | { kind: "rss"; id: string; label: string }
   | { kind: "finance"; id: string; label: string }
-  | { kind: "logs"; id: string; label: string };
+  | { kind: "logs"; id: string; label: string }
+  | { kind: "tokens"; id: string; label: string };
 
 interface Props {
   tabs: Tab[];
@@ -47,7 +48,12 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
         // Derive the displayed label at render time for the Finance tab so
         // locale switches update the open tab's name. Other tabs keep the
         // label captured at open time (existing behavior).
-        const displayLabel = tab.kind === "finance" ? t("Finance") : tab.label;
+        const displayLabel =
+          tab.kind === "finance"
+            ? t("Finance")
+            : tab.kind === "tokens"
+              ? t("Token audit")
+              : tab.label;
         const tooltipContent =
           tab.kind === "file" ? tab.filePath : displayLabel;
         const icon =
@@ -71,6 +77,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
             <FinanceTabIcon />
           ) : tab.kind === "logs" ? (
             <LogsTabIcon />
+          ) : tab.kind === "tokens" ? (
+            <TokensTabIcon />
           ) : (
             getFileIcon(tab.label, 13)
           );
@@ -261,6 +269,19 @@ function LogsTabIcon() {
       <line x1="5.5" y1="8" x2="13.5" y2="8" />
       <circle cx="3" cy="12" r="0.7" fill="currentColor" stroke="none" />
       <line x1="5.5" y1="12" x2="13.5" y2="12" />
+    </svg>
+  );
+}
+
+function TokensTabIcon() {
+  // Coin silhouette with a small bar chart — reads as "tokens / cost".
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6" />
+      <line x1="5.5" y1="11" x2="6.5" y2="9" />
+      <line x1="7.5" y1="11" x2="8.5" y2="8" />
+      <line x1="9.5" y1="11" x2="10.5" y2="6.5" />
+      <line x1="4.5" y1="11.5" x2="11.5" y2="11.5" />
     </svg>
   );
 }

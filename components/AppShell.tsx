@@ -18,6 +18,7 @@ import { DiffPanel } from "./DiffPanel";
 import { RssPanel } from "./RssPanel";
 import { FinancePanel } from "./FinancePanel";
 import { LogsPanel } from "./LogsPanel";
+import { TokensPanel } from "./TokensPanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 
 const TODO_TAB_ID = "todo:global";
@@ -31,6 +32,7 @@ const DIFF_TAB_ID = "diff:global";
 const RSS_TAB_ID = "rss:global";
 const FINANCE_TAB_ID = "finance:global";
 const LOGS_TAB_ID = "logs:global";
+const TOKENS_TAB_ID = "tokens:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -571,6 +573,16 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [t]);
 
+  // Open the Token-audit panel.
+  const handleOpenTokensTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((tab) => tab.kind === "tokens")) return prev;
+      return [{ kind: "tokens", id: TOKENS_TAB_ID, label: t("Token audit") }, ...prev];
+    });
+    setActiveFileTabId(TOKENS_TAB_ID);
+    setRightPanelState("normal");
+  }, [t]);
+
   const handleCloseFileTab = useCallback((tabId: string) => {
     setFileTabs((prev) => {
       const next = prev.filter((t) => t.id !== tabId);
@@ -680,6 +692,7 @@ export function AppShell() {
     openDiffTab: handleOpenDiffTab,
     openFinanceTab: handleOpenFinanceTab,
     openLogsTab: handleOpenLogsTab,
+    openTokensTab: handleOpenTokensTab,
     toggleSidebar: () => setSidebarOpen((v) => !v),
     toggleRightPanel: () => setRightPanelState((v) => v === "closed" ? "normal" : "closed"),
     toggleFocus,
@@ -693,6 +706,7 @@ export function AppShell() {
     handleOpenDiffTab,
     handleOpenFinanceTab,
     handleOpenLogsTab,
+    handleOpenTokensTab,
     toggleFocus, agentControls,
     selectedSession, newSessionCwd, activeCwd,
   ]);
@@ -1124,6 +1138,8 @@ export function AppShell() {
             <FinancePanel />
           ) : activeFileTab?.kind === "logs" ? (
             <LogsPanel />
+          ) : activeFileTab?.kind === "tokens" ? (
+            <TokensPanel onSelectSession={handleSelectSession} />
           ) : (
             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
               {t("No file open")}
@@ -1398,6 +1414,29 @@ export function AppShell() {
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
           </button>
+          </Tooltip>
+          {/* Open Token audit panel — sits with the bottom-of-bar group */}
+          <Tooltip content={t("Open token audit")}>
+            <button
+              onClick={handleOpenTokensTab}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 36, height: 36, padding: 0,
+                background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+                color: activeFileTab?.kind === "tokens" ? "var(--accent)" : "var(--text-muted)",
+                cursor: "pointer", transition: "color 0.12s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "tokens" ? "var(--accent)" : "var(--text-muted)"; }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="8" cy="8" r="6" />
+                <line x1="5.5" y1="11" x2="6.5" y2="9" />
+                <line x1="7.5" y1="11" x2="8.5" y2="8" />
+                <line x1="9.5" y1="11" x2="10.5" y2="6.5" />
+                <line x1="4.5" y1="11.5" x2="11.5" y2="11.5" />
+              </svg>
+            </button>
           </Tooltip>
           {/* Open tool calls — always visible; shows running/total badge */}
           <ToolCallsVerticalButton active={activeFileTab?.kind === "toolCalls"} onClick={handleOpenToolCallsTab} />
