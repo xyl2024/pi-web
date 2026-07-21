@@ -14,7 +14,7 @@ body {
 }
 
 .titlebar {
-  height: 28px;
+  height: 22px;
   background: #ececec;
   display: flex;
   align-items: center;
@@ -87,7 +87,7 @@ body {
 
 #app-frame {
   width: 100vw;
-  height: calc(100vh - 28px);
+  height: calc(100vh - 22px);
   border: none;
   display: block;
   background: #ffffff;
