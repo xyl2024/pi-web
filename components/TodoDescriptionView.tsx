@@ -199,7 +199,17 @@ export function TodoDescriptionView({
   return (
     <div
       className={`markdown-body ${className ?? ""}`.trim()}
-      style={{ fontSize: 12, ...style }}
+      style={{
+        fontSize: 12,
+        // Preserve user-entered newlines in text nodes (e.g. <p>line1\nline2</p>
+        // from paste / legacy markdown / agent content) without forcing
+        // monospace preservation — `pre-line` keeps `\n` as a line break and
+        // collapses other whitespace. CodeBlock / MermaidBlock / SvgBlock set
+        // their own `white-space: pre` on the inner <pre>, so they're
+        // unaffected by this ancestor rule.
+        whiteSpace: "pre-line",
+        ...style,
+      }}
     >
       {highlighted}
     </div>
