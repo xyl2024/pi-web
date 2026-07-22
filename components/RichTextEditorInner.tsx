@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { useEditor, EditorContent, Editor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -19,7 +19,7 @@ import { useToast } from "@/components/Toast";
 import { uploadTodoImages, extractImageFiles, extractClipboardImageFiles } from "@/lib/todo-image-upload";
 import type { ImageUploader } from "@/components/RichTextEditor";
 import { buildDescriptionSanitizeConfig } from "@/lib/description-sanitize";
-import { TextColorPicker, TextColorToolbarButton, applyEditorColor } from "@/components/TextColorPicker";
+import { TextColorPicker, applyEditorColor } from "@/components/TextColorPicker";
 
 interface Props {
   defaultValue: string;
@@ -270,7 +270,60 @@ export function RichTextEditorInner({
         background: "var(--bg-panel)",
       }}
     >
-      <Toolbar editor={editor} onSave={handleSave} onCancel={handleCancel} t={t} />
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 4,
+          padding: "4px 8px",
+          background: "var(--bg-panel)",
+          borderBottom: "1px solid var(--border)",
+          flexShrink: 0,
+        }}
+      >
+        <button
+          type="button"
+          onClick={handleCancel}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0 10px",
+            height: 22,
+            fontSize: 11,
+            lineHeight: 1,
+            border: "1px solid var(--border)",
+            borderRadius: 3,
+            cursor: "pointer",
+            background: "transparent",
+            color: "var(--text-muted)",
+            fontFamily: "inherit",
+          }}
+        >
+          {t("Cancel")}
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0 10px",
+            height: 22,
+            fontSize: 11,
+            lineHeight: 1,
+            border: "1px solid var(--border)",
+            borderRadius: 3,
+            cursor: "pointer",
+            background: "var(--accent)",
+            color: "var(--bg)",
+            fontFamily: "inherit",
+          }}
+        >
+          {t("Save")}
+        </button>
+      </div>
       <div
         style={{
           flex: 1,
@@ -323,294 +376,6 @@ function BubbleMenuColorContent({ editor }: { editor: Editor }) {
 }
 
 // ---------------------------------------------------------------------------
-// Toolbar
-// ---------------------------------------------------------------------------
-
-type TFunction = (key: string) => string;
-
-function Toolbar({
-  editor,
-  onSave,
-  onCancel,
-  t,
-}: {
-  editor: Editor | null;
-  onSave: () => void;
-  onCancel: () => void;
-  t: TFunction;
-}) {
-  // Force a re-render when the editor's selection / active marks change, so
-  // `isActive` highlighting on each button stays in sync.
-  const [, force] = useState(0);
-  useEffect(() => {
-    if (!editor) return;
-    const onUpdate = () => force((n) => n + 1);
-    editor.on("selectionUpdate", onUpdate);
-    editor.on("transaction", onUpdate);
-    return () => {
-      editor.off("selectionUpdate", onUpdate);
-      editor.off("transaction", onUpdate);
-    };
-  }, [editor]);
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        gap: 4,
-        padding: "4px 6px",
-        background: "var(--bg-panel)",
-        borderBottom: "1px solid var(--border)",
-        fontSize: 11,
-        color: "var(--text-dim)",
-        flexShrink: 0,
-      }}
-    >
-      <ToolbarGroup>
-        <ToolbarButton
-          label={t("Bold")}
-          active={!!editor?.isActive("bold")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleBold().run()}
-          glyph={<b>B</b>}
-        />
-        <ToolbarButton
-          label={t("Italic")}
-          active={!!editor?.isActive("italic")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleItalic().run()}
-          glyph={<i>I</i>}
-        />
-        <ToolbarButton
-          label={t("Strikethrough")}
-          active={!!editor?.isActive("strike")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleStrike().run()}
-          glyph={<s>S</s>}
-        />
-        <ToolbarButton
-          label={t("Inline code")}
-          active={!!editor?.isActive("code")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleCode().run()}
-          glyph={<code style={{ fontSize: 10 }}>{"</>"}</code>}
-        />
-        {editor && (
-          <TextColorToolbarButton
-            editor={editor}
-            active={editor.isActive("textStyle")}
-          />
-        )}
-      </ToolbarGroup>
-      <ToolbarGroup>
-        <ToolbarButton
-          label={t("Heading 1")}
-          active={!!editor?.isActive("heading", { level: 1 })}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-          glyph={<span style={{ fontWeight: 600 }}>H1</span>}
-        />
-        <ToolbarButton
-          label={t("Heading 2")}
-          active={!!editor?.isActive("heading", { level: 2 })}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-          glyph={<span style={{ fontWeight: 600 }}>H2</span>}
-        />
-        <ToolbarButton
-          label={t("Heading 3")}
-          active={!!editor?.isActive("heading", { level: 3 })}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-          glyph={<span style={{ fontWeight: 600 }}>H3</span>}
-        />
-      </ToolbarGroup>
-      <ToolbarGroup>
-        <ToolbarButton
-          label={t("Bulleted list")}
-          active={!!editor?.isActive("bulletList")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleBulletList().run()}
-          glyph={<span>•&nbsp;≡</span>}
-        />
-        <ToolbarButton
-          label={t("Numbered list")}
-          active={!!editor?.isActive("orderedList")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-          glyph={<span>1.&nbsp;≡</span>}
-        />
-        <ToolbarButton
-          label={t("Task list")}
-          active={!!editor?.isActive("taskList")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleTaskList().run()}
-          glyph={<span>☐&nbsp;≡</span>}
-        />
-      </ToolbarGroup>
-      <ToolbarGroup>
-        <ToolbarButton
-          label={t("Quote")}
-          active={!!editor?.isActive("blockquote")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-          glyph={<span>{'" "'}</span>}
-        />
-        <ToolbarButton
-          label={t("Code block")}
-          active={!!editor?.isActive("codeBlock")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
-          glyph={<span>{"{ }"}</span>}
-        />
-      </ToolbarGroup>
-      <ToolbarGroup>
-        <ToolbarButton
-          label={t("Insert link")}
-          active={!!editor?.isActive("link")}
-          disabled={!editor}
-          onClick={() => {
-            if (!editor) return;
-            const prev = editor.getAttributes("link").href as string | undefined;
-            const url = window.prompt(t("Insert link"), prev ?? "https://");
-            if (url === null) return;
-            if (url === "") {
-              editor.chain().focus().extendMarkRange("link").unsetLink().run();
-              return;
-            }
-            editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
-          }}
-          glyph={<span>🔗</span>}
-        />
-        <ToolbarButton
-          label={t("Insert image")}
-          disabled={!editor}
-          onClick={() => {
-            if (!editor) return;
-            const url = window.prompt(t("Insert image URL"), "https://");
-            if (!url) return;
-            editor.chain().focus().setImage({ src: url }).run();
-          }}
-          glyph={<span>🖼</span>}
-        />
-        <ToolbarButton
-          label={t("Insert table")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-          glyph={<span>⊞</span>}
-        />
-        <ToolbarButton
-          label={t("Divider")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().setHorizontalRule().run()}
-          glyph={<span>―</span>}
-        />
-      </ToolbarGroup>
-      <ToolbarGroup>
-        <ToolbarButton
-          label={t("Undo")}
-          disabled={!editor || !editor.can().undo()}
-          onClick={() => editor?.chain().focus().undo().run()}
-          glyph={<span>↶</span>}
-        />
-        <ToolbarButton
-          label={t("Redo")}
-          disabled={!editor || !editor.can().redo()}
-          onClick={() => editor?.chain().focus().redo().run()}
-          glyph={<span>↷</span>}
-        />
-        <ToolbarButton
-          label={t("Clear formatting")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().clearNodes().unsetAllMarks().run()}
-          glyph={<span>Tx</span>}
-        />
-      </ToolbarGroup>
-      <ToolbarGroup style={{ marginLeft: "auto", borderRight: "none" }}>
-        <ToolbarButton label={t("Cancel")} glyph={<span>{t("Cancel")}</span>} onClick={onCancel} variant="ghost" />
-        <ToolbarButton label={t("Save")} glyph={<span>{t("Save")}</span>} onClick={onSave} variant="primary" />
-      </ToolbarGroup>
-    </div>
-  );
-}
-
-function ToolbarGroup({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: 2,
-        padding: "0 4px",
-        borderRight: "1px solid var(--border)",
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function ToolbarButton({
-  label,
-  active = false,
-  disabled = false,
-  onClick,
-  glyph,
-  variant = "ghost",
-}: {
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  glyph: React.ReactNode;
-  variant?: "ghost" | "primary";
-}) {
-  const base = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 22,
-    height: 18,
-    padding: "0 6px",
-    fontSize: 11,
-    lineHeight: 1,
-    border: "1px solid var(--border)",
-    borderRadius: 3,
-    cursor: disabled ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
-    background: variant === "primary"
-      ? "var(--accent)"
-      : active
-        ? "var(--bg-selected)"
-        : "transparent",
-    color: variant === "primary"
-      ? "var(--bg)"
-      : active
-        ? "var(--text)"
-        : disabled
-          ? "var(--text-dim)"
-          : "var(--text-muted)",
-    opacity: disabled ? 0.5 : 1,
-  };
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      aria-pressed={active}
-      disabled={disabled}
-      onMouseDown={(e) => e.preventDefault() /* keep editor focus */}
-      onClick={onClick}
-      style={base}
-    >
-      {glyph}
-    </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Paste / drop helpers
 // ---------------------------------------------------------------------------
 
@@ -618,7 +383,7 @@ async function uploadAndInsert(
   editor: Editor,
   files: File[],
   showToast: (input: { kind: "error"; message: string }) => void,
-  t: TFunction,
+  t: (key: string) => string,
   uploader: ImageUploader,
   coords?: { left: number; top: number },
 ): Promise<void> {
