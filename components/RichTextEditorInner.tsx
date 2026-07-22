@@ -266,7 +266,6 @@ export function RichTextEditorInner({
         marginLeft: 22,
         borderRadius: 3,
         overflow: "hidden",
-        background: "var(--bg-panel)",
       }}
     >
       <div
@@ -275,7 +274,6 @@ export function RichTextEditorInner({
           justifyContent: "flex-end",
           gap: 4,
           padding: "4px 8px",
-          background: "var(--bg-panel)",
           borderBottom: "1px solid var(--border)",
           flexShrink: 0,
         }}
@@ -328,7 +326,6 @@ export function RichTextEditorInner({
           flex: 1,
           minHeight: 120,
           overflow: "auto",
-          background: "var(--bg-panel)",
         }}
       >
         <EditorContent editor={editor} />
