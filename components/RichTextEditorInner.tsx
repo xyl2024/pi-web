@@ -264,7 +264,6 @@ export function RichTextEditorInner({
         flexDirection: "column",
         minHeight,
         marginLeft: 22,
-        border: "1px solid var(--accent)",
         borderRadius: 3,
         overflow: "hidden",
         background: "var(--bg-panel)",
