@@ -1,10 +1,11 @@
-import { AuthStorage } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type { Provider } from "@earendil-works/pi-ai";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const authStorage = AuthStorage.create();
-  const providers = authStorage.getOAuthProviders();
+  const runtime = await ModelRuntime.create();
+  const oauthProviders = runtime.getProviders().filter((p: Provider) => p.auth.oauth);
 
   const EXCLUDED = new Set(["anthropic"]);
   const DISPLAY_NAMES: Record<string, string> = {
@@ -12,19 +13,17 @@ export async function GET() {
     "github-copilot": "GitHub Copilot",
   };
 
-  const result = await Promise.all(
-    providers
-      .filter((p) => !EXCLUDED.has(p.id))
-      .map(async (p) => {
-        const loggedIn = authStorage.has(p.id);
-        return {
-          id: p.id,
-          name: DISPLAY_NAMES[p.id] ?? p.name,
-          usesCallbackServer: p.usesCallbackServer ?? false,
-          loggedIn,
-        };
-      })
-  );
+  const credentials = await runtime.listCredentials();
+  const configured = new Set(credentials.map((c) => c.providerId));
+
+  const result = oauthProviders
+    .filter((p: Provider) => !EXCLUDED.has(p.id))
+    .map((p: Provider) => ({
+      id: p.id,
+      name: DISPLAY_NAMES[p.id] ?? p.name,
+      usesCallbackServer: false,
+      loggedIn: configured.has(p.id),
+    }));
 
   return Response.json({ providers: result });
 }

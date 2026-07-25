@@ -1,6 +1,5 @@
 import {
-  AuthStorage,
-  ModelRegistry,
+  ModelRuntime,
   SessionManager,
   SettingsManager,
   createAgentSession,
@@ -98,11 +97,10 @@ export async function POST(req: Request) {
   try {
     const agentDir = getAgentDir();
     const cwd = process.cwd();
-    const authStorage = AuthStorage.create();
-    const registry = ModelRegistry.create(authStorage);
+    const runtime = await ModelRuntime.create();
 
     if (requestedProvider && requestedModelId) {
-      model = registry.find(requestedProvider, requestedModelId);
+      model = runtime.getModel(requestedProvider, requestedModelId);
       if (!model) {
         return Response.json(
           { error: `Model not available: ${requestedProvider}/${requestedModelId}` },
@@ -119,7 +117,7 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      model = registry.find(provider, modelId ?? "");
+      model = runtime.getModel(provider, modelId ?? "");
       if (!model) {
         return Response.json(
           { error: `Default model not available: ${provider}/${modelId}` },

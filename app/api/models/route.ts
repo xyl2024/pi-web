@@ -1,4 +1,4 @@
-import { AuthStorage, ModelRegistry, SettingsManager, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime, SettingsManager, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { createLogger, elapsedMs } from "@/lib/logger";
 
@@ -16,9 +16,8 @@ export async function GET() {
 
   try {
     const agentDir = getAgentDir();
-    const authStorage = AuthStorage.create();
-    const registry = ModelRegistry.create(authStorage);
-    const available = registry.getAvailable();
+    const runtime = await ModelRuntime.create();
+    const available = runtime.getModels();
     modelList = available.map((m: { id: string; name: string; provider: string }) => ({
       id: m.id,
       name: m.name,

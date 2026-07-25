@@ -1,4 +1,4 @@
-import { AuthStorage } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 export const dynamic = "force-dynamic";
 
@@ -57,9 +57,8 @@ export async function GET(
 
   const stream = new ReadableStream({
     async start(controller) {
-      const authStorage = AuthStorage.create();
-      const providers = authStorage.getOAuthProviders();
-      const providerInfo = providers.find((p) => p.id === provider);
+      const runtime = await ModelRuntime.create();
+      const providerInfo = runtime.getProviders().find((p) => p.id === provider && p.auth.oauth);
       if (!providerInfo) {
         send(controller, { type: "error", message: `Unknown provider: ${provider}` });
         controller.close();
@@ -117,57 +116,55 @@ export async function GET(
       abort.signal.addEventListener("abort", cleanup);
 
       try {
-        await authStorage.login(provider, {
-          onAuth: (info: { url: string; instructions?: string }) => {
-            const request = getManualInputRequest();
-            send(controller, {
-              type: "auth",
-              url: info.url,
-              instructions: info.instructions ?? null,
-              token: request.token,
-            });
-          },
-          onDeviceCode: (info: {
-            userCode: string;
-            verificationUri: string;
-            intervalSeconds?: number;
-            expiresInSeconds?: number;
-          }) => {
-            send(controller, {
-              type: "device_code",
-              userCode: info.userCode,
-              verificationUri: info.verificationUri,
-              intervalSeconds: info.intervalSeconds ?? null,
-              expiresInSeconds: info.expiresInSeconds ?? null,
-            });
-          },
-          onPrompt: async (prompt: { message: string; placeholder?: string }) => {
+        await runtime.login(provider, "oauth", {
+          signal: abort.signal,
+          prompt: async (p) => {
+            if (p.type === "select") {
+              const request = createClientInputRequest();
+              send(controller, {
+                type: "select_request",
+                message: p.message,
+                options: p.options,
+                token: request.token,
+              });
+              return (await request.promise) ?? "";
+            }
+            // text, secret, manual_code → all flow through prompt_request.
             const request = getManualInputRequest();
             send(controller, {
               type: "prompt_request",
-              message: prompt.message,
-              placeholder: prompt.placeholder ?? null,
+              message: p.message,
+              placeholder: p.placeholder ?? null,
               token: request.token,
             });
-            const value = await request.promise;
-            return value;
+            return await request.promise;
           },
-          onProgress: (message: string) => {
-            send(controller, { type: "progress", message });
+          notify: (event) => {
+            switch (event.type) {
+              case "auth_url":
+                send(controller, {
+                  type: "auth",
+                  url: event.url,
+                  instructions: event.instructions ?? null,
+                });
+                break;
+              case "device_code":
+                send(controller, {
+                  type: "device_code",
+                  userCode: event.userCode,
+                  verificationUri: event.verificationUri,
+                  intervalSeconds: event.intervalSeconds ?? null,
+                  expiresInSeconds: event.expiresInSeconds ?? null,
+                });
+                break;
+              case "progress":
+                send(controller, { type: "progress", message: event.message });
+                break;
+              case "info":
+                send(controller, { type: "progress", message: event.message });
+                break;
+            }
           },
-          onSelect: async (prompt: { message: string; options: { id: string; label: string }[] }) => {
-            const request = createClientInputRequest();
-            send(controller, {
-              type: "select_request",
-              message: prompt.message,
-              options: prompt.options,
-              token: request.token,
-            });
-            const value = await request.promise;
-            return value || undefined;
-          },
-          onManualCodeInput: () => getManualInputRequest().promise,
-          signal: abort.signal,
         });
 
         send(controller, { type: "success" });

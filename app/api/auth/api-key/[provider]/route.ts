@@ -1,4 +1,5 @@
-import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type { Provider } from "@earendil-works/pi-ai";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -8,11 +9,10 @@ type Params = { params: Promise<{ provider: string }> };
 // GET /api/auth/api-key/[provider] — returns auth status (never returns the actual key)
 export async function GET(_req: Request, { params }: Params) {
   const { provider } = await params;
-  const authStorage = AuthStorage.create();
-  const registry = ModelRegistry.create(authStorage);
-  const status = registry.getProviderAuthStatus(provider);
-  const displayName = registry.getProviderDisplayName(provider);
-  const models = registry.getAll().filter((m) => m.provider === provider).length;
+  const runtime = await ModelRuntime.create();
+  const status = runtime.getProviderAuthStatus(provider);
+  const displayName = runtime.getProviders().find((p: Provider) => p.id === provider)?.name ?? provider;
+  const models = runtime.getModels().filter((m) => m.provider === provider).length;
   return NextResponse.json({ provider, displayName, configured: status.configured, source: status.source, models });
 }
 
@@ -24,8 +24,12 @@ export async function POST(req: Request, { params }: Params) {
     if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
       return NextResponse.json({ error: "apiKey is required" }, { status: 400 });
     }
-    const authStorage = AuthStorage.create();
-    authStorage.set(provider, { type: "api_key", key: apiKey.trim() });
+    const runtime = await ModelRuntime.create();
+    // 0.82.0 has no public setApiKey. RuntimeCredentials.modify is the same write
+    // path pi uses during runtime.login() — calling it via private field.
+    // Type-cast required until pi exposes a public write API.
+    await (runtime as unknown as { credentials: { modify: (id: string, fn: () => Promise<{ type: "api_key"; key: string }>) => Promise<unknown> } })
+      .credentials.modify(provider, async () => ({ type: "api_key", key: apiKey.trim() }));
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
@@ -36,8 +40,9 @@ export async function POST(req: Request, { params }: Params) {
 export async function DELETE(_req: Request, { params }: Params) {
   const { provider } = await params;
   try {
-    const authStorage = AuthStorage.create();
-    authStorage.remove(provider);
+    const runtime = await ModelRuntime.create();
+    await (runtime as unknown as { credentials: { delete: (id: string) => Promise<void> } })
+      .credentials.delete(provider);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });

@@ -1,4 +1,4 @@
-import type { SessionManager, SettingsManager, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { SessionManager, SettingsManager, AgentSessionEvent, ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 interface ContextUsage {
   percent: number | null;
@@ -28,7 +28,7 @@ export interface AgentSessionLike {
   readonly isStreaming: boolean;
   readonly isCompacting: boolean;
   readonly model: ModelLike | undefined;
-  readonly modelRegistry: { find: (provider: string, modelId: string) => ModelLike | undefined };
+  readonly modelRuntime: Pick<ModelRuntime, "getModel" | "getModels">;
   readonly sessionManager: SessionManager;
   readonly settingsManager: SettingsManager;
   readonly agent: { state?: { systemPrompt?: string; thinkingLevel?: string } };
