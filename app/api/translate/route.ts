@@ -1,13 +1,5 @@
-import {
-  ModelRuntime,
-  SessionManager,
-  SettingsManager,
-  createAgentSession,
-  createExtensionRuntime,
-  getAgentDir,
-  type ResourceLoader,
-} from "@earendil-works/pi-coding-agent";
 import { createLogger, elapsedMs } from "@/lib/logger";
+import { createDirectLlmSession, resolveDirectModel } from "@/lib/llm-direct";
 import {
   DEFAULT_TARGET_LANGUAGE,
   MAX_TRANSLATE_PROMPT_CHARS,
@@ -21,24 +13,6 @@ export const dynamic = "force-dynamic";
 const log = createLogger("api/translate");
 
 const MAX_INPUT_CHARS = 8000;
-
-// Custom loader that returns no extensions/skills/prompts/themes/agents files.
-// Combined with SessionManager.inMemory() + SettingsManager.inMemory() +
-// noTools:"all", this guarantees the translate request never touches disk,
-// never reads ~/.pi/agent/settings.json, and never fires any extension hook.
-function buildTranslateResourceLoader(systemPrompt: string): ResourceLoader {
-  return {
-    getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
-    getSkills: () => ({ skills: [], diagnostics: [] }),
-    getPrompts: () => ({ prompts: [], diagnostics: [] }),
-    getThemes: () => ({ themes: [], diagnostics: [] }),
-    getAgentsFiles: () => ({ agentsFiles: [] }),
-    getSystemPrompt: () => systemPrompt,
-    getAppendSystemPrompt: () => [],
-    extendResources: () => {},
-    reload: async () => {},
-  };
-}
 
 interface TranslateRequestBody {
   text?: unknown;
@@ -88,43 +62,16 @@ export async function POST(req: Request) {
     );
   }
 
-  // Resolve model. Mirror app/api/models/route.ts: use defaults from a separate
-  // (read-only) SettingsManager when the client didn't pick one. We deliberately
-  // do NOT pass this SettingsManager to createAgentSession — that one uses an
-  // empty in-memory manager so the user's real ~/.pi/agent/settings.json is
-  // not consulted at all.
-  let model;
+  // Resolve model via the shared direct-LLM helper. The wrapper handles
+  // reading ~/.pi/agent/settings.json (read-only) and falling back to the
+  // user's default model when the client didn't pick one.
+  let model: { provider: string; id: string };
   try {
-    const agentDir = getAgentDir();
-    const cwd = process.cwd();
-    const runtime = await ModelRuntime.create();
-
-    if (requestedProvider && requestedModelId) {
-      model = runtime.getModel(requestedProvider, requestedModelId);
-      if (!model) {
-        return Response.json(
-          { error: `Model not available: ${requestedProvider}/${requestedModelId}` },
-          { status: 400 },
-        );
-      }
-    } else {
-      const settings = SettingsManager.create(cwd, agentDir);
-      const provider = settings.getDefaultProvider();
-      const modelId = settings.getDefaultModel();
-      if (!provider) {
-        return Response.json(
-          { error: "No default model configured in ~/.pi/agent/settings.json" },
-          { status: 400 },
-        );
-      }
-      model = runtime.getModel(provider, modelId ?? "");
-      if (!model) {
-        return Response.json(
-          { error: `Default model not available: ${provider}/${modelId}` },
-          { status: 400 },
-        );
-      }
-    }
+    const resolved = await resolveDirectModel({
+      provider: requestedProvider ?? undefined,
+      modelId: requestedModelId ?? undefined,
+    });
+    model = { provider: resolved.provider, id: resolved.modelId };
   } catch (error) {
     log.error("translate model resolve failed", { error, durationMs: elapsedMs(startedAt) });
     return Response.json({ error: `Failed to resolve model: ${String(error)}` }, { status: 500 });
@@ -132,7 +79,7 @@ export async function POST(req: Request) {
 
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | null = null;
-  let session: { abort: () => Promise<void>; dispose: () => void } | null = null;
+  let session: { prompt: (text: string) => Promise<unknown>; subscribe: (handler: (e: { type: string; [k: string]: unknown }) => void) => () => void; abort: () => Promise<void>; dispose: () => void } | null = null;
   let heartbeat: ReturnType<typeof setInterval> | null = null;
   let closed = false;
 
@@ -170,14 +117,12 @@ export async function POST(req: Request) {
       req.signal?.addEventListener("abort", cleanup);
 
       try {
-        const { session: created } = await createAgentSession({
-          sessionManager: SessionManager.inMemory(),
-          settingsManager: SettingsManager.inMemory({}),
-          resourceLoader: buildTranslateResourceLoader(systemPrompt),
-          model,
-          thinkingLevel: "off",
-          noTools: "all",
-        });
+        const created = await createDirectLlmSession(
+          model.provider,
+          model.id,
+          systemPrompt,
+          "off",
+        );
         session = created;
         log.info("translate session created", {
           model: { provider: model.provider, id: model.id },
