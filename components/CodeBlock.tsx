@@ -13,10 +13,9 @@ interface Props {
 }
 
 /**
- * Shared syntax-highlighted code block with language label, copy button, and
- * line numbers. Used by MessageView, FileViewer (markdown preview), and
- * TodoDescriptionView so the todo panel renders code blocks the same way as
- * the file viewer.
+ * Shared syntax-highlighted code block with language label and copy button.
+ * Used by MessageView, FileViewer (markdown preview), and TodoDescriptionView
+ * so the todo panel renders code blocks the same way as the file viewer.
  */
 export function CodeBlock({ code, lang }: Props) {
   const { isDark } = useTheme();
@@ -63,15 +62,6 @@ export function CodeBlock({ code, lang }: Props) {
           gap: 10,
         }}
       >
-        {/* macOS traffic-light buttons (decorative) */}
-        <span
-          aria-hidden
-          style={{ display: "inline-flex", gap: 7, alignItems: "center" }}
-        >
-          <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#ff5f57", boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.15)" }} />
-          <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#febc2e", boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.15)" }} />
-          <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#28c840", boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.15)" }} />
-        </span>
         <span
           style={{
             position: "absolute",
@@ -109,8 +99,6 @@ export function CodeBlock({ code, lang }: Props) {
       <SyntaxHighlighter
         language={lang || "text"}
         style={isDark ? vscDarkPlus : vs}
-        showLineNumbers
-        lineNumberStyle={{ color: "var(--text-dim)", fontStyle: "normal" }}
         customStyle={{
           margin: 0,
           padding: "10px 12px",
