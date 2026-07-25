@@ -38,6 +38,12 @@ export interface PiWebConfig {
   system_prompt_replacements: SystemPromptReplacements;
   dangerous_patterns: DangerousPatternsConfig;
   extensions: ExtensionsConfig;
+  /**
+   * When true, the client will ask the server to auto-generate a title for
+   * each new session after the first assistant turn completes. The server
+   * no-ops if the session already has a user-defined name. Defaults to true.
+   */
+  auto_name_sessions: boolean;
 }
 
 const DEFAULT_DANGEROUS_PATTERNS: DangerousPatternsConfig = {
@@ -54,6 +60,7 @@ const DEFAULT_CONFIG: PiWebConfig = {
   extensions: {
     clawd_on_desk: { enabled: false },
   },
+  auto_name_sessions: true,
 };
 
 function parseDangerousPatterns(raw: unknown): DangerousPatternsConfig {
@@ -155,6 +162,10 @@ export function readConfig(): PiWebConfig {
       extensions: {
         clawd_on_desk: { enabled: clawdOnDeskEnabled },
       },
+      // Backwards-compatible: missing or non-boolean field defaults to true.
+      // Don't fail the whole config load for this — old config.yaml files
+      // simply lack the key and should still work.
+      auto_name_sessions: typeof cfg.auto_name_sessions === "boolean" ? cfg.auto_name_sessions : true,
     };
   } catch (err) {
     log.warn("failed to read config, resetting to defaults", { error: String(err) });

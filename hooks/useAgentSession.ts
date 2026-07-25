@@ -9,6 +9,7 @@ import { useToast } from "@/components/Toast";
 import { useI18n } from "./useI18n";
 import { usePendingPermissionsRef } from "./usePendingPermissions";
 import { setSessionUiState, setLeafChangeHandler } from "./sessionUiStore";
+import { useAutoNameEnabled } from "./autoNameStore";
 
 export interface SessionData {
   sessionId: string;
@@ -64,6 +65,13 @@ export interface UseAgentSessionOptions {
   onAgentEnd?: () => void;
   onSessionCreated?: (session: SessionInfo) => void;
   onSessionForked?: (newSessionId: string) => void;
+  /**
+   * Fired after the auto-name route writes a new name to the session file.
+   * AppShell uses this to bump the sidebar refresh key so the new title
+   * appears in the left list immediately, without waiting for the next
+   * user-initiated refresh.
+   */
+  onSessionAutoNamed?: (sessionId: string, name: string) => void;
   modelsRefreshKey?: number;
   chatInputRef?: React.RefObject<ChatInputHandle | null>;
   setNewSessionModel?: (model: { provider: string; modelId: string } | null) => void;
@@ -99,6 +107,7 @@ export interface ChatInputHandle {
 export function useAgentSession(opts: UseAgentSessionOptions) {
   const {
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
+    onSessionAutoNamed,
     modelsRefreshKey, statsEmit,
     scrollToEntryId, onScrollComplete,
   } = opts;
@@ -145,6 +154,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   // clears it to avoid double-toasting.
   const pendingAssistantErrorRef = useRef<string | null>(null);
   const handleAgentEventRef = useRef<((event: AgentEvent) => void) | null>(null);
+  const onSessionAutoNamedRef = useRef(onSessionAutoNamed);
+  onSessionAutoNamedRef.current = onSessionAutoNamed;
   const initialScrollDoneRef = useRef(false);
   const scrollToEntryIdRef = useRef(scrollToEntryId);
   scrollToEntryIdRef.current = scrollToEntryId;
@@ -155,6 +166,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const loadingAgentsFilesRef = useRef<string | null>(null);
+
+  // Auto-naming trigger state. We only fire the auto-name request once per
+  // session, after the first assistant turn ends, gated on the user's
+  // preference. Reset on every session switch (see the mount effect that
+  // watches session?.id).
+  const autoNameFirstUserSentRef = useRef(false);
+  const autoNameTriggeredRef = useRef(false);
+  const autoNameEnabled = useAutoNameEnabled();
 
   const setNewSessionModel = opts.setNewSessionModel ?? setNewSessionModelState;
   const setToolPresetState = opts.setToolPreset ?? setToolPreset;
@@ -358,6 +377,34 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             })
             .catch(() => {});
         }
+        // Auto-naming trigger: once the FIRST assistant turn ends after the
+        // first user message, fire one POST to /api/sessions/[id]/auto-name.
+        // Gated on the user's preference; the server side handles the
+        // already-named / parse-failed / llm-failed cases silently.
+        if (
+          completed?.role === "assistant" &&
+          autoNameFirstUserSentRef.current &&
+          !autoNameTriggeredRef.current &&
+          autoNameEnabled
+        ) {
+          autoNameTriggeredRef.current = true;
+          const sid = sessionIdRef.current;
+          if (sid) {
+            void fetch(`/api/sessions/${encodeURIComponent(sid)}/auto-name`, {
+              method: "POST",
+            })
+              .then((r) => (r.ok ? r.json() : null))
+              .then((data: { name?: string } | null) => {
+                // Only reload the session if the server actually wrote a name.
+                // `skipped` / `parse_failed` / etc. need no UI refresh.
+                if (data && typeof data.name === "string" && data.name.length > 0) {
+                  void loadSession(sid);
+                  onSessionAutoNamedRef.current?.(sid, data.name);
+                }
+              })
+              .catch(() => { /* silent — auto-naming is best-effort */ });
+          }
+        }
         break;
       }
       case "tool_execution_start": {
@@ -437,7 +484,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         }
         break;
     }
-  }, [loadSession, onAgentEnd, permissionsRef, t, toast]);
+  }, [loadSession, onAgentEnd, permissionsRef, t, toast, autoNameEnabled]);
   handleAgentEventRef.current = handleAgentEvent;
 
   const handleSend = useCallback(async (message: string, images?: AttachedImage[]) => {
@@ -457,6 +504,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     setAgentPhase({ kind: "waiting_model" });
     dispatch({ type: "start" });
     pendingScrollToUserRef.current = true;
+    // The first user message of a session arms the auto-naming trigger. The
+    // trigger is consumed by the next assistant message_end (and only once
+    // per session — the flag is reset on sessionId change).
+    autoNameFirstUserSentRef.current = true;
 
     const piImages = images?.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType }));
 
@@ -679,6 +730,22 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   // Load session + agents files on mount (parallel)
   useEffect(() => {
+    // Reset the auto-naming trigger state for every session change. The
+    // exception is the brand-new-session flow: when the user sends the
+    // first message BEFORE the new session id is established, handleSend
+    // sets `autoNameFirstUserSentRef` to true. If we then reset it here
+    // when the id lands, the trigger would never fire. Skip the reset in
+    // that case so the first-message flag survives the session-id change.
+    if (!autoNameFirstUserSentRef.current) {
+      autoNameFirstUserSentRef.current = false;
+      autoNameTriggeredRef.current = false;
+    } else {
+      // First-message flag is set; the session id was just established.
+      // Only reset the "already triggered" latch so subsequent message_end
+      // events don't re-fire.
+      autoNameTriggeredRef.current = false;
+    }
+
     if (session) {
       sessionIdRef.current = session.id;
       // Start both in parallel; agents files won't clobber if session.cwd changes mid-flight
