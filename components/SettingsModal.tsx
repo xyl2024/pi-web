@@ -7,7 +7,6 @@ import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
 import { useToast } from "./Toast";
 import { WeChatSettingsSection } from "./WeChatSettingsSection";
 import { InboxTestSection } from "./InboxTestSection";
-import { setAutoNameEnabled } from "@/hooks/autoNameStore";
 import type { PiWebConfig } from "@/lib/config";
 
 export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void; onProfileSaved?: () => void }) {
@@ -219,13 +218,6 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
     } : prev));
   }, []);
 
-  const handleAutoNameToggle = useCallback(() => {
-    setConfig((prev) => (prev ? {
-      ...prev,
-      auto_name_sessions: !prev.auto_name_sessions,
-    } : prev));
-  }, []);
-
   // Dirty check — compare current config against the snapshot from initial load
   const isDirty = !!config && !!originalConfig && JSON.stringify(config) !== JSON.stringify(originalConfig);
 
@@ -246,10 +238,6 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
       setOriginalConfig(config);
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 1500);
-      // Keep the in-memory autoNameStore in sync so other consumers (the
-      // useAgentSession trigger, the command palette toggle) see the new
-      // value without needing a refresh.
-      setAutoNameEnabled(config.auto_name_sessions);
       toast.show({ kind: "success", message: t("Settings saved") });
     } catch (e) {
       toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to save settings") });
@@ -272,7 +260,6 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
   const rules = config?.system_prompt_replacements.rules ?? [];
   const enabled = config?.system_prompt_replacements.enabled ?? false;
   const clawdOnDeskEnabled = config?.extensions.clawd_on_desk.enabled ?? false;
-  const autoNameEnabled = config?.auto_name_sessions ?? true;
 
   if (loading) {
     return (
@@ -656,33 +643,6 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
               >
                 <span style={{
                   position: "absolute", top: 2, left: clawdOnDeskEnabled ? 20 : 2,
-                  width: 18, height: 18, borderRadius: 9,
-                  background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                  transition: "left 0.2s",
-                }} />
-              </button>
-            </div>
-          </div>
-
-          {/* ── Section 5: Session Naming ── */}
-          <div style={{ marginTop: 24, marginBottom: 0 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", margin: "0 0 4px 0" }}>{t("Session Naming")}</h3>
-            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 14px 0", lineHeight: 1.5 }}>
-              {t("When a new session's first assistant turn finishes, ask the default model to generate a short title from the first user message. The user-defined name (set via right-click → Rename) is never overwritten.")}
-            </p>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 13, color: "var(--text)" }}>{t("Auto-name sessions")}</span>
-              <button
-                onClick={handleAutoNameToggle}
-                style={{
-                  width: 40, height: 22, borderRadius: 11,
-                  background: autoNameEnabled ? "var(--accent)" : "var(--bg-hover)",
-                  border: "none", cursor: "pointer", position: "relative",
-                  transition: "background 0.2s",
-                }}
-              >
-                <span style={{
-                  position: "absolute", top: 2, left: autoNameEnabled ? 20 : 2,
                   width: 18, height: 18, borderRadius: 9,
                   background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
                   transition: "left 0.2s",

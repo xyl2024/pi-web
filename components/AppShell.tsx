@@ -54,7 +54,6 @@ import type { ChatInputHandle } from "./ChatInput";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { buildCommands, type Command, type CommandContext } from "@/lib/commands";
 import { useAgentControls } from "@/hooks/sessionUiStore";
-import { useAutoNameEnabled, persistAutoNameEnabled, hydrateAutoNameEnabled, getAutoNameEnabled } from "@/hooks/autoNameStore";
 
 interface ToolInfo {
   name: string;
@@ -328,27 +327,6 @@ export function AppShell() {
     router.replace(`?session=${encodeURIComponent(session.id)}`, { scroll: false });
   }, [router]);
 
-  // Fired by useAgentSession after the auto-name route writes a new name
-  // to the session file. Bumps the sidebar refresh key so the left list
-  // picks up the new title without waiting for the next user-initiated
-  // refresh (which can be up to 5s away due to listAllSessions caching).
-  const handleSessionAutoNamed = useCallback((_sessionId: string, _name: string) => {
-    setRefreshKey((k) => k + 1);
-  }, []);
-
-  // Toggle the auto-naming preference and persist. Read fresh from the store
-  // hook (not a captured value) so consecutive toggles flip correctly.
-  const autoNameEnabled = useAutoNameEnabled();
-  const handleToggleAutoName = useCallback(async () => {
-    const next = !getAutoNameEnabled();
-    try {
-      await persistAutoNameEnabled(next);
-      toast.show({ kind: "success", message: next ? t("Auto-naming enabled") : t("Auto-naming disabled") });
-    } catch (e) {
-      toast.show({ kind: "error", message: e instanceof Error && e.message ? t("Failed to update auto-naming") : t("Failed to update auto-naming") });
-    }
-  }, [t, toast]);
-
   // Called by SchedulerModal "Open session" — fetches minimal session info
   // and routes through the same selection path as the sidebar.
   const handleOpenScheduledSession = useCallback((sessionId: string) => {
@@ -428,13 +406,6 @@ export function AppShell() {
   useEffect(() => {
     handleOpenTodoTab();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // One-shot: hydrate the auto-name store from /api/settings on mount.
-  // The store starts at the default (true); a brief flash of "enabled" is
-  // harmless since the persisted default is also true.
-  useEffect(() => {
-    void hydrateAutoNameEnabled();
   }, []);
 
   // Open the favorites tab — same pattern as todos / file tabs.
@@ -706,8 +677,6 @@ export function AppShell() {
     setTheme: theme.setPreset,
     setLocale,
     newSession: handleSlashNew,
-    autoNameEnabled,
-    toggleAutoName: handleToggleAutoName,
     openSettings: () => setSettingsConfigOpen(true),
     openModels: () => setModelsConfigOpen(true),
     openSkills: () => setSkillsConfigOpen(true),
@@ -732,7 +701,6 @@ export function AppShell() {
     hasCwd: !!(activeCwd ?? selectedSession?.cwd ?? newSessionCwd),
   }), [
     theme.setPreset, setLocale, handleSlashNew,
-    autoNameEnabled, handleToggleAutoName,
     handleOpenTodoTab, handleOpenFavoritesTab, handleOpenCanvasTab,
     handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenHttpTab, handleOpenJsonTab,
     handleOpenDiffTab,
@@ -1085,7 +1053,6 @@ export function AppShell() {
               onAgentEnd={handleAgentEnd}
               onSessionCreated={handleSessionCreated}
               onSessionForked={handleSessionForked}
-              onSessionAutoNamed={handleSessionAutoNamed}
               modelsRefreshKey={modelsRefreshKey}
               chatInputRef={chatInputRef}
               scrollToEntryId={pendingScrollEntryId}

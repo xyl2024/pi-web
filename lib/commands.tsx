@@ -130,10 +130,6 @@ export interface CommandContext {
 
   // Session lifecycle
   newSession: () => void;
-  /** Flip the auto-naming preference and persist to /api/settings. */
-  toggleAutoName: () => void | Promise<void>;
-  /** Current auto-naming preference (so the command can label itself). */
-  autoNameEnabled: boolean;
 
   // Modal openers
   openSettings: () => void;
@@ -219,15 +215,6 @@ export function buildCommands(ctx: CommandContext, opts: BuildOptions): Command[
     icon: <StopIcon />,
     when: (c) => !!c.agentControls?.isCompacting,
     run: () => ctx.agentControls?.abortCompaction(),
-  });
-
-  cmds.push({
-    id: "session.toggle_auto_name",
-    title: ctx.autoNameEnabled ? t("Disable auto-naming") : t("Enable auto-naming"),
-    group: "Session",
-    keywords: ["auto", "name", "title", "session", "ai", "自动", "命名", "标题"],
-    icon: <SparkleIcon />,
-    run: () => ctx.toggleAutoName(),
   });
 
   // ── Theme (5) ──
