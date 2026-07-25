@@ -12,6 +12,7 @@ import { useI18n } from "@/hooks/useI18n";
 import { Tooltip } from "./Tooltip";
 import { extractImageGallery, MarkdownImage, ImageLightbox } from "./ImageLightbox";
 import { MermaidBlock } from "./MermaidBlock";
+import { EchartsBlock } from "./EchartsBlock";
 import { SvgBlock } from "./SvgBlock";
 import { CodeBlock } from "./CodeBlock";
 import { FileSearchBar } from "./FileSearchBar";
@@ -1109,6 +1110,10 @@ function TextFileViewer({ filePath, cwd }: Props) {
           if (lang === "svg") {
             // Stable key keeps the SvgBlock instance alive across re-renders.
             return <SvgBlock key={raw} code={raw.replace(/\n$/, "")} />;
+          }
+          if (lang === "echarts") {
+            // Stable key keeps the EchartsBlock instance alive across re-renders.
+            return <EchartsBlock key={raw} code={raw.replace(/\n$/, "")} />;
           }
           return <CodeBlock code={raw.replace(/\n$/, "")} lang={lang} />;
         }

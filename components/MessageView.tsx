@@ -7,6 +7,7 @@ import { Tooltip } from "./Tooltip";
 import { useI18n } from "@/hooks/useI18n";
 import { ShowFileRenderer } from "./ShowFileRenderer";
 import { MermaidBlock } from "./MermaidBlock";
+import { EchartsBlock } from "./EchartsBlock";
 import { SvgBlock } from "./SvgBlock";
 import { CodeBlock, copyText } from "./CodeBlock";
 import { SHOW_FILE_TOOL_NAME } from "@/lib/show-file-tool-types";
@@ -688,6 +689,9 @@ function TextBlock({ block, keywords, isSearchMatch, isStreaming }: { block: Tex
           }
           if (lang === "svg") {
             return <SvgBlock key={raw} code={raw.replace(/\n$/, "")} isStreaming={isStreaming} />;
+          }
+          if (lang === "echarts") {
+            return <EchartsBlock key={raw} code={raw.replace(/\n$/, "")} isStreaming={isStreaming} />;
           }
           return <CodeBlock code={raw.replace(/\n$/, "")} lang={lang} />;
         }

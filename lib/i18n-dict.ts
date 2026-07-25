@@ -634,6 +634,10 @@ export const ZH_TRANSLATIONS = {
   "View diagram": "查看图表",
   "Expand": "展开",
   "Collapse": "收起",
+  // ECharts renderer
+  "Failed to render ECharts chart": "ECharts 图表渲染失败",
+  "Download PNG": "下载 PNG",
+  "Rendering…": "渲染中…",
   // Translate panel (right-panel tab)
   "Translate": "翻译",
   "Translate (⌘+Enter)": "翻译 (⌘+Enter)",

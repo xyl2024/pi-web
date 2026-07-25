@@ -8,6 +8,7 @@ import { useI18n } from "@/hooks/useI18n";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { MermaidBlock } from "@/components/MermaidBlock";
+import { EchartsBlock } from "@/components/EchartsBlock";
 import { SvgBlock } from "@/components/SvgBlock";
 import { encodeFilePathForApi, joinFilePath } from "@/lib/file-paths";
 
@@ -347,6 +348,11 @@ function MarkdownContent({ url }: { url: string }) {
         // Stable key keeps the SvgBlock instance alive across
         // re-renders even if the surrounding tree restructures.
         return <SvgBlock key={raw} code={raw.replace(/\n$/, "")} />;
+      }
+      if (isBlock && lang === "echarts") {
+        // Stable key keeps the EchartsBlock instance alive across
+        // re-renders even if the surrounding tree restructures.
+        return <EchartsBlock key={raw} code={raw.replace(/\n$/, "")} />;
       }
       return <code className={className}>{children}</code>;
     }) as Components["code"];

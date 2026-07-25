@@ -6,6 +6,7 @@ import parse, { domToReact, type DOMNode, type Element, type HTMLReactParserOpti
 import { useI18n } from "@/hooks/useI18n";
 import { MarkdownImage } from "./ImageLightbox";
 import { MermaidBlock } from "./MermaidBlock";
+import { EchartsBlock } from "./EchartsBlock";
 import { SvgBlock } from "./SvgBlock";
 import { CodeBlock } from "./CodeBlock";
 import { highlightDeep } from "./HighlightText";
@@ -97,6 +98,15 @@ export function TodoDescriptionView({
             return (
               <SvgBlock
                 key={`svg-${text}`}
+                code={String(text ?? "").replace(/\n$/, "")}
+              />
+            );
+          }
+          if (langMatch && langMatch[1] === "echarts") {
+            const text = stringifyChildren(codeChild.children as DOMNode[]);
+            return (
+              <EchartsBlock
+                key={`echarts-${text}`}
                 code={String(text ?? "").replace(/\n$/, "")}
               />
             );
