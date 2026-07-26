@@ -2,7 +2,7 @@ import { createAgentSession, DefaultResourceLoader, SessionManager, isToolCallEv
 import { cacheSessionPath, invalidateSessionListCache } from "./session-reader";
 import type { AgentSessionLike, ToolInfo } from "./pi-types";
 import { createLogger, elapsedMs } from "./logger";
-import { readConfig, applyReplacements } from "./config";
+import { readConfig } from "./config";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { recordRequest, recordResponse } from "./payload-capture";
@@ -699,29 +699,6 @@ export async function startRpcSession(
     // the only way to truly clear it is to call agent.setSystemPrompt directly.
     if (Array.isArray(toolNames) && toolNames.length === 0) {
       inner.agent.state.systemPrompt = "";
-    }
-
-    // Apply user-configured system prompt replacements (pi-web feature).
-    // Read from ~/.pi-web/config.yaml and apply literal string replacements.
-    // Both _baseSystemPrompt and agent.state.systemPrompt must be updated:
-    // pi-core's prompt() method resets agent.state.systemPrompt from _baseSystemPrompt
-    // on every turn (line 815 of agent-session.js), so replacing only the latter
-    // is lost on the first message.
-    try {
-      const config = readConfig();
-      const spr = config.system_prompt_replacements;
-      if (spr.enabled && spr.rules.length > 0) {
-        const replaced = applyReplacements(
-          inner.agent.state.systemPrompt ?? "",
-          spr.rules,
-        );
-        inner.agent.state.systemPrompt = replaced;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (inner as any)._baseSystemPrompt = replaced;
-      }
-    } catch {
-      // readConfig already logs and returns defaults on failure;
-      // this catch is a safety net for unexpected errors.
     }
 
     const wrapper = new AgentSessionWrapper(inner);
