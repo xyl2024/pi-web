@@ -16,7 +16,6 @@ import { CanvasPanel } from "./CanvasPanel";
 import { DiffPanel } from "./DiffPanel";
 import { RssPanel } from "./RssPanel";
 import { FinancePanel } from "./FinancePanel";
-import { LogsPanel } from "./LogsPanel";
 import { TokensPanel } from "./TokensPanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 
@@ -29,7 +28,6 @@ const CANVAS_TAB_ID = "canvas:global";
 const DIFF_TAB_ID = "diff:global";
 const RSS_TAB_ID = "rss:global";
 const FINANCE_TAB_ID = "finance:global";
-const LOGS_TAB_ID = "logs:global";
 const TOKENS_TAB_ID = "tokens:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
@@ -576,16 +574,6 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [t]);
 
-  // Open the LogsCenter panel — same pattern as Finance.
-  const handleOpenLogsTab = useCallback(() => {
-    setFileTabs((prev) => {
-      if (prev.some((tab) => tab.kind === "logs")) return prev;
-      return [{ kind: "logs", id: LOGS_TAB_ID, label: t("Logs") }, ...prev];
-    });
-    setActiveFileTabId(LOGS_TAB_ID);
-    setRightPanelState("normal");
-  }, [t]);
-
   // Open the Token-audit panel.
   const handleOpenTokensTab = useCallback(() => {
     setFileTabs((prev) => {
@@ -703,7 +691,6 @@ export function AppShell() {
     openJsonTab: handleOpenJsonTab,
     openDiffTab: handleOpenDiffTab,
     openFinanceTab: handleOpenFinanceTab,
-    openLogsTab: handleOpenLogsTab,
     openTokensTab: handleOpenTokensTab,
     toggleSidebar: () => setSidebarOpen((v) => !v),
     toggleRightPanel: () => setRightPanelState((v) => v === "closed" ? "normal" : "closed"),
@@ -717,7 +704,6 @@ export function AppShell() {
     handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenJsonTab,
     handleOpenDiffTab,
     handleOpenFinanceTab,
-    handleOpenLogsTab,
     handleOpenTokensTab,
     toggleFocus, agentControls,
     selectedSession, newSessionCwd, activeCwd,
@@ -1148,8 +1134,6 @@ export function AppShell() {
             <RssPanel />
           ) : activeFileTab?.kind === "finance" ? (
             <FinancePanel />
-          ) : activeFileTab?.kind === "logs" ? (
-            <LogsPanel />
           ) : activeFileTab?.kind === "tokens" ? (
             <TokensPanel onSelectSession={handleSelectSession} />
           ) : (
@@ -1333,30 +1317,6 @@ export function AppShell() {
               <path d="M2 4a10 10 0 0 1 10 10" />
 </svg>
         </button>
-        </Tooltip>
-        {/* Open LogsCenter panel */}
-        <Tooltip content={t("Open logs")}>
-          <button
-            onClick={handleOpenLogsTab}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center",
-              width: 36, height: 36, padding: 0,
-              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "logs" ? "var(--accent)" : "var(--text-muted)",
-              cursor: "pointer", transition: "color 0.12s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "logs" ? "var(--accent)" : "var(--text-muted)"; }}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="3" cy="4" r="0.7" fill="currentColor" stroke="none" />
-              <line x1="5.5" y1="4" x2="13.5" y2="4" />
-              <circle cx="3" cy="8" r="0.7" fill="currentColor" stroke="none" />
-              <line x1="5.5" y1="8" x2="13.5" y2="8" />
-              <circle cx="3" cy="12" r="0.7" fill="currentColor" stroke="none" />
-              <line x1="5.5" y1="12" x2="13.5" y2="12" />
-            </svg>
-          </button>
         </Tooltip>
         {/* Expand/collapse — only when panel is open and has tabs */}
         {rightPanelState !== "closed" && fileTabs.length > 0 && (
