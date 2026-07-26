@@ -73,6 +73,21 @@ export function AppShell() {
   const toast = useToast();
   const cm = useContextMenu();
   const { unread: inboxUnread } = useInboxUnreadCount();
+
+  useEffect(() => {
+    if (window.parent === window) return;
+
+    const styles = getComputedStyle(document.documentElement);
+    window.parent.postMessage({
+      type: "pi-theme",
+      colors: {
+        background: styles.getPropertyValue("--bg-panel").trim(),
+        border: styles.getPropertyValue("--border").trim(),
+        text: styles.getPropertyValue("--text").trim(),
+      },
+    }, "*");
+  }, [theme.preset]);
+
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
   // When user clicks +, we only store the cwd — no fake session id
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);

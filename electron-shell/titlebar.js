@@ -5,6 +5,7 @@
 (function () {
   const iframe = document.getElementById("app-frame");
   const piUrl = (window.piShell && window.piShell.piUrl) || "http://localhost:14514";
+  const piOrigin = new URL(piUrl).origin;
   iframe.src = piUrl;
 
   document.getElementById("btn-close").addEventListener("click", () => {
@@ -42,10 +43,25 @@
   }
 
   // The error page (a data URL inside the iframe) can't reach the preload
-  // directly, so it asks us to retry via postMessage.
+  // directly, so it asks us to retry via postMessage. The Pi Web iframe also
+  // sends its resolved theme colors so the shell stays visually consistent.
   window.addEventListener("message", (e) => {
     if (e && e.data === "pi-retry") {
       iframe.src = piUrl;
+      return;
     }
+
+    if (e.source !== iframe.contentWindow || e.origin !== piOrigin) return;
+
+    const data = e.data;
+    const colors = data && data.type === "pi-theme" ? data.colors : null;
+    if (!colors || ![colors.background, colors.border, colors.text].every(
+      (color) => typeof color === "string" && CSS.supports("color", color),
+    )) return;
+
+    const root = document.documentElement;
+    root.style.setProperty("--titlebar-bg", colors.background);
+    root.style.setProperty("--titlebar-border", colors.border);
+    root.style.setProperty("--titlebar-text", colors.text);
   });
 })();
