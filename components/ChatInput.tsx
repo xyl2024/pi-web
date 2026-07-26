@@ -5,6 +5,8 @@ import { useI18n, type Locale } from "@/hooks/useI18n";
 import { Tooltip } from "./Tooltip";
 import { IconHoverButton } from "./IconHoverButton";
 import { ProviderIcon } from "./ProviderIcon";
+import { useConfirm } from "./ConfirmDialog";
+import { useToast } from "./Toast";
 
 export interface AttachedImage {
   data: string;   // base64, no prefix
@@ -60,6 +62,14 @@ interface Props {
   onOpenReplay?: () => void;
   replayAvailable?: boolean;
   sessionId?: string | null;
+  /** Text of the session's first user message (string or first text block). null disables the auto-name button. */
+  firstUserMessageText?: string | null;
+  /** Current session_info.name (may be unset for never-named sessions). */
+  currentSessionName?: string | null;
+  /** Fired after the auto-name PATCH succeeds — used to refresh the sidebar list. */
+  onRenameCompleted?: (name: string) => void | Promise<void>;
+  /** Fired as soon as the rename is committed — keeps parent state in sync. */
+  onSessionNameChange?: (name: string) => void;
 }
 
 export interface ChatInputHandle {
@@ -277,6 +287,10 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   onOpenReplay,
   replayAvailable,
   onExport, isExporting, sessionId,
+  firstUserMessageText,
+  currentSessionName,
+  onRenameCompleted,
+  onSessionNameChange,
 }: Props, ref) {
   const { t, locale } = useI18n();
   const [value, setValue] = useState("");
@@ -298,6 +312,23 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const toolDropdownRef = useRef<HTMLDivElement>(null);
   const thinkingDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Confirm/toast hooks for the auto-name flow.
+  const confirm = useConfirm();
+  const toast = useToast();
+  // Tracks the brief in-progress POST + PATCH pair so the button can disable +
+  // show a "Naming..." label while the network round-trip is happening.
+  const [isAutoNaming, setIsAutoNaming] = useState(false);
+  // Holds the most-recently-generated name so the toolbar button can briefly
+  // display it instead of the usual icon for ~3s after a successful rename.
+  const [autoNamedDisplay, setAutoNamedDisplay] = useState<string | null>(null);
+  const autoNamedDisplayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (autoNamedDisplayTimerRef.current) {
+      clearTimeout(autoNamedDisplayTimerRef.current);
+      autoNamedDisplayTimerRef.current = null;
+    }
+  }, []);
 
   const slashQuery = useMemo(() => getSlashQuery(value, cursorPosition), [value, cursorPosition]);
   const filteredSlashResources = useMemo(() => {
@@ -477,6 +508,94 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   }, [value, attachedImages, onSteer, onFollowUp, clearImages, buildMessage]);
 
+  // LLM-driven session name generation. Asks the dedicated suggest endpoint
+  // for a name, then writes it via the existing PATCH route. The button stays
+  // disabled (gated by canAutoName) until the first user message is usable
+  // and the agent isn't streaming — see JSX below.
+  const handleAutoName = useCallback(async () => {
+    if (!sessionId) return;
+    if (isAutoNaming) return;
+    if (isStreaming) return;
+    if (!firstUserMessageText || !firstUserMessageText.trim()) return;
+
+    if (currentSessionName && currentSessionName.trim()) {
+      const ok = await confirm({
+        title: t("Auto-name session?"),
+        description: t("This will replace the current session name."),
+        confirmLabel: t("Auto-name"),
+        cancelLabel: t("Cancel"),
+        destructive: false,
+      });
+      if (!ok) return;
+    }
+
+    setIsAutoNaming(true);
+    try {
+      const suggestRes = await fetch(
+        `/api/sessions/${encodeURIComponent(sessionId)}/auto-name`,
+        { method: "POST" },
+      );
+      const suggestBody = (await suggestRes.json().catch(() => ({}))) as {
+        name?: unknown;
+        error?: unknown;
+      };
+      if (!suggestRes.ok || typeof suggestBody.name !== "string") {
+        const reason = typeof suggestBody.error === "string" ? suggestBody.error : `HTTP ${suggestRes.status}`;
+        throw new Error(reason);
+      }
+      const name = suggestBody.name.trim();
+      if (!name) {
+        toast.show({ kind: "error", message: t("Auto-naming returned an empty name") });
+        return;
+      }
+
+      const patchRes = await fetch(
+        `/api/sessions/${encodeURIComponent(sessionId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        },
+      );
+      if (!patchRes.ok) {
+        const body = (await patchRes.json().catch(() => ({}))) as { error?: unknown };
+        const reason = typeof body.error === "string" ? body.error : `HTTP ${patchRes.status}`;
+        throw new Error(reason);
+      }
+
+      onSessionNameChange?.(name);
+      try { await onRenameCompleted?.(name); } catch { /* sidebar refresh is best-effort */ }
+      toast.show({ kind: "success", message: `${t("Renamed")} ${name}` });
+
+      setAutoNamedDisplay(name);
+      if (autoNamedDisplayTimerRef.current) clearTimeout(autoNamedDisplayTimerRef.current);
+      autoNamedDisplayTimerRef.current = setTimeout(() => {
+        setAutoNamedDisplay(null);
+        autoNamedDisplayTimerRef.current = null;
+      }, 3000);
+    } catch (error) {
+      toast.show({
+        kind: "error",
+        message: `${t("Auto-naming failed")}: ${
+          error instanceof Error && error.message ? error.message : t("Network error")
+        }`,
+      });
+    } finally {
+      setIsAutoNaming(false);
+    }
+  }, [
+    sessionId,
+    isAutoNaming,
+    isStreaming,
+    firstUserMessageText,
+    currentSessionName,
+    confirm,
+    toast,
+    onSessionNameChange,
+    onRenameCompleted,
+    t,
+  ]);
+
   const selectSlashResource = useCallback((item: SlashResource) => {
     if (item.source === "action") {
       onSlashAction?.(item.command);
@@ -646,6 +765,16 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         : String(contextUsage.contextWindow);
     return { pct, color, ctxWindowFmt };
   }, [contextUsage]);
+
+  // Auto-name is only available when there's a session, a usable first user
+  // message, the agent isn't streaming, and no LLM call is already in flight.
+  const canAutoName = Boolean(
+    sessionId &&
+    firstUserMessageText &&
+    firstUserMessageText.trim() &&
+    !isStreaming &&
+    !isAutoNaming
+  );
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -1443,6 +1572,43 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 </svg>
                 {t("Stop")}
               </button>
+            )}
+
+            {sessionId && (
+              <IconHoverButton
+                onClick={handleAutoName}
+                disabled={!canAutoName}
+                variant={isAutoNaming ? "accent" : "default"}
+                expandDirection="left"
+                label={
+                  autoNamedDisplay
+                    ? autoNamedDisplay
+                    : isAutoNaming
+                      ? t("Naming...")
+                      : t("Auto-name")
+                }
+                title={
+                  isAutoNaming
+                    ? t("Naming...")
+                    : t("Auto-name session")
+                }
+                ariaLabel={
+                  isAutoNaming
+                    ? t("Naming...")
+                    : t("Auto-name session")
+                }
+                icon={isAutoNaming ? (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                ) : (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2l1.8 5.4L19 9l-5.2 1.6L12 16l-1.8-5.4L5 9l5.2-1.6L12 2z" />
+                    <path d="M19 14l.9 2.6L22 17.5l-2.1.9L19 21l-.9-2.6L16 17.5l2.1-.9L19 14z" />
+                  </svg>
+                )}
+              />
             )}
 
             {onNewSession && (

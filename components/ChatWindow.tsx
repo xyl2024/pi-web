@@ -33,6 +33,10 @@ interface Props {
   /** Called after the scroll-to-entry navigation completes */
   onScrollComplete?: () => void;
   onNewSessionRequest?: () => void;
+  /** Fired after the auto-name PATCH succeeds — used to refresh the sidebar. */
+  onRenameCompleted?: () => void;
+  /** Fired as soon as the user confirms a rename — keeps in-memory state in sync. */
+  onSessionNameChange?: (name: string) => void;
 }
 
 function phaseLabel(phase: AgentPhase, t: ReturnType<typeof useI18n>["t"]): string {
@@ -47,7 +51,7 @@ function phaseLabel(phase: AgentPhase, t: ReturnType<typeof useI18n>["t"]): stri
   return t("Thinking...");
 }
 
-function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest }: Props) {
+function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest, onRenameCompleted, onSessionNameChange }: Props) {
   const { t, locale } = useI18n();
   const toast = useToast();
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
@@ -80,6 +84,33 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   // Tool call stats hook — snapshot is published to the module store so the
   // right-panel tab + vertical button (in AppShell) can render it.
   const { snapshot } = useToolCallStats(messages);
+
+  // First user message text — used to gate the auto-name button. The server
+  // route reads the same field from the .jsonl, so this is purely a UI
+  // enable/disable hint and never authoritative.
+  const firstUserMessageText = useMemo(() => {
+    const first = messages.find((m) => m.role === "user");
+    if (!first) return null;
+    const content = (first as { content: unknown }).content;
+    if (typeof content === "string") {
+      const trimmed = content.trim();
+      return trimmed || null;
+    }
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (
+          block &&
+          typeof block === "object" &&
+          (block as { type?: unknown }).type === "text" &&
+          typeof (block as { text?: unknown }).text === "string"
+        ) {
+          const text = (block as { text: string }).text.trim();
+          if (text) return text;
+        }
+      }
+    }
+    return null;
+  }, [messages]);
 
   // ── Register agent controls with the palette store ──
   // The ⌘K command palette in AppShell reads these via useAgentControls().
@@ -484,6 +515,10 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       onExport={session ? handleExport : undefined}
       isExporting={isExporting}
       sessionId={currentSessionId}
+      firstUserMessageText={firstUserMessageText}
+      currentSessionName={session?.name ?? null}
+      onRenameCompleted={onRenameCompleted ?? (() => {})}
+      onSessionNameChange={onSessionNameChange}
     />
   );
 

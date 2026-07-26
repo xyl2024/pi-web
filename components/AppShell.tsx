@@ -360,6 +360,16 @@ export function AppShell() {
     router.replace(`?session=${encodeURIComponent(newSessionId)}`, { scroll: false });
   }, [router]);
 
+  // Auto-name callback wiring: update the in-memory selected session so the
+  // chat header / top bar stays in sync without a full reload, then bump
+  // refreshKey so SessionSidebar re-reads the .jsonl and reflects the name.
+  const handleSessionNameChange = useCallback((name: string) => {
+    setSelectedSession((prev) => (prev ? { ...prev, name } : prev));
+  }, []);
+  const handleSessionRenameCompleted = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
+
   const handleInitialRestoreDone = useCallback(() => {
     setInitialSessionRestored(true);
   }, []);
@@ -1058,6 +1068,8 @@ export function AppShell() {
               scrollToEntryId={pendingScrollEntryId}
               onScrollComplete={() => setPendingScrollEntryId(null)}
               onNewSessionRequest={handleSlashNew}
+              onRenameCompleted={handleSessionRenameCompleted}
+              onSessionNameChange={handleSessionNameChange}
             />
           ) : showPlaceholder ? (
             activeCwd ? (
