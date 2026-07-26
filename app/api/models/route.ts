@@ -17,7 +17,7 @@ export async function GET() {
   try {
     const agentDir = getAgentDir();
     const runtime = await ModelRuntime.create();
-    const available = runtime.getModels();
+    const available = await runtime.getAvailable();
     modelList = available.map((m: { id: string; name: string; provider: string }) => ({
       id: m.id,
       name: m.name,
