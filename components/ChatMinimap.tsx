@@ -308,8 +308,8 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
               width: 200,
               zIndex: 100,
               pointerEvents: "none",
-              opacity: isNearest ? 1 : 0.45,
-              transition: "top 0.1s, opacity 0.1s",
+              opacity: 1,
+              transition: "top 0.1s",
             }}
           >
             <div
