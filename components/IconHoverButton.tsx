@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, type ReactNode } from "react";
+import { Tooltip } from "./Tooltip";
 
 type Variant = "default" | "accent" | "danger";
 
@@ -10,7 +11,7 @@ interface IconHoverButtonProps {
   /** Plain text revealed when the button is hovered or focused. */
   label: string;
   onClick: () => void;
-  /** Native tooltip fallback (also surfaced via title attr). Defaults to label. */
+  /** Tooltip content (project-standard Radix tooltip). Defaults to label. */
   title?: string;
   /** Accessible label for screen readers. Defaults to label. */
   ariaLabel?: string;
@@ -98,7 +99,7 @@ export function IconHoverButton({
   // grows leftward — useful for items anchored to the right edge of a toolbar.
   const labelNode = <span style={labelStyle}>{label}</span>;
 
-  return (
+  const button = (
     <button
       type="button"
       onClick={onClick}
@@ -108,10 +109,15 @@ export function IconHoverButton({
       onBlur={() => setHovered(false)}
       disabled={disabled}
       aria-label={ariaLabel ?? label}
-      title={title ?? label}
       style={buttonStyle}
     >
       {expandDirection === "left" ? <>{labelNode}{icon}</> : <>{icon}{labelNode}</>}
     </button>
+  );
+
+  return (
+    <Tooltip content={title ?? label}>
+      {button}
+    </Tooltip>
   );
 }
