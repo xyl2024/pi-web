@@ -22,6 +22,18 @@ function loadLib(): Promise<typeof echarts> {
 // other rendered assistant output. Every evaluation is wrapped in try/catch so
 // a malformed option can never take down the surrounding page.
 function evalOption(code: string, lib: typeof echarts): unknown {
+  // JS-style `option = <expr>` body: assign to a local `option` and return
+  // its final value, so the author doesn't need to write `return option;`
+  // themselves. Trailing semicolons and follow-up statements that mutate
+  // `option` are supported. The bare `return (${code})` path below can't
+  // handle this shape — a trailing `;` inside `(...)` is a syntax error.
+  if (/^\s*option\s*=/.test(code)) {
+    try {
+      return new Function("echarts", `var option;\n${code}\nreturn option;`)(lib);
+    } catch {
+      // fall through to the expression / statement-body paths
+    }
+  }
   try {
     // Common case: the block is an object-literal expression.
     return new Function("echarts", `return (${code})`)(lib);
@@ -49,7 +61,11 @@ interface Props {
  * MessageView, FileViewer, ShowFileRenderer, and TodoDescriptionView to detect
  * ```echarts blocks and replace react-markdown's default `pre > code` fallback
  * with an actual ECharts chart. The block body is JS that evaluates to an
- * ECharts `option` object.
+ * ECharts `option` object — either a bare object-literal expression
+ * `{ ... }`, or a JS-style assignment `option = { ... }` (single or
+ * multi-line, optional trailing semicolons). The assignment form doesn't
+ * need a trailing `return option;` — the final value of `option` is
+ * returned automatically.
  */
 export function EchartsBlock({ code, isStreaming }: Props) {
   const { t } = useI18n();
