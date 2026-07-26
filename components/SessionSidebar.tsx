@@ -1087,11 +1087,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
 
       {/* Session list */}
       <div ref={listScrollRef} style={{ flex: explorerOpen && (selectedCwdProp || selectedCwd) ? "1 1 0" : "1 1 auto", overflowY: "auto", padding: "0", minHeight: 80 }}>
-        {loading && (
-          <div style={{ padding: "16px 14px", color: "var(--text-muted)", fontSize: 12 }}>
-            {t("Loading...")}
-          </div>
-        )}
         {loadError && !loading && (
           <div style={{ padding: "12px 14px", color: "#f87171", fontSize: 12 }}>
             {loadError}
