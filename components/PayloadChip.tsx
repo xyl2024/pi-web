@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Tooltip } from "./Tooltip";
 import { useI18n } from "@/hooks/useI18n";
-import { PayloadPopover, type CapturedPayloadSummary } from "./PayloadPopover";
+import {
+  PayloadPopover,
+  type CapturedPayloadSummary,
+} from "./PayloadPopover";
 
 interface Props {
   sessionId: string;
@@ -33,6 +36,33 @@ export function PayloadChip({ sessionId, entryId, pending }: Props) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
   const [summary, setSummary] = useState<CapturedPayloadSummary | null>(null);
+
+  // Eagerly fetch the lightweight summary (status + duration only) once the
+  // response is no longer pending, so the chip can show status + duration
+  // without requiring a click. The full request body / response headers are
+  // intentionally NOT fetched here — they're only loaded when the user
+  // opens the popover.
+  useEffect(() => {
+    if (pending) return;
+    let cancelled = false;
+    fetch(
+      `/api/agent/${encodeURIComponent(sessionId)}/payloads/summary?entryId=${encodeURIComponent(entryId)}`,
+    )
+      .then(async (r): Promise<CapturedPayloadSummary | null> => {
+        if (!r.ok) return null;
+        return r.json();
+      })
+      .then((d) => {
+        if (cancelled || !d) return;
+        setSummary(d);
+      })
+      .catch(() => {
+        /* 404 / network error → chip keeps the "API · req" placeholder. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, entryId, pending]);
 
   const showLoaded = !pending && summary !== null;
   const statusColor = summary ? statusToColor(summary.status) : undefined;

@@ -9,10 +9,10 @@ export interface CapturedPayloadSummary {
   status: number | null;
   /** Wall-clock duration of the provider call (response.timestamp - request.timestamp). */
   durationMs: number | null;
-  /** Size of the serialized request body in bytes (UTF-8). */
-  requestSize: number;
-  /** Size of the response.headers block in bytes (serialized). */
-  responseHeadersSize: number;
+  /** Size of the serialized request body in bytes (UTF-8). Only populated when fetched from the full-payload endpoint. */
+  requestSize?: number;
+  /** Size of the response.headers block in bytes (serialized). Only populated when fetched from the full-payload endpoint. */
+  responseHeadersSize?: number;
 }
 
 interface Props {
@@ -24,7 +24,7 @@ interface Props {
   onLoaded?: (summary: CapturedPayloadSummary) => void;
 }
 
-interface FetchedPayload {
+export interface FetchedPayload {
   index: number;
   timestamp: number;
   payload: unknown;
@@ -344,7 +344,7 @@ function EmptyState() {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function summarize(data: FetchedPayload): CapturedPayloadSummary {
+export function summarize(data: FetchedPayload): CapturedPayloadSummary {
   const requestJson = JSON.stringify(data.payload);
   const responseHeaders = data.response ? JSON.stringify(data.response.headers) : "";
   return {
