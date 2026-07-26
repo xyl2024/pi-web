@@ -753,7 +753,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     xhigh: t("Highest reasoning"),
   };
 
-  // Context usage bar — mirrors the threshold colors used in the top-right status bar.
+  // Context usage cells — 10 discrete bars, each covering a 10% bucket. Color
+  // thresholds mirror the top-right status bar (>70% yellow, >90% red).
   const contextBar = useMemo(() => {
     if (!contextUsage?.contextWindow || contextUsage.percent === null) return null;
     const pct = Math.max(0, Math.min(100, contextUsage.percent));
@@ -763,7 +764,9 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       : contextUsage.contextWindow >= 1000
         ? `${(contextUsage.contextWindow / 1000).toFixed(0)}k`
         : String(contextUsage.contextWindow);
-    return { pct, color, ctxWindowFmt };
+    // 0% → 0 cells lit; 0.1–10% → 1; 10.1–20% → 2; …; 99.1–100% → 10.
+    const filledCells = Math.min(10, Math.ceil(pct / 10));
+    return { pct, color, ctxWindowFmt, filledCells };
   }, [contextUsage]);
 
   // Auto-name is only available when there's a session, a usable first user
@@ -1313,7 +1316,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             )}
           </div>
 
-          {/* CENTER: context usage bar — sits next to the model selector */}
+          {/* CENTER: context usage cells — sits next to the model selector */}
           {contextBar && (
             <Tooltip content={`${t("Context")}: ${contextBar.pct.toFixed(1)}% of ${contextUsage!.contextWindow.toLocaleString()} tokens`}>
               <div
@@ -1329,21 +1332,33 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   whiteSpace: "nowrap",
                 }}
               >
-                <div style={{
-                  position: "relative",
-                  width: 80, height: 8,
-                  background: "var(--bg-panel)",
-                  border: "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
-                  borderRadius: 3,
-                  overflow: "hidden",
-                  flexShrink: 0,
-                }}>
-                  <div style={{
-                    position: "absolute", top: 0, left: 0, bottom: 0,
-                    width: `${contextBar.pct}%`,
-                    background: contextBar.color,
-                    transition: "width 0.2s ease",
-                  }} />
+                <div
+                  role="meter"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={contextBar.pct}
+                  style={{
+                    display: "flex",
+                    gap: 2,
+                    width: 65, height: 8,
+                    flexShrink: 0,
+                  }}
+                >
+                  {Array.from({ length: 10 }, (_, i) => {
+                    const active = i < contextBar.filledCells;
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          flex: 1,
+                          height: "100%",
+                          background: active ? contextBar.color : "color-mix(in srgb, var(--text-muted) 20%, var(--bg-panel))",
+                          borderRadius: 1,
+                          transition: "background 0.2s ease",
+                        }}
+                      />
+                    );
+                  })}
                 </div>
                 <span style={{ fontWeight: 600 }}>{contextBar.pct.toFixed(0)}%</span>
                 <span style={{ color: "var(--text-dim)", fontSize: 11 }}>/ {contextBar.ctxWindowFmt}</span>
