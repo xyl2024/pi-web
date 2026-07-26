@@ -308,6 +308,13 @@ export const ZH_TRANSLATIONS = {
   "Clawd on Desk": "桌面 Clawd",
   "Stream session events to a local Clawd desktop server (127.0.0.1:23333-23337). Useful for driving a desktop agent UI. Changes take effect on new sessions.": "将会话事件推送到本地 Clawd 桌面服务（127.0.0.1:23333-23337），用于驱动桌面端 Agent UI。对新建会话生效。",
   "Enable Clawd on Desk": "启用桌面 Clawd",
+  // Settings / append system prompt (~/.pi/agent/APPEND_SYSTEM.md)
+  "Append System Prompt": "追加系统提示词",
+  "Appended to every new pi session's system prompt. Takes effect on new sessions.": "追加到每个新 pi 会话系统提示词的末尾。对新建会话生效。",
+  "file does not exist yet — saving will create it": "文件尚不存在，保存后将自动创建",
+  "Markdown content appended after the built-in system prompt.": "在系统内置提示词之后追加的 Markdown 内容。",
+  "Append system prompt saved": "追加系统提示词已保存",
+  "Failed to save append system prompt": "保存追加系统提示词失败",
   // File explorer (first batch: new/rename/delete/copy/search/context menu)
   "New file": "新建文件",
   "New folder": "新建文件夹",
