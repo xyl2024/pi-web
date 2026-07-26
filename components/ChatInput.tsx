@@ -3,6 +3,7 @@
 import React, { useRef, useState, useCallback, useEffect, useImperativeHandle, forwardRef, KeyboardEvent, useMemo } from "react";
 import { useI18n, type Locale } from "@/hooks/useI18n";
 import { Tooltip } from "./Tooltip";
+import { IconHoverButton } from "./IconHoverButton";
 import { ProviderIcon } from "./ProviderIcon";
 
 export interface AttachedImage {
@@ -1059,37 +1060,21 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
           {/* LEFT: attach + model selector (idle) or steer/followup toggle (streaming) */}
           <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 2 }}>
-            <Tooltip content={t("Attach image")}>
-            <button
+            <IconHoverButton
               onClick={() => fileInputRef.current?.click()}
               disabled={isStreaming}
-              style={{
-                flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                width: 32, height: 32, padding: 0,
-                background: "none", border: "none",
-                borderRadius: 9,
-                color: attachedImages.length ? "var(--accent)" : "var(--text-muted)",
-                cursor: isStreaming ? "not-allowed" : "pointer",
-                opacity: isStreaming ? 0.5 : 1,
-                transition: "background 0.12s, color 0.12s",
-              }}
-              onMouseEnter={(e) => {
-                if (isStreaming) return;
-                e.currentTarget.style.background = "var(--bg-hover)";
-                e.currentTarget.style.color = attachedImages.length ? "var(--accent)" : "var(--text)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "none";
-                e.currentTarget.style.color = attachedImages.length ? "var(--accent)" : "var(--text-muted)";
-              }}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-            </button>
-            </Tooltip>
+              icon={
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
+                </svg>
+              }
+              label={t("Attach")}
+              title={t("Attach image")}
+              ariaLabel={t("Attach image")}
+              variant={attachedImages.length ? "accent" : "default"}
+            />
             {/* Model selector — visible always, disabled during streaming */}
             {modelOptions.length > 0 && currentName && onModelChange && (
                 <div ref={dropdownRef} style={{ position: "relative" }}>
@@ -1243,72 +1228,33 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           {/* RIGHT: thinking + tools preset + compact (idle) | Stop (streaming) */}
           <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }}>
             {onOpenReplay && replayAvailable && (
-              <Tooltip content={t("Replay")}>
-                <button
-                  onClick={onOpenReplay}
-                  aria-label={t("Replay")}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 32, height: 32, padding: 0,
-                    background: "none",
-                    border: "none",
-                    borderRadius: 9,
-                    color: "var(--text-muted)",
-                    cursor: "pointer",
-                    flexShrink: 0,
-                    transition: "background 0.12s, color 0.12s",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--bg-hover)";
-                    e.currentTarget.style.color = "var(--text)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "none";
-                    e.currentTarget.style.color = "var(--text-muted)";
-                  }}
-                >
+              <IconHoverButton
+                onClick={onOpenReplay}
+                icon={
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
                   </svg>
-                </button>
-              </Tooltip>
+                }
+                label={t("Replay")}
+                title={t("Replay")}
+              />
             )}
 
             {!isStreaming && onThinkingLevelChange && (
               <div ref={thinkingDropdownRef} style={{ position: "relative" }}>
-                <Tooltip content={t("Change thinking level")}>
-                <button
-                  onClick={() => !isStreaming && setThinkingDropdownOpen((v) => !v)}
-                  disabled={isStreaming}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    padding: "0 10px",
-                    height: 32,
-                    background: thinkingDropdownOpen ? "var(--bg-hover)" : "none",
-                    border: "none",
-                    borderRadius: 9,
-                    color: "var(--text-muted)",
-                    cursor: isStreaming ? "not-allowed" : "pointer",
-                    opacity: isStreaming ? 0.5 : 1,
-                    transition: "background 0.12s, color 0.12s",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (isStreaming) return;
-                    e.currentTarget.style.background = "var(--bg-hover)";
-                    e.currentTarget.style.color = "var(--text)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = thinkingDropdownOpen ? "var(--bg-hover)" : "none";
-                    e.currentTarget.style.color = "var(--text-muted)";
-                  }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9.5 2A5.5 5.5 0 0 0 4 7.5c0 1.7.78 3.21 2 4.21V14a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-2.29c1.22-1 2-2.51 2-4.21A5.5 5.5 0 0 0 9.5 2z" />
-                    <line x1="7" y1="18" x2="12" y2="18" />
-                    <line x1="8" y1="21" x2="11" y2="21" />
-                  </svg>
-                </button>
-                </Tooltip>
+                <IconHoverButton
+                  onClick={() => setThinkingDropdownOpen((v) => !v)}
+                  active={thinkingDropdownOpen}
+                  icon={
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9.5 2A5.5 5.5 0 0 0 4 7.5c0 1.7.78 3.21 2 4.21V14a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-2.29c1.22-1 2-2.51 2-4.21A5.5 5.5 0 0 0 9.5 2z" />
+                      <line x1="7" y1="18" x2="12" y2="18" />
+                      <line x1="8" y1="21" x2="11" y2="21" />
+                    </svg>
+                  }
+                  label={t("Thinking")}
+                  title={t("Change thinking level")}
+                />
                 {thinkingDropdownOpen && (
                   <div style={{
                     position: "absolute", bottom: "calc(100% + 6px)", right: 0,
@@ -1360,37 +1306,17 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             )}
             {!isStreaming && onToolPresetChange && (
               <div ref={toolDropdownRef} style={{ position: "relative" }}>
-                <Tooltip content={t("Change tool preset")}>
-                <button
-                  onClick={() => !isStreaming && setToolDropdownOpen((v) => !v)}
-                  disabled={isStreaming}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    padding: "0 10px",
-                    height: 32,
-                    background: toolDropdownOpen ? "var(--bg-hover)" : "none",
-                    border: "none",
-                    borderRadius: 9,
-                    color: "var(--text-muted)",
-                    cursor: isStreaming ? "not-allowed" : "pointer",
-                    opacity: isStreaming ? 0.5 : 1,
-                    transition: "background 0.12s, color 0.12s",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (isStreaming) return;
-                    e.currentTarget.style.background = "var(--bg-hover)";
-                    e.currentTarget.style.color = "var(--text)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = toolDropdownOpen ? "var(--bg-hover)" : "none";
-                    e.currentTarget.style.color = "var(--text-muted)";
-                  }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-                  </svg>
-                </button>
-                </Tooltip>
+                <IconHoverButton
+                  onClick={() => setToolDropdownOpen((v) => !v)}
+                  active={toolDropdownOpen}
+                  icon={
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                    </svg>
+                  }
+                  label={t("Tools")}
+                  title={t("Change tool preset")}
+                />
                 {toolDropdownOpen && (
                   <div style={{
                     position: "absolute", bottom: "calc(100% + 6px)", right: 0,
@@ -1445,33 +1371,13 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     {compactError}
                   </div>
                 )}
-                <Tooltip content={isCompacting ? t("Stop compaction") : t("Compact context")}>
-                <button
-                  onClick={isCompacting ? onAbortCompaction : onCompact}
+                <IconHoverButton
+                  onClick={isCompacting ? onAbortCompaction! : onCompact!}
                   disabled={isStreaming && !isCompacting}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    padding: "0 10px",
-                    height: 32,
-                    background: isCompacting ? "rgba(239,68,68,0.08)" : "none",
-                    border: "none",
-                    borderRadius: 9,
-                    color: isCompacting ? "#ef4444" : "var(--text-muted)",
-                    cursor: (isStreaming && !isCompacting) ? "not-allowed" : "pointer",
-                    opacity: (isStreaming && !isCompacting) ? 0.5 : 1,
-                    transition: "background 0.12s, color 0.12s",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (isStreaming && !isCompacting) return;
-                    e.currentTarget.style.background = isCompacting ? "rgba(239,68,68,0.16)" : "var(--bg-hover)";
-                    e.currentTarget.style.color = isCompacting ? "#ef4444" : "var(--text)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = isCompacting ? "rgba(239,68,68,0.08)" : "none";
-                    e.currentTarget.style.color = isCompacting ? "#ef4444" : "var(--text-muted)";
-                  }}
-                >
-                  {isCompacting ? (
+                  variant={isCompacting ? "danger" : "default"}
+                  label={isCompacting ? t("Stop") : t("Compact")}
+                  title={isCompacting ? t("Stop compaction") : t("Compact context")}
+                  icon={isCompacting ? (
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="2" y="2" width="6" height="6" rx="1" fill="currentColor" /></svg>
                   ) : (
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1479,41 +1385,21 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                       <line x1="10" y1="14" x2="3" y2="21" /><line x1="21" y1="3" x2="14" y2="10" />
                     </svg>
                   )}
-                </button>
-                </Tooltip>
+                />
               </div>
             )}
 
             {onExport && sessionId && (
               <div style={{ position: "relative" }}>
-                <Tooltip content={isExporting ? t("Exporting...") : t("Export session")}>
-                <button
-                  onClick={onExport}
+                <IconHoverButton
+                  onClick={onExport!}
                   disabled={isStreaming && !isExporting}
-                  aria-label={isExporting ? t("Exporting...") : t("Export session")}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    padding: "0 10px",
-                    height: 32,
-                    background: "none",
-                    border: "none",
-                    borderRadius: 9,
-                    color: isExporting ? "var(--accent)" : "var(--text-muted)",
-                    cursor: (isStreaming && !isExporting) ? "not-allowed" : "pointer",
-                    opacity: (isStreaming && !isExporting) ? 0.5 : 1,
-                    transition: "background 0.12s, color 0.12s",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (isStreaming && !isExporting) return;
-                    e.currentTarget.style.background = "var(--bg-hover)";
-                    e.currentTarget.style.color = "var(--text)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "none";
-                    e.currentTarget.style.color = isExporting ? "var(--accent)" : "var(--text-muted)";
-                  }}
-                >
-                  {isExporting ? (
+                  variant={isExporting ? "accent" : "default"}
+                  expandDirection="left"
+                  label={isExporting ? t("Exporting...") : t("Export")}
+                  title={isExporting ? t("Exporting...") : t("Export session")}
+                  ariaLabel={isExporting ? t("Exporting...") : t("Export session")}
+                  icon={isExporting ? (
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="12" y1="2" x2="12" y2="6" />
                       <line x1="12" y1="16" x2="12" y2="22" />
@@ -1529,8 +1415,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                       <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                   )}
-                </button>
-                </Tooltip>
+                />
               </div>
             )}
 
@@ -1561,36 +1446,20 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             )}
 
             {onNewSession && (
-              <Tooltip content={t("New session")}>
-                <button
-                  onClick={onNewSession}
-                  aria-label={t("New session")}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 32, height: 32, padding: 0,
-                    background: "none",
-                    border: "none",
-                    borderRadius: 9,
-                    color: "var(--accent)",
-                    cursor: "pointer",
-                    flexShrink: 0,
-                    transition: "background 0.12s, color 0.12s",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--bg-hover)";
-                    e.currentTarget.style.color = "var(--accent-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "none";
-                    e.currentTarget.style.color = "var(--accent)";
-                  }}
-                >
+              <IconHoverButton
+                onClick={onNewSession}
+                variant="accent"
+                expandDirection="left"
+                label={t("New")}
+                title={t("New session")}
+                ariaLabel={t("New session")}
+                icon={
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                     <line x1="6" y1="1.5" x2="6" y2="10.5" />
                     <line x1="1.5" y1="6" x2="10.5" y2="6" />
                   </svg>
-                </button>
-              </Tooltip>
+                }
+              />
             )}
           </div>
 
