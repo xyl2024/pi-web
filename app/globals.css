@@ -770,3 +770,13 @@ li.todo-task-item[data-checked="true"] > div {
   border-top: 1px solid var(--border);
   margin: 20px 0;
 }
+
+/* ── SessionSidebar "..." action menu animation ─────────── */
+@keyframes pi-menu-pop-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes pi-menu-row-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}

@@ -1395,6 +1395,7 @@ function SessionItem({
   const [triggerHovered, setTriggerHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [menuVisible, setMenuVisible] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -1423,6 +1424,19 @@ function SessionItem({
     setMenuPos({ top: rect.top, left: rect.right + 6 });
     setMenuOpen(true);
   }, [cancelMenuClose]);
+
+  // Drive the pop-in transition: when `menuOpen` flips to true, the portal
+  // mounts in its pre-state (opacity 0, scale 0.96); the next animation
+  // frame flips `menuVisible` to trigger the transition. Without rAF the
+  // two setStates commit in the same batch and the transition never fires.
+  useEffect(() => {
+    if (!menuOpen) {
+      setMenuVisible(false);
+      return;
+    }
+    const id = requestAnimationFrame(() => setMenuVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, [menuOpen]);
 
   const handleMenuItem = useCallback((fn?: () => void) => {
     cancelMenuClose();
@@ -1702,44 +1716,42 @@ function SessionItem({
             </Tooltip>
           )}
 
-          {/* "..." trigger — shown on hover; opens an action menu */}
+          {/* "..." trigger — shown on row hover; toggles the action menu on click (no hover-open) */}
           {(hovered || triggerHovered || menuOpen) && (
             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-              <Tooltip content={t("More actions")}>
-                <button
-                  ref={triggerRef}
-                  aria-label={t("More actions")}
-                  onClick={(e) => { e.stopPropagation(); if (menuOpen) { cancelMenuClose(); setMenuOpen(false); } else { openMenu(); } }}
-                  onMouseEnter={() => { setTriggerHovered(true); cancelMenuClose(); if (!menuOpen) openMenu(); }}
-                  onMouseLeave={() => { setTriggerHovered(false); if (menuOpen) scheduleMenuClose(); }}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 26, height: 26, padding: 0,
-                    background: menuOpen ? "var(--bg-selected)" : "none",
-                    border: menuOpen ? "1px solid rgba(37,99,235,0.35)" : "1px solid transparent",
-                    borderRadius: 7,
-                    color: menuOpen ? "var(--accent)" : "var(--text-muted)",
-                    cursor: "pointer", flexShrink: 0,
-                    transition: "background 0.12s, color 0.12s, border-color 0.12s",
-                  }}
-                  onMouseOver={(e) => {
-                    if (menuOpen) return;
-                    e.currentTarget.style.background = "var(--bg-hover)";
-                    e.currentTarget.style.color = "var(--text)";
-                  }}
-                  onMouseOut={(e) => {
-                    if (menuOpen) return;
-                    e.currentTarget.style.background = "none";
-                    e.currentTarget.style.color = "var(--text-muted)";
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{ opacity: menuOpen ? 1 : 0.85 }}>
-                    <circle cx="5" cy="12" r="2" />
-                    <circle cx="12" cy="12" r="2" />
-                    <circle cx="19" cy="12" r="2" />
-                  </svg>
-                </button>
-              </Tooltip>
+              <button
+                ref={triggerRef}
+                aria-label={t("More actions")}
+                onClick={(e) => { e.stopPropagation(); if (menuOpen) { cancelMenuClose(); setMenuOpen(false); } else { openMenu(); } }}
+                onMouseEnter={() => { setTriggerHovered(true); cancelMenuClose(); }}
+                onMouseLeave={() => { setTriggerHovered(false); if (menuOpen) scheduleMenuClose(); }}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 26, height: 26, padding: 0,
+                  background: menuOpen ? "var(--bg-selected)" : "none",
+                  border: menuOpen ? "1px solid rgba(37,99,235,0.35)" : "1px solid transparent",
+                  borderRadius: 7,
+                  color: menuOpen ? "var(--accent)" : "var(--text-muted)",
+                  cursor: "pointer", flexShrink: 0,
+                  transition: "background 0.12s, color 0.12s, border-color 0.12s",
+                }}
+                onMouseOver={(e) => {
+                  if (menuOpen) return;
+                  e.currentTarget.style.background = "var(--bg-hover)";
+                  e.currentTarget.style.color = "var(--text)";
+                }}
+                onMouseOut={(e) => {
+                  if (menuOpen) return;
+                  e.currentTarget.style.background = "none";
+                  e.currentTarget.style.color = "var(--text-muted)";
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{ opacity: menuOpen ? 1 : 0.85 }}>
+                  <circle cx="5" cy="12" r="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <circle cx="19" cy="12" r="2" />
+                </svg>
+              </button>
             </div>
           )}
         </>
@@ -1766,10 +1778,19 @@ function SessionItem({
             gap: 1,
             fontSize: 12,
             color: "var(--text)",
+            transformOrigin: "left top",
+            opacity: menuVisible ? 1 : 0,
+            transform: menuVisible
+              ? "translateY(0) scale(1)"
+              : "translateY(-6px) scale(0.96)",
+            transition:
+              "opacity 140ms ease-out, transform 160ms cubic-bezier(0.22, 1, 0.36, 1)",
+            pointerEvents: menuVisible ? "auto" : "none",
           }}
         >
           {onTogglePin && (
             <MenuRow
+              index={0}
               icon={<PinIcon filled={isPinned} />}
               label={isPinned ? t("Unpin session") : t("Pin session")}
               onClick={() => handleMenuItem(onTogglePin)}
@@ -1777,17 +1798,20 @@ function SessionItem({
           )}
           {onToggleFavorite && (
             <MenuRow
+              index={onTogglePin ? 1 : 0}
               icon={<StarIcon filled={isFavorited} />}
               label={isFavorited ? t("Unfavorite session") : t("Favorite session")}
               onClick={() => handleMenuItem(onToggleFavorite)}
             />
           )}
           <MenuRow
+            index={(onTogglePin ? 1 : 0) + (onToggleFavorite ? 1 : 0)}
             icon={<PencilIcon />}
             label={t("Rename")}
             onClick={() => handleMenuItem(beginRename)}
           />
           <MenuRow
+            index={(onTogglePin ? 1 : 0) + (onToggleFavorite ? 1 : 0) + 1}
             icon={<TrashIcon />}
             label={t("Delete")}
             destructive
@@ -1805,11 +1829,13 @@ function MenuRow({
   label,
   destructive,
   onClick,
+  index = 0,
 }: {
   icon: React.ReactNode;
   label: string;
   destructive?: boolean;
   onClick: () => void;
+  index?: number;
 }) {
   const [hover, setHover] = useState(false);
   return (
@@ -1829,6 +1855,8 @@ function MenuRow({
         userSelect: "none",
         color: destructive ? (hover ? "#fca5a5" : "#f87171") : "var(--text)",
         background: hover ? (destructive ? "rgba(239,68,68,0.10)" : "var(--bg-hover)") : "transparent",
+        animation: "pi-menu-row-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        animationDelay: `${40 + index * 28}ms`,
       }}
     >
       <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 14, height: 14, color: destructive ? "#ef4444" : "var(--text-muted)", opacity: destructive ? 0.95 : 0.85 }}>
