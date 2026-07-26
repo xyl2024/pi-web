@@ -4,7 +4,7 @@
  * Mirrors the singleton pattern in `lib/scheduler-db.ts`: `better-sqlite3` is
  * imported only here, the handle is cached on `globalThis` so Next.js dev-mode
  * HMR doesn't reopen it on every reload. Separate file from todos.db / scheduler.db
- * / http-collections.db because the audit log's lifecycle and access pattern
+ * because the audit log's lifecycle and access pattern
  * (continuous INSERT per pi `message_end`, no cascade) shouldn't entangle with
  * any other domain.
  *

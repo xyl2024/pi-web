@@ -3,7 +3,7 @@
 /**
  * Module store for the RSS panel's view + scroll-position state.
  *
- * Mirrors the sessionUiStore / toolCallStatsStore / httpStore pattern: a single
+ * Mirrors the sessionUiStore / toolCallStatsStore pattern: a single
  * typed state object, useSyncExternalStore-based subscription, content-equality
  * guarded patcher. Owned by the RSS panel so its current view (feeds / articles
  * / reader), selected feed, open article, and per-view scroll position survive:

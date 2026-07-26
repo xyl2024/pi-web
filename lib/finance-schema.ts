@@ -224,7 +224,7 @@ export function monthBounds(
 }
 
 // ---------------------------------------------------------------------------
-// ID generation — mirror of http-collections-schema.ts:319
+// ID generation — unique to finance-schema
 // ---------------------------------------------------------------------------
 
 export function generateId(): string {

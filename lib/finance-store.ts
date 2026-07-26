@@ -2,7 +2,7 @@
  * SQLite-backed CRUD + aggregation for the daily-accounting (FinancePanel)
  * feature. See plan: `tab-grill-me-in-chinese-sorted-moth.md`.
  *
- * Mirror of `lib/http-collections-store.ts`: validation, custom error classes,
+ * Mirror of `lib/scheduler-store.ts`: validation, custom error classes,
  * row-to-type mappers, and `db.transaction(() => { ... })()` blocks for
  * mutating ops.
  *

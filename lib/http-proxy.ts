@@ -1,55 +1,16 @@
 import { createLogger } from "@/lib/logger";
 
 /**
- * Server-side HTTP proxy core. The /api/http route calls proxyFetch() with
- * an AbortController owned by the route (so the cancel route can find and
- * abort the same controller via the in-flight registry).
+ * Server-side HTTP proxy utility. Used by features that fetch arbitrary HTTP
+ * URLs from the server (RSS feeds, etc.) with size + timeout guards.
  *
- * The in-flight registry lives on globalThis so it survives Next.js HMR
- * reloads, mirroring the pattern in lib/rpc-manager.ts. On process exit /
- * SIGINT / SIGTERM every entry is aborted so we never leak a pending
- * upstream fetch on a graceful shutdown.
+ * The caller owns the AbortSignal and is responsible for surfacing it back to
+ * the user (cancel button, request abort, etc.). proxyFetch bridges the
+ * caller's signal into a local controller so a single timeout / abort always
+ * tears down the same upstream fetch.
  */
 
 const log = createLogger("lib/http-proxy");
-
-export const DEFAULT_TIMEOUT_MS = 30_000;
-export const DEFAULT_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
-export const MIN_TIMEOUT_MS = 1_000;
-export const MAX_TIMEOUT_MS = 120_000;
-export const MIN_SIZE_LIMIT_BYTES = 1024;
-export const MAX_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
-
-export interface InFlightHandle {
-  controller: AbortController;
-  startedAt: number;
-  url: string;
-  method: string;
-}
-
-declare global {
-  var __piHttpInFlight: Map<string, InFlightHandle> | undefined;
-}
-
-export function getInFlightRegistry(): Map<string, InFlightHandle> {
-  if (!globalThis.__piHttpInFlight) {
-    globalThis.__piHttpInFlight = new Map();
-    const cleanup = () => {
-      globalThis.__piHttpInFlight?.forEach((h) => {
-        try {
-          h.controller.abort();
-        } catch {
-          /* ignore */
-        }
-      });
-      globalThis.__piHttpInFlight?.clear();
-    };
-    process.once("exit", cleanup);
-    process.once("SIGINT", cleanup);
-    process.once("SIGTERM", cleanup);
-  }
-  return globalThis.__piHttpInFlight;
-}
 
 export interface ProxyArgs {
   method: string;
@@ -88,8 +49,7 @@ export async function proxyFetch(args: ProxyArgs): Promise<ProxyResult> {
   const timer = setTimeout(() => controller.abort(), args.timeoutMs);
 
   // Bridge the caller's signal into our local controller. Either signal
-  // (caller-side cancel from /api/http/[id]/cancel, or our timeout) aborts
-  // the same fetch.
+  // (caller-initiated cancel, or our timeout) aborts the same fetch.
   const onCallerAbort = () => controller.abort();
   if (args.signal.aborted) controller.abort();
   args.signal.addEventListener("abort", onCallerAbort, { once: true });
@@ -132,9 +92,9 @@ export async function proxyFetch(args: ProxyArgs): Promise<ProxyResult> {
       headers[k] = v;
     });
 
-    // Binary content types are returned base64-encoded so the client can
-    // render images (data: URLs) or display the raw bytes without corruption
-    // from a forced UTF-8 decode.
+    // Binary content types are returned base64-encoded so the caller can
+    // re-decode them (e.g. data: URLs for images) without corruption from
+    // a forced UTF-8 decode.
     const contentTypeHeader = (headers["content-type"] ?? "").toLowerCase();
     const isBinary = contentTypeHeader.startsWith("image/") || contentTypeHeader === "application/octet-stream";
     const body = isBinary
@@ -157,9 +117,9 @@ export async function proxyFetch(args: ProxyArgs): Promise<ProxyResult> {
     const durationMs = Date.now() - startedAt;
     const name = err instanceof Error ? err.name : "";
     if (name === "AbortError" || controller.signal.aborted) {
-      // Distinguish caller-initiated abort (cancel route) from our own
-      // timeout: the caller's signal is the one that fired if it was
-      // already aborted when we entered, or if the timer hasn't elapsed.
+      // Distinguish caller-initiated abort from our own timeout: the caller's
+      // signal is the one that fired if it was already aborted when we entered,
+      // or if the timer hasn't elapsed.
       const wasTimeout = !args.signal.aborted;
       const kind = wasTimeout ? "timeout" : "aborted";
       log.warn("http proxy aborted", { ...fields, url: args.url, kind, durationMs });
@@ -181,10 +141,4 @@ export async function proxyFetch(args: ProxyArgs): Promise<ProxyResult> {
     clearTimeout(timer);
     args.signal.removeEventListener("abort", onCallerAbort);
   }
-}
-
-export function clampInt(value: unknown, min: number, max: number, fallback: number): number {
-  const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(min, Math.min(max, Math.floor(n)));
 }

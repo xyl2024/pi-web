@@ -1,7 +1,7 @@
 /**
  * SQLite-backed CRUD + XML parsing + upsert for the RSS panel.
  *
- * Mirror of `lib/http-collections-store.ts`: validation, custom error classes,
+ * Mirror of `lib/scheduler-store.ts`: validation, custom error classes,
  * row-to-type mappers, and `db.transaction(() => { ... })()` blocks for
  * mutating ops that touch more than one table.
  *

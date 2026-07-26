@@ -3,7 +3,7 @@
  * center. Storage lives in `lib/inbox-store.ts` on top of `lib/inbox-db.ts`.
  * This file is the contract between storage, HTTP routes, and the React layer.
  *
- * Mirror of `lib/http-collections-schema.ts`: pure data + validators, no IO.
+ * Pure data + validators, no IO. Style mirrors the other lib/*-schema.ts files.
  */
 
 export type InboxLevel = "info" | "warn" | "error";

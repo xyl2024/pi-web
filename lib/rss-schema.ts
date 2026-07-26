@@ -4,7 +4,7 @@
  * `lib/rss-db.ts`; this file is the contract between storage and the HTTP
  * routes / React layer.
  *
- * Mirror of `lib/http-collections-schema.ts`: pure data + validators, no IO.
+ * Mirror of `lib/scheduler-schema.ts` style: pure data + validators, no IO.
  * Re-exported through the same surface so route handlers can `import { ... }
  * from "@/lib/rss-schema"` and have everything they need.
  */

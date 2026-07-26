@@ -8,7 +8,7 @@ import { isContentEqual } from "@/lib/shallowEqual";
 /**
  * Module store for the LogsCenter right-panel tab.
  *
- * Mirrors the `httpStore` / `sessionUiStore` pattern: a single typed state
+ * Mirrors the `sessionUiStore` pattern: a single typed state
  * object, useSyncExternalStore subscription, content-equality guarded
  * patcher. The LogsPanel UI reads + dispatches everything through this store
  * so the in-flight filter state survives tab switches and panel closes.

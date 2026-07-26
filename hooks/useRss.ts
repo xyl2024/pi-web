@@ -3,7 +3,6 @@
 /**
  * Client-side hook for the RSS panel.
  *
- * Mirrors `hooks/useHttpCollections.ts`:
  *   - Single full-snapshot GET on mount + window focus.
  *   - `inFlightRef` guards against overlapping refetches.
  *   - Errors are surfaced as toasts by the call sites (the hook itself just
@@ -94,7 +93,7 @@ export function useRss(): UseRssState {
     return p;
   }, []);
 
-  // Initial fetch + window focus refetch (Y1 pattern from useHttpCollections).
+  // Initial fetch + window focus refetch.
   useEffect(() => {
     void refresh();
     const onFocus = () => {

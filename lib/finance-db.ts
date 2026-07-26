@@ -3,7 +3,7 @@
  *
  * Independent of the other pi-web DBs so each feature can be backed up /
  * restored on its own schedule. Same singleton-via-globalThis pattern as
- * `lib/http-collections-db.ts` so Next.js dev-mode HMR doesn't open a fresh
+ * `lib/scheduler-db.ts` so Next.js dev-mode HMR doesn't open a fresh
  * handle on every reload.
  *
  * File location: `~/.pi-web/finance.db` by default, override with

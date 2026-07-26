@@ -82,7 +82,7 @@ A single careless command can wipe data that has no backup, is not in git, and c
 
 - The user todo list is stored in `~/.pi-web/todos.db` (SQLite via `better-sqlite3`). The legacy `todos.json` was renamed to `todos.json.migrated.<ts>` on first DB read — it is **not** deleted and can be inspected with `cat`. To roll back: run `npx tsx scripts/todos-restore.ts` (writes a fresh `todos.json` from the DB; if `--out` already exists it is renamed to `<out>.restored.<ts>` first, matching the rename-not-delete migration pattern).
 - The `cat > ~/.pi-web/todos.db` (or `todos.json`) idiom is the kind of thing that looks safe in a one-liner test script but truncates the file immediately. If the heredoc body is wrong, the file is `0 bytes` and unrecoverable.
-- Other irreplaceable user data in this project: `~/.pi-web/todo_images/`, `~/.pi-web/workspace/`, `~/.pi-web/payloads/`, `~/.pi-web/config.yaml`, `~/.pi-web/scheduler.db`, `~/.pi-web/http-collections.db`, `~/.pi-web/favorites.json`, `~/.pi-web/agent-todo/`, `~/.pi/agent/sessions/`, `~/.pi/agent/models.json`, `~/.pi-web/pinned.json`, `~/.pi-web/todo-tools.json`.
+- Other irreplaceable user data in this project: `~/.pi-web/todo_images/`, `~/.pi-web/workspace/`, `~/.pi-web/payloads/`, `~/.pi-web/config.yaml`, `~/.pi-web/scheduler.db`, `~/.pi-web/favorites.json`, `~/.pi-web/agent-todo/`, `~/.pi/agent/sessions/`, `~/.pi/agent/models.json`, `~/.pi-web/pinned.json`, `~/.pi-web/todo-tools.json`.
 - The agent todo state lives in `~/.pi-web/agent-todo/<sessionId>.jsonl` (append-only snapshots). The current state is the last parsed line; truncating the file wipes it instantly with no DB backup.
 
 ### If a write goes wrong
@@ -179,7 +179,6 @@ module-scoped store using `useSyncExternalStore`:
 
 - `sessionUiStore` — branch leaf (`branchTree`/`ActiveLeafId`), `systemPrompt`, `agentsFiles`, `sessionStats`, `contextUsage`. Owned by `useAgentSession`, read by `AppShell`. Imperative session controls (model/thinking/tools/compact/steer) are bridged to `CommandPalette` ⌘K via the separate `useAgentControls()` hook, **not** part of this store's snapshot.
 - `toolCallStatsStore` — per-turn tool call statistics, owned by `useAgentSession`, read by the vertical button + `ToolCallStatsPanel`.
-- `httpStore` — HTTP debug-panel draft state; survives tab switches and panel closes (no disk persistence, by design).
 
 The store pattern eliminates the previous "5 separate `onXxxChange` props +
 matching `useState` in AppShell" dance and makes state survive `ChatWindow`
@@ -192,19 +191,6 @@ icon, keybinding, predicate, and run function). `CommandPalette` (⌘K,
 Raycast-style) is wired into `AppShell` and reads + dispatches agent
 controls registered by the active `ChatWindow` via `setAgentControls()`. New
 agent-facing actions belong here rather than as ad-hoc top-bar buttons.
-
-### HTTP debug panel + request collections
-
-`HttpPanel` posts to `/api/http` (server-side `proxyFetch` in `lib/http-proxy.ts`),
-which streams the response back with size + timeout guards. A client-supplied
-`id` registers an `AbortController` on `globalThis.__piHttpInFlight` so the
-`POST /api/http/[id]/cancel` route can abort it.
-
-`HttpPanelCollections` (drawer) persists reusable requests in
-`~/.pi-web/http-collections.db` via `lib/http-collections-store.ts`. The
-contract is in `lib/http-collections-schema.ts`; the validation error class
-mirrors `TodoValidationError` so the route layer can map domain errors to
-HTTP statuses uniformly.
 
 ### Scheduler
 
@@ -274,13 +260,6 @@ app/api/
   todo-tools/route.ts               GET/PUT enabled-todo-tool config
   tags/route.ts                     PATCH rename / DELETE remove a tag globally
   tags/color/route.ts               PATCH set or clear a tag's color
-  http/route.ts                     POST { id, method, url, ... } — server-side proxyFetch
-  http/[id]/cancel/route.ts         POST cancel an in-flight HTTP request
-  http-collections/route.ts         GET full snapshot of collections + items
-  http-collections/collections/{route,[id]/route.ts}
-                                    POST create / GET-PUT-DELETE /[id] edit or delete one collection
-  http-collections/items/{route,[id]/route.ts}
-                                    POST create / GET-PUT-DELETE /[id] one saved request item
   scheduled-tasks/route.ts          GET/POST/PATCH/DELETE scheduled cron tasks
   scheduled-tasks/[id]/run/route.ts POST run a task now (ad-hoc)
   scheduled-tasks/[id]/runs/route.ts GET last N runs for one task
@@ -332,12 +311,8 @@ lib/
   show-file-tool-types.ts   client-safe types/constants
   canvas-files-store.ts     IndexedDB storage for Excalidraw image dataURLs (with orphan GC)
   translate.ts              shared translate prompts + language list (server + client)
-  curl-parser.ts            best-effort cURL command parser for the HTTP panel
   json-parser.ts            tolerant JSON parser for the JSON panel
-  http-proxy.ts             proxyFetch core + in-flight AbortController registry
-  http-collections-db.ts    SQLite handle for ~/.pi-web/http-collections.db
-  http-collections-schema.ts types + validation + error classes for the collections feature
-  http-collections-store.ts CRUD on top of the DB
+  http-proxy.ts             proxyFetch core: server-side fetch with size + timeout guards
   scheduler-db.ts           SQLite handle for ~/.pi-web/scheduler.db
   scheduler-store.ts        CRUD + validation for scheduled tasks + runs
   scheduler/                loop.ts (self-rescheduling setTimeout) + runner.ts (per-task FIFO chain)
@@ -376,11 +351,6 @@ components/
   AgentTodoPanel.tsx        floating panel showing the agent's live task plan for the active session
   HighlightText.tsx         search-term <mark> wrapper (single + recursive)
   ToolCallStatsPanel.tsx    right-panel tab body (reads toolCallStatsStore)
-  HttpPanel.tsx             right-panel tab: method/URL/headers/body editor + send
-  HttpPanelCollections.tsx  collections drawer inside HttpPanel (search, grouped tree)
-  HttpPanelSaveItemModal.tsx + HttpPanelEditCollectionModal.tsx
-                            create/edit modals for the Collections feature
-  CollectionPanel.tsx       right-panel tab wrapper for HttpPanelCollections
   JsonPanel.tsx             right-panel tab: textarea + tree view, persistent localStorage
   JsonTreeView.tsx + JsonHighlight.tsx
                             tree rendering + header-less JSON syntax highlighter
@@ -422,8 +392,6 @@ hooks/
   usePendingPermissions.tsx provider for the in-session permission queue + PermissionDialog host
   sessionUiStore.ts         module-scoped useSyncExternalStore: branch leaf + agent controls
   toolCallStatsStore.ts     module-scoped useSyncExternalStore: per-turn stats view
-  httpStore.ts              module-scoped useSyncExternalStore: HTTP panel draft state
-  useHttpCollections.ts     single-snapshot GET on mount + window focus (no SWR, no client cache)
   useToolCallStats.ts + ToolCallStatsContext.tsx
                             per-turn tool-call statistics reducer + provider
   useDragDrop.ts            drag-and-drop file/image upload
@@ -447,7 +415,6 @@ electron-shell/
 
 scripts/
   todos-restore.ts                   roll back todos.db → todos.json
-  test-http-collections-store.ts     smoke test for the collections CRUD
   deploy-systemd-user.sh             deploy to ~/.local/share/pi-web-fork + install user systemd unit
   copy-excalidraw-fonts.mjs          one-time Excalidraw font copy (postinstall-ish)
 
@@ -498,10 +465,7 @@ On `useAgentSession` mount, `GET /api/sessions/[id]?includeState` is called. If 
 Newer pi emits `compaction_start` / `compaction_end`; older versions emitted `auto_compaction_start` / `auto_compaction_end`. `handleAgentEvent` accepts both sets to keep `isCompacting` in sync. Manual compact is a blocking POST — the button stays disabled until the response returns.
 
 ### Module-scoped stores
-`sessionUiStore`, `toolCallStatsStore`, and `httpStore` all follow the same pattern: one typed state object, `useSyncExternalStore` subscription, content-equality guarded patcher (`lib/shallowEqual.ts`). Callback handles are kept in refs outside the snapshot — `sessionUiStore` exposes both a state snapshot and a separate `useAgentControls()` hook, while `httpStore` uses module-level action helpers that mutate the draft directly — so identity-based re-render loops are avoided. When adding a new cross-cutting UI state, follow this pattern — it survives `ChatWindow` remounts and eliminates prop-drilling.
-
-### HTTP proxy in-flight registry
-`getInFlightRegistry()` returns a `Map<id, AbortController>` stored on `globalThis.__piHttpInFlight`. The route writes on entry and removes on completion; `POST /api/http/[id]/cancel` looks up by id and calls `controller.abort()`. Process-exit / SIGINT / SIGTERM hooks iterate the map and abort every entry so we never leak a pending upstream fetch.
+`sessionUiStore` and `toolCallStatsStore` follow the same pattern: one typed state object, `useSyncExternalStore` subscription, content-equality guarded patcher (`lib/shallowEqual.ts`). `sessionUiStore` exposes both a state snapshot and a separate `useAgentControls()` hook — imperative controls are bridged via the hook, not the snapshot, so identity-based re-render loops are avoided. When adding a new cross-cutting UI state, follow this pattern — it survives `ChatWindow` remounts and eliminates prop-drilling.
 
 ### Description sanitization is centralized
 `lib/description-sanitize.ts` is the single source of truth for the DOMPurify config used by every code path that touches a todo description: storage normalization, editor save/mount, read-only view render, legacy markdown migration, and zip export (which uses `allowStyle: false`). Adding a new tag/attribute to descriptions requires touching this one file. The `style` widening is gated by an idempotent `uponSanitizeAttribute` hook that rewrites every style value to only `color: #rrggbb` — opening `style` without that hook would be a CSS-injection vector.
@@ -598,9 +562,9 @@ When Pi Work is loaded inside the `electron-shell` `<iframe>`, every
 `allow="clipboard-read; clipboard-write"` (set in `electron-shell/titlebar.html`).
 Without it, Chromium's Permissions-Policy silently blocks the call. The web
 app has a `document.execCommand("copy")` fallback in `components/CodeBlock.tsx`'s
-`copyText()` helper (also reached by `HttpPanel`'s copy button via that import,
-plus `MermaidBlock.tsx`, `SvgBlock.tsx`, `FileExplorer.tsx`) — but the iframe
-attribute is the canonical fix and the fallback should not be relied on.
+`copyText()` helper (also reached by `MermaidBlock.tsx`, `SvgBlock.tsx`,
+`FileExplorer.tsx`) — but the iframe attribute is the canonical fix and the
+fallback should not be relied on.
 
 ---
 

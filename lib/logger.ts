@@ -21,7 +21,7 @@ const LEVEL_WEIGHT: Record<LogLevel, number> = {
 // memory so the SSE endpoint can hand them to a new subscriber as a snapshot
 // on connect, then fan out every new entry to every active subscriber. State
 // lives on globalThis so it survives Next.js dev hot-reload, matching the
-// pattern used by `__piSessions` and `__piHttpInFlight` (see AGENTS.md).
+// pattern used by `__piSessions` (see AGENTS.md).
 
 interface LogRingState {
   ring: LogEntry[];

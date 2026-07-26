@@ -1,7 +1,7 @@
 /**
  * SQLite-backed storage for the Inbox message center.
  *
- * Mirror of `lib/scheduler-db.ts` and `lib/http-collections-db.ts`:
+ * Mirror of `lib/scheduler-db.ts`:
  * - one table (`inbox_messages`) per file
  * - WAL + NORMAL synchronous for fast inserts
  * - globalThis singleton so Next.js dev-mode HMR doesn't reopen the handle

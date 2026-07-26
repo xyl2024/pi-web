@@ -130,7 +130,7 @@ export class InboxValidationError extends Error {
 
 - **表**：`inbox_messages(id PK, ts, source, level, title, payload_json)`
 - **索引**：`idx_inbox_messages_ts (ts DESC)` + `idx_inbox_messages_source_ts (source, ts DESC)`
-- **单例**：通过 `globalThis.__piInboxDb` 防止 Next.js dev HMR 重复打开句柄（与 `lib/scheduler-db.ts` / `lib/http-collections-db.ts` 同样的模式）
+- **单例**：通过 `globalThis.__piInboxDb` 防止 Next.js dev HMR 重复打开句柄（与 `lib/scheduler-db.ts` 同样的模式）
 - **WAL + synchronous = NORMAL**：高频插入友好
 - **环境变量**：`PI_WEB_INBOX_DB` 覆盖默认路径 `~/.pi-web/inbox.db`
 

@@ -1,9 +1,9 @@
 /**
  * SQLite-backed storage for the RSS panel.
  *
- * Independent of the todos / scheduler / collections DBs so each feature can
+ * Independent of the todos / scheduler DBs so each feature can
  * be backed up / restored on its own schedule. Same singleton-via-globalThis
- * pattern as `lib/http-collections-db.ts` so Next.js dev-mode HMR doesn't open
+ * pattern as `lib/scheduler-db.ts` so Next.js dev-mode HMR doesn't open
  * a fresh handle on every reload.
  *
  * File location: `~/.pi-web/rss.db` by default, override with `PI_WEB_RSS_DB`

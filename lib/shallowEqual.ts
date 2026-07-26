@@ -2,7 +2,7 @@
  * Deep content-equality comparator. Two values are considered equal when
  * their visible content matches, even if they have different references.
  *
- * Used by the module stores (sessionUiStore / toolCallStatsStore / httpStore)
+ * Used by the module stores (sessionUiStore / toolCallStatsStore)
  * to avoid spurious re-renders when an upstream hook recomputes a fresh
  * object on every render whose contents are identical to the previous one.
  *

@@ -1,7 +1,7 @@
 /**
  * SQLite-backed CRUD for the Inbox message center.
  *
- * Mirror of `lib/http-collections-store.ts`: validation, custom error class,
+ * Mirror of `lib/scheduler-store.ts`: validation, custom error class,
  * row-to-type mapper. The Inbox is append-only by design — messages are
  * never updated in place. Only push (insert) and delete operations exist.
  * Reads are simple ORDER BY ts DESC queries, optionally filtered by `since`

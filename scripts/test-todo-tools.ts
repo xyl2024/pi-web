@@ -1,7 +1,7 @@
 /**
  * Smoke test for `lib/todo-tools.ts` (the two pi agent tools) and the
  * supporting helpers in `lib/todo-tools-url.ts` / `lib/todo-images-utils.ts`.
- * Mirrors the runnable-TS pattern of `scripts/test-http-collections-store.ts`:
+ * Runnable-TS pattern:
  *   - mkdtempSync tmp dir
  *   - override PI_WEB_TODOS_DB BEFORE importing anything that calls getDb()
  *   - assertion failures exit(1); cleanup runs in `finally`

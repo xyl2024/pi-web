@@ -11,7 +11,6 @@ import { TodoPanel } from "./TodoPanel";
 import { CollectionPanel } from "./CollectionPanel";
 import { TranslatePanel } from "./TranslatePanel";
 import { ToolCallStatsPanel } from "./ToolCallStatsPanel";
-import { HttpPanel } from "./HttpPanel";
 import { JsonPanel } from "./JsonPanel";
 import { CanvasPanel } from "./CanvasPanel";
 import { DiffPanel } from "./DiffPanel";
@@ -25,7 +24,6 @@ const TODO_TAB_ID = "todo:global";
 const FAVORITES_TAB_ID = "favorites:global";
 const TRANSLATE_TAB_ID = "translate:global";
 const TOOL_CALLS_TAB_ID = "toolCalls:global";
-const HTTP_TAB_ID = "http:global";
 const JSON_TAB_ID = "json:global";
 const CANVAS_TAB_ID = "canvas:global";
 const DIFF_TAB_ID = "diff:global";
@@ -471,17 +469,7 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [activeFileTabId, rightPanelState, t]);
 
-  // Open the HTTP debug tab — same pattern as todos / favorites / translate.
-  const handleOpenHttpTab = useCallback(() => {
-    setFileTabs((prev) => {
-      if (prev.some((tab) => tab.kind === "http")) return prev;
-      return [{ kind: "http", id: HTTP_TAB_ID, label: t("HTTP") }, ...prev];
-    });
-    setActiveFileTabId(HTTP_TAB_ID);
-    setRightPanelState("normal");
-  }, [t]);
-
-  // Open the JSON formatter tab — same pattern as HTTP.
+  // Open the JSON formatter tab — same pattern as todos / favorites / translate.
   const handleOpenJsonTab = useCallback(() => {
     setFileTabs((prev) => {
       if (prev.some((tab) => tab.kind === "json")) return prev;
@@ -712,7 +700,6 @@ export function AppShell() {
     openCanvasTab: handleOpenCanvasTab,
     openTranslateTab: handleOpenTranslateTab,
     openToolCallsTab: handleOpenToolCallsTab,
-    openHttpTab: handleOpenHttpTab,
     openJsonTab: handleOpenJsonTab,
     openDiffTab: handleOpenDiffTab,
     openFinanceTab: handleOpenFinanceTab,
@@ -727,7 +714,7 @@ export function AppShell() {
   }), [
     theme.setPreset, setLocale, handleSlashNew,
     handleOpenTodoTab, handleOpenFavoritesTab, handleOpenCanvasTab,
-    handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenHttpTab, handleOpenJsonTab,
+    handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenJsonTab,
     handleOpenDiffTab,
     handleOpenFinanceTab,
     handleOpenLogsTab,
@@ -1149,8 +1136,6 @@ export function AppShell() {
             <TranslatePanel />
           ) : activeFileTab?.kind === "toolCalls" ? (
             <ToolCallStatsTabBody />
-          ) : activeFileTab?.kind === "http" ? (
-            <HttpPanel />
           ) : activeFileTab?.kind === "json" ? (
             <JsonPanel />
           ) : activeFileTab?.kind === "file" ? (
@@ -1287,26 +1272,6 @@ export function AppShell() {
             <path d="M15.5 17h7" />
           </svg>
         </button>
-        </Tooltip>
-        {/* Open HTTP debug panel */}
-        <Tooltip content={t("HTTP")}>
-          <button
-            onClick={handleOpenHttpTab}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center",
-              width: 36, height: 36, padding: 0,
-              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "http" ? "var(--accent)" : "var(--text-muted)",
-              cursor: "pointer", transition: "color 0.12s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "http" ? "var(--accent)" : "var(--text-muted)"; }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
-          </button>
         </Tooltip>
         {/* Open JSON formatter panel */}
         <Tooltip content={t("JSON")}>

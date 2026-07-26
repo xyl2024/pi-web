@@ -3,7 +3,7 @@
 /**
  * Client-side hook for the daily-accounting (FinancePanel) feature.
  *
- * Data flow mirrors `useHttpCollections`: full-snapshot GET on mount
+ * Data flow: full-snapshot GET on mount
  * + window focus refetch. After every mutation the hook refetches so the UI
  * never sees stale data. No client-side cache; the SQLite file is the source
  * of truth and the React layer keeps a local copy.

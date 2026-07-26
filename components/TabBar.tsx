@@ -11,7 +11,6 @@ export type Tab =
   | { kind: "favorites"; id: string; label: string }
   | { kind: "translate"; id: string; label: string }
   | { kind: "toolCalls"; id: string; label: string }
-  | { kind: "http"; id: string; label: string }
   | { kind: "json"; id: string; label: string }
   | { kind: "canvas"; id: string; label: string }
   | { kind: "diff"; id: string; label: string }
