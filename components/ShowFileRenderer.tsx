@@ -161,7 +161,7 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
           onExpand={(node, title) => setLightbox({ kind: "content", title, node })}
         />
         {lightbox?.kind === "content" && (
-          <FullscreenOverlay title={lightbox.title} onClose={() => setLightbox(null)}>
+          <FullscreenOverlay onClose={() => setLightbox(null)}>
             {lightbox.node}
           </FullscreenOverlay>
         )}
@@ -539,8 +539,7 @@ function ExpandButton({ onClick }: { onClick: () => void }) {
 // Viewport-sized overlay used to expand non-image content (HTML iframe)
 // fullscreen. Esc or backdrop click closes. The child node is mounted
 // fresh on each open via the caller's `key` strategy.
-function FullscreenOverlay({ title, onClose, children }: {
-  title: string;
+function FullscreenOverlay({ onClose, children }: {
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -575,38 +574,38 @@ function FullscreenOverlay({ title, onClose, children }: {
         flexDirection: "column",
       }}
     >
-      <div
+      <button
+        onClick={onClose}
+        title={t("Close")}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "rgba(255,255,255,0.28)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "rgba(255,255,255,0.18)";
+        }}
         style={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          zIndex: 1,
+          width: 36,
+          height: 36,
+          padding: 0,
+          fontSize: 16,
+          lineHeight: 1,
+          cursor: "pointer",
           display: "flex",
           alignItems: "center",
-          gap: 12,
-          padding: "8px 16px",
-          background: "rgba(0, 0, 0, 0.5)",
-          color: "rgba(255,255,255,0.9)",
-          fontSize: 12,
-          flexShrink: 0,
+          justifyContent: "center",
+          background: "rgba(255,255,255,0.18)",
+          color: "rgba(255,255,255,0.95)",
+          border: "1px solid rgba(255,255,255,0.35)",
+          borderRadius: 8,
+          fontFamily: "var(--font-mono)",
         }}
       >
-        <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{title}</span>
-        <button
-          onClick={onClose}
-          title={t("Close")}
-          style={{
-            marginLeft: "auto",
-            padding: "4px 10px",
-            fontSize: 12,
-            cursor: "pointer",
-            background: "rgba(255,255,255,0.08)",
-            color: "rgba(255,255,255,0.9)",
-            border: "1px solid rgba(255,255,255,0.15)",
-            borderRadius: 5,
-            fontFamily: "var(--font-mono)",
-            lineHeight: 1.2,
-          }}
-        >
-          ✕
-        </button>
-      </div>
+        ✕
+      </button>
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>{children}</div>
     </div>
   );

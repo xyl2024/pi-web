@@ -113,7 +113,6 @@ export function ImageLightbox({ images, index, onClose, onIndexChange }: {
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
   const [dragging, setDragging] = useState(false);
-  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [loadError, setLoadError] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
@@ -128,7 +127,6 @@ export function ImageLightbox({ images, index, onClose, onIndexChange }: {
     setScale(1);
     setTx(0);
     setTy(0);
-    setNaturalSize(null);
     setLoadError(false);
   }, [index]);
 
@@ -247,38 +245,33 @@ export function ImageLightbox({ images, index, onClose, onIndexChange }: {
         flexDirection: "column",
       }}
     >
-      {/* Top toolbar */}
-      <div
+      <button
+        onClick={onClose}
+        title={t("Close")}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "rgba(255,255,255,0.28)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "rgba(255,255,255,0.18)";
+        }}
         style={{
+          ...btnBase,
+          position: "absolute",
+          top: 12,
+          right: 12,
+          width: 36,
+          height: 36,
+          padding: 0,
           display: "flex",
           alignItems: "center",
-          gap: 12,
-          padding: "8px 16px",
-          background: "rgba(0, 0, 0, 0.5)",
-          color: "rgba(255,255,255,0.9)",
-          fontSize: 12,
-          flexShrink: 0,
+          justifyContent: "center",
+          fontSize: 16,
+          background: "rgba(255,255,255,0.18)",
+          border: "1px solid rgba(255,255,255,0.35)",
         }}
       >
-        {hasMultiple && (
-          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>
-            {index + 1} / {images.length}
-          </span>
-        )}
-        {current.alt && (
-          <span style={{ color: "rgba(255,255,255,0.6)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {current.alt}
-          </span>
-        )}
-        {naturalSize && (
-          <span style={{ marginLeft: "auto", color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-mono)" }}>
-            {naturalSize.w} × {naturalSize.h}
-          </span>
-        )}
-        <button onClick={onClose} style={btnBase} title={t("Close")}>
-          ✕
-        </button>
-      </div>
+        ✕
+      </button>
 
       {/* Image area — click on backdrop closes */}
       <div
@@ -303,9 +296,6 @@ export function ImageLightbox({ images, index, onClose, onIndexChange }: {
             src={current.src}
             alt={current.alt}
             draggable={false}
-            onLoad={(e) => {
-              setNaturalSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight });
-            }}
             onError={() => setLoadError(true)}
             onMouseDown={handleMouseDown}
             style={{
