@@ -1162,7 +1162,7 @@ export function AppShell() {
         borderLeft: "1px solid var(--border)",
       }}>
         {/* Show/hide file panel — always visible */}
-        <Tooltip content={rightPanelState !== "closed" ? t("Hide file panel") : t("Show file panel")}>
+        <Tooltip content={rightPanelState !== "closed" ? t("Hide file panel") : t("Show file panel")} side="left">
         <button
           onClick={() => setRightPanelState((v) => v === "closed" ? "normal" : "closed")}
           style={{
@@ -1181,7 +1181,7 @@ export function AppShell() {
         </button>
         </Tooltip>
         {/* Open todos — always visible */}
-        <Tooltip content={t("Open todos")}>
+        <Tooltip content={t("Open todos")} side="left">
         <button
           onClick={() => handleToggleRightPanelTab(TODO_TAB_ID, handleOpenTodoTab)}
           style={{
@@ -1201,7 +1201,7 @@ export function AppShell() {
         </button>
         </Tooltip>
         {/* Open canvas — single global whiteboard */}
-        <Tooltip content={activeRightPanelKind === "canvas" ? t("Hide canvas") : t("Open canvas")}>
+        <Tooltip content={activeRightPanelKind === "canvas" ? t("Hide canvas") : t("Open canvas")} side="left">
           <button
             onClick={handleToggleCanvasTab}
             style={{
@@ -1221,7 +1221,7 @@ export function AppShell() {
           </button>
         </Tooltip>
         {/* Open translate — always visible */}
-        <Tooltip content={t("Open translate")}>
+        <Tooltip content={t("Open translate")} side="left">
         <button
           onClick={() => handleToggleRightPanelTab(TRANSLATE_TAB_ID, handleOpenTranslateTab)}
           style={{
@@ -1245,7 +1245,7 @@ export function AppShell() {
         </button>
         </Tooltip>
         {/* Open JSON formatter panel */}
-        <Tooltip content={t("JSON")}>
+        <Tooltip content={t("JSON")} side="left">
           <button
             onClick={() => handleToggleRightPanelTab(JSON_TAB_ID, handleOpenJsonTab)}
             style={{
@@ -1265,7 +1265,7 @@ export function AppShell() {
           </button>
         </Tooltip>
         {/* Open diff panel */}
-        <Tooltip content={t("Open Diff")}>
+        <Tooltip content={t("Open Diff")} side="left">
           <button
             onClick={() => handleToggleRightPanelTab(DIFF_TAB_ID, handleOpenDiffTab)}
             style={{
@@ -1285,7 +1285,7 @@ export function AppShell() {
           </button>
         </Tooltip>
         {/* Open RSS panel */}
-        <Tooltip content={t("RSS")}>
+        <Tooltip content={t("RSS")} side="left">
           <button
             onClick={() => handleToggleRightPanelTab(RSS_TAB_ID, handleOpenRssTab)}
             style={{
@@ -1307,7 +1307,7 @@ export function AppShell() {
         </Tooltip>
         {/* Expand/collapse — only when panel is open and has tabs */}
         {rightPanelState !== "closed" && fileTabs.length > 0 && (
-          <Tooltip content={rightPanelState === "expanded" ? t("Collapse file panel") : t("Expand file panel")}>
+          <Tooltip content={rightPanelState === "expanded" ? t("Collapse file panel") : t("Expand file panel")} side="left">
           <button
             onClick={() => setRightPanelState((v) => v === "expanded" ? "normal" : "expanded")}
             style={{
@@ -1336,7 +1336,7 @@ export function AppShell() {
         {/* Favorites + Tool Calls + Focus — grouped at the bottom of the button bar */}
         <div style={{ marginTop: "auto" }}>
           {/* Open favorites — always visible */}
-          <Tooltip content={t("Open favorites")}>
+          <Tooltip content={t("Open favorites")} side="left">
           <button
             onClick={() => handleToggleRightPanelTab(FAVORITES_TAB_ID, handleOpenFavoritesTab)}
             style={{
@@ -1355,7 +1355,7 @@ export function AppShell() {
           </button>
           </Tooltip>
           {/* Open Token audit panel — sits with the bottom-of-bar group */}
-          <Tooltip content={t("Open token audit")}>
+          <Tooltip content={t("Open token audit")} side="left">
             <button
               onClick={() => handleToggleRightPanelTab(TOKENS_TAB_ID, handleOpenTokensTab)}
               style={{
@@ -1383,7 +1383,7 @@ export function AppShell() {
             onClick={() => handleToggleRightPanelTab(TOOL_CALLS_TAB_ID, handleOpenToolCallsTab)}
           />
           {/* Focus mode toggle */}
-          <Tooltip content={focused ? t("Exit focus") : t("Focus")}>
+          <Tooltip content={focused ? t("Exit focus") : t("Focus")} side="left">
             <button
               onClick={toggleFocus}
               aria-label={focused ? t("Exit focus") : t("Focus")}

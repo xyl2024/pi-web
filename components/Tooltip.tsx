@@ -6,9 +6,10 @@ import type { ReactNode } from "react";
 interface Props {
   content: string;
   children: ReactNode;
+  side?: "top" | "right" | "bottom" | "left";
 }
 
-export function Tooltip({ content, children }: Props) {
+export function Tooltip({ content, children, side }: Props) {
   return (
     <TooltipPrimitive.Provider delayDuration={500}>
       <TooltipPrimitive.Root>
@@ -17,6 +18,7 @@ export function Tooltip({ content, children }: Props) {
         </TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
+            side={side}
             sideOffset={5}
             style={{
               zIndex: 9999,
