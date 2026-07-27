@@ -572,6 +572,29 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [t]);
 
+  // Right-bar tab buttons toggle the panel only when their own tab is both
+  // active and visible. Opening through other entry points keeps its existing
+  // "open this tab" semantics.
+  const handleToggleRightPanelTab = useCallback((tabId: string, openTab: () => void) => {
+    if (activeFileTabId === tabId && rightPanelState !== "closed") {
+      setRightPanelState("closed");
+      return;
+    }
+    openTab();
+  }, [activeFileTabId, rightPanelState]);
+
+  // Canvas takes the full right column when activated from its right-bar
+  // button so the whiteboard has room to breathe; toggling it again restores
+  // the normal split.
+  const handleToggleCanvasTab = useCallback(() => {
+    if (activeFileTabId === CANVAS_TAB_ID && rightPanelState === "expanded") {
+      setRightPanelState("normal");
+      return;
+    }
+    handleToggleRightPanelTab(CANVAS_TAB_ID, handleOpenCanvasTab);
+    setRightPanelState("expanded");
+  }, [activeFileTabId, rightPanelState, handleToggleRightPanelTab, handleOpenCanvasTab]);
+
   const handleCloseFileTab = useCallback((tabId: string) => {
     setFileTabs((prev) => {
       const next = prev.filter((t) => t.id !== tabId);
@@ -657,6 +680,7 @@ export function AppShell() {
   const showPlaceholder = initialSessionRestored && !showChat;
 
   const activeFileTab = fileTabs.find((t) => t.id === activeFileTabId) ?? null;
+  const activeRightPanelKind = rightPanelState === "closed" ? null : activeFileTab?.kind ?? null;
 
   // ── Command palette context + command list ──
   // Re-built whenever any input changes (cheap; buildCommands is O(N) where
@@ -1159,16 +1183,16 @@ export function AppShell() {
         {/* Open todos — always visible */}
         <Tooltip content={t("Open todos")}>
         <button
-          onClick={handleOpenTodoTab}
+          onClick={() => handleToggleRightPanelTab(TODO_TAB_ID, handleOpenTodoTab)}
           style={{
             display: "flex", alignItems: "center", justifyContent: "center",
             width: 36, height: 36, padding: 0,
             background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-            color: activeFileTab?.kind === "todo" ? "var(--accent)" : "var(--text-muted)",
+            color: activeRightPanelKind === "todo" ? "var(--accent)" : "var(--text-muted)",
             cursor: "pointer", transition: "color 0.12s",
           }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "todo" ? "var(--accent)" : "var(--text-muted)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = activeRightPanelKind === "todo" ? "var(--accent)" : "var(--text-muted)"; }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -1177,18 +1201,18 @@ export function AppShell() {
         </button>
         </Tooltip>
         {/* Open canvas — single global whiteboard */}
-        <Tooltip content={activeFileTab?.kind === "canvas" ? t("Hide canvas") : t("Open canvas")}>
+        <Tooltip content={activeRightPanelKind === "canvas" ? t("Hide canvas") : t("Open canvas")}>
           <button
-            onClick={handleOpenCanvasTab}
+            onClick={handleToggleCanvasTab}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "canvas" ? "var(--accent)" : "var(--text-muted)",
+              color: activeRightPanelKind === "canvas" ? "var(--accent)" : "var(--text-muted)",
               cursor: "pointer", transition: "color 0.12s",
             }}
             onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "canvas" ? "var(--accent)" : "var(--text-muted)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeRightPanelKind === "canvas" ? "var(--accent)" : "var(--text-muted)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18.37 2.63a1.75 1.75 0 0 1 2.48 2.48L9 16.96l-4.5 1.04 1.04-4.5Z" />
@@ -1199,16 +1223,16 @@ export function AppShell() {
         {/* Open translate — always visible */}
         <Tooltip content={t("Open translate")}>
         <button
-          onClick={handleOpenTranslateTab}
+          onClick={() => handleToggleRightPanelTab(TRANSLATE_TAB_ID, handleOpenTranslateTab)}
           style={{
             display: "flex", alignItems: "center", justifyContent: "center",
             width: 36, height: 36, padding: 0,
             background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-            color: activeFileTab?.kind === "translate" ? "var(--accent)" : "var(--text-muted)",
+            color: activeRightPanelKind === "translate" ? "var(--accent)" : "var(--text-muted)",
             cursor: "pointer", transition: "color 0.12s",
           }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "translate" ? "var(--accent)" : "var(--text-muted)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = activeRightPanelKind === "translate" ? "var(--accent)" : "var(--text-muted)"; }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 5h12" />
@@ -1223,16 +1247,16 @@ export function AppShell() {
         {/* Open JSON formatter panel */}
         <Tooltip content={t("JSON")}>
           <button
-            onClick={handleOpenJsonTab}
+            onClick={() => handleToggleRightPanelTab(JSON_TAB_ID, handleOpenJsonTab)}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "json" ? "var(--accent)" : "var(--text-muted)",
+              color: activeRightPanelKind === "json" ? "var(--accent)" : "var(--text-muted)",
               cursor: "pointer", transition: "color 0.12s",
             }}
             onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "json" ? "var(--accent)" : "var(--text-muted)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeRightPanelKind === "json" ? "var(--accent)" : "var(--text-muted)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M8 3 H6 a2 2 0 0 0 -2 2 v3 a2 2 0 0 1 -2 2 a2 2 0 0 1 2 2 v3 a2 2 0 0 0 2 2 h2" />
@@ -1243,16 +1267,16 @@ export function AppShell() {
         {/* Open diff panel */}
         <Tooltip content={t("Open Diff")}>
           <button
-            onClick={handleOpenDiffTab}
+            onClick={() => handleToggleRightPanelTab(DIFF_TAB_ID, handleOpenDiffTab)}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "diff" ? "var(--accent)" : "var(--text-muted)",
+              color: activeRightPanelKind === "diff" ? "var(--accent)" : "var(--text-muted)",
               cursor: "pointer", transition: "color 0.12s",
             }}
             onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "diff" ? "var(--accent)" : "var(--text-muted)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeRightPanelKind === "diff" ? "var(--accent)" : "var(--text-muted)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="8" height="16" rx="1.5" />
@@ -1263,16 +1287,16 @@ export function AppShell() {
         {/* Open RSS panel */}
         <Tooltip content={t("RSS")}>
           <button
-            onClick={handleOpenRssTab}
+            onClick={() => handleToggleRightPanelTab(RSS_TAB_ID, handleOpenRssTab)}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "rss" ? "var(--accent)" : "var(--text-muted)",
+              color: activeRightPanelKind === "rss" ? "var(--accent)" : "var(--text-muted)",
               cursor: "pointer", transition: "color 0.12s",
             }}
             onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "rss" ? "var(--accent)" : "var(--text-muted)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeRightPanelKind === "rss" ? "var(--accent)" : "var(--text-muted)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="3.5" cy="12.5" r="1.2" fill="currentColor" stroke="none" />
@@ -1314,18 +1338,18 @@ export function AppShell() {
           {/* Open favorites — always visible */}
           <Tooltip content={t("Open favorites")}>
           <button
-            onClick={handleOpenFavoritesTab}
+            onClick={() => handleToggleRightPanelTab(FAVORITES_TAB_ID, handleOpenFavoritesTab)}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "favorites" ? "var(--accent)" : "var(--text-muted)",
+              color: activeRightPanelKind === "favorites" ? "var(--accent)" : "var(--text-muted)",
               cursor: "pointer", transition: "color 0.12s",
             }}
             onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "favorites" ? "var(--accent)" : "var(--text-muted)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeRightPanelKind === "favorites" ? "var(--accent)" : "var(--text-muted)"; }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill={activeFileTab?.kind === "favorites" ? "var(--accent)" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill={activeRightPanelKind === "favorites" ? "var(--accent)" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
           </button>
@@ -1333,16 +1357,16 @@ export function AppShell() {
           {/* Open Token audit panel — sits with the bottom-of-bar group */}
           <Tooltip content={t("Open token audit")}>
             <button
-              onClick={handleOpenTokensTab}
+              onClick={() => handleToggleRightPanelTab(TOKENS_TAB_ID, handleOpenTokensTab)}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
                 width: 36, height: 36, padding: 0,
                 background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-                color: activeFileTab?.kind === "tokens" ? "var(--accent)" : "var(--text-muted)",
+                color: activeRightPanelKind === "tokens" ? "var(--accent)" : "var(--text-muted)",
                 cursor: "pointer", transition: "color 0.12s",
               }}
               onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "tokens" ? "var(--accent)" : "var(--text-muted)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = activeRightPanelKind === "tokens" ? "var(--accent)" : "var(--text-muted)"; }}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="8" cy="8" r="6" />
@@ -1354,7 +1378,10 @@ export function AppShell() {
             </button>
           </Tooltip>
           {/* Open tool calls — always visible; shows running/total badge */}
-          <ToolCallsVerticalButton active={activeFileTab?.kind === "toolCalls"} onClick={handleOpenToolCallsTab} />
+          <ToolCallsVerticalButton
+            active={activeRightPanelKind === "toolCalls"}
+            onClick={() => handleToggleRightPanelTab(TOOL_CALLS_TAB_ID, handleOpenToolCallsTab)}
+          />
           {/* Focus mode toggle */}
           <Tooltip content={focused ? t("Exit focus") : t("Focus")}>
             <button
