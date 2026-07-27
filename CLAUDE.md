@@ -403,6 +403,7 @@ docs/
   SKILL_find_skills.md               notes on the marketplace skill discovery flow
   openclaw-weixin-integration.md     reference for the WeChat (openclaw) integration
   wechat-integration.html             interactive docs for the WeChat flow
+  echarts-block.md                   syntax rules + examples for ` ```echarts ` fenced code blocks
 ```
 
 ---
