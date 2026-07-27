@@ -31,13 +31,14 @@ function resolveDbPath(): string {
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS todos (
-    id           TEXT PRIMARY KEY,
-    title        TEXT NOT NULL,
-    description  TEXT,
-    done         INTEGER NOT NULL DEFAULT 0,
-    created_at   INTEGER NOT NULL,
-    completed_at INTEGER,
-    deadline     INTEGER
+    id              TEXT PRIMARY KEY,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    completion_note TEXT,
+    done            INTEGER NOT NULL DEFAULT 0,
+    created_at      INTEGER NOT NULL,
+    completed_at    INTEGER,
+    deadline        INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS todo_tags (
@@ -89,6 +90,7 @@ export function getDb(): Database.Database {
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA);
   ensureTagColorColumn(db);
+  ensureCompletionNoteColumn(db);
 
   globalThis.__piTodosDb = db;
   migrateFromJsonIfNeeded(db, dbPath);
@@ -105,6 +107,21 @@ function ensureTagColorColumn(db: Database.Database): void {
   const cols = db.prepare("PRAGMA table_info(todo_tags)").all() as { name: string }[];
   if (cols.some((c) => c.name === "color")) return;
   db.exec("ALTER TABLE todo_tags ADD COLUMN color TEXT");
+}
+
+/**
+ * One-shot column addition for `todos.completion_note`. Same pattern as
+ * `ensureTagColorColumn` — non-destructive ALTER TABLE, safe to call on every
+ * `getDb()`. Existing rows read back with `completion_note = NULL`, which
+ * the validation layer treats as "no completion note". The completion-note
+ * required-when-done invariant only applies to rows that get marked done
+ * after this migration runs; legacy `done = 1` rows stay NULL forever
+ * (intentional — see CLAUDE.md discussion).
+ */
+function ensureCompletionNoteColumn(db: Database.Database): void {
+  const cols = db.prepare("PRAGMA table_info(todos)").all() as { name: string }[];
+  if (cols.some((c) => c.name === "completion_note")) return;
+  db.exec("ALTER TABLE todos ADD COLUMN completion_note TEXT");
 }
 
 /**

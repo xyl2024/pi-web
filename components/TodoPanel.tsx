@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useI18n, type Locale } from "@/hooks/useI18n";
 import { useTodos, type Tag, type Todo } from "@/hooks/useTodos";
+import { hasCompletionNoteContent } from "@/lib/completion-note";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
@@ -2651,7 +2652,7 @@ function TodoItem({
 }: {
   todo: Todo;
   onToggleDone: () => void;
-  onUpdate: (patch: { title?: string; description?: string; done?: boolean; deadline?: number; tags?: Tag[] }) => void;
+  onUpdate: (patch: { title?: string; description?: string; completionNote?: string; done?: boolean; deadline?: number; tags?: Tag[] }) => void;
   onDelete: () => void;
   onExport: () => Promise<void>;
   searchTerm: string;
@@ -2662,25 +2663,35 @@ function TodoItem({
   const cm = useContextMenu();
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
+  const [editingCompletion, setEditingCompletion] = useState(false);
   const [detailsVisible, setDetailsVisible] = useState(!todo.done);
   const [titleDraft, setTitleDraft] = useState(todo.title);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [deadlinePickerOpen, setDeadlinePickerOpen] = useState(false);
   const [hovering, setHovering] = useState(false);
   const [editTagsOpen, setEditTagsOpen] = useState(false);
+  // Brief red-border pulse on the completion-note editor when the user tries
+  // to toggle done on an empty note. Cleared on a setTimeout so the same
+  // visual cue can re-fire if the user ignores it and tries again.
+  const [completionHighlight, setCompletionHighlight] = useState(false);
+  const completionSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Latest HTML coming out of the RichTextEditor while editingDesc is true.
   // Read by the pagehide flush below so a page refresh can keep the request
   // alive across unload via fetch keepalive. Kept in a ref (not state) so
   // reading it on unload doesn't trigger a re-render.
   const latestDescriptionRef = useRef<string>(todo.description ?? "");
+  // Mirror of the above for the completion-note editor.
+  const latestCompletionRef = useRef<string>(todo.completionNote ?? "");
   // Latest todo.id / todo.description — kept in refs so the pagehide handler
   // (registered once when editingDesc flips on) always sees the current
   // values instead of the stale ones captured by the original closure.
   const todoIdRef = useRef(todo.id);
   const todoDescRef = useRef(todo.description ?? "");
+  const todoCompletionRef = useRef(todo.completionNote ?? "");
   todoIdRef.current = todo.id;
   todoDescRef.current = todo.description ?? "";
+  todoCompletionRef.current = todo.completionNote ?? "";
 
   const openDeadlinePicker = () => setDeadlinePickerOpen(true);
 
@@ -2692,6 +2703,17 @@ function TodoItem({
   const gallery = useMemo(
     () => extractImagesFromHtml(todo.description ?? ""),
     [todo.description],
+  );
+  // Completion-note images feed the same lightbox so prev/next works across
+  // both fields. Order matters for index stability — description first, then
+  // completion — so clicks in the completion view resolve to the right slot.
+  const completionGallery = useMemo(
+    () => extractImagesFromHtml(todo.completionNote ?? ""),
+    [todo.completionNote],
+  );
+  const combinedGallery = useMemo(
+    () => [...gallery, ...completionGallery],
+    [gallery, completionGallery],
   );
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -2793,12 +2815,65 @@ function TodoItem({
     setEditingDesc(false);
   };
 
+  const commitCompletion = (value: string) => {
+    if (value !== (todo.completionNote ?? "")) {
+      onUpdate({ completionNote: value });
+    }
+    setEditingCompletion(false);
+  };
+
+  // Pulse the completion-note editor with a red border for ~1.2s after a
+  // failed mark-done attempt so the user knows where to look.
+  const pulseCompletionHighlight = useCallback(() => {
+    setCompletionHighlight(true);
+    window.setTimeout(() => setCompletionHighlight(false), 1200);
+  }, []);
+
   // Keep latestDescriptionRef in sync with the live editor while it is open.
   // RichTextEditorInner fires this on every transaction (sanitized HTML), so
   // pagehide below has something authoritative to send.
   const handleEditorChange = useCallback((html: string) => {
     latestDescriptionRef.current = html;
   }, []);
+
+  // Mirror of the above for the completion-note editor.
+  const handleCompletionEditorChange = useCallback((html: string) => {
+    latestCompletionRef.current = html;
+  }, []);
+
+  // Wrap the parent's `onToggleDone` with a client-side guard: when the user
+  // is trying to mark a todo as done (i.e. current done is false), require
+  // a non-empty completion note first. The server re-validates (defense in
+  // depth) — this is purely for instant UX feedback so the optimistic toggle
+  // never has to roll back for the obvious "user forgot to fill it in" case.
+  const handleToggleDone = useCallback(() => {
+    const tryingToComplete = !todo.done;
+    if (tryingToComplete) {
+      // Prefer the in-flight editor HTML (latestCompletionRef) over the
+      // stored todo.completionNote — the user may have typed something
+      // they haven't blurred out of the editor yet.
+      const candidate = latestCompletionRef.current || todo.completionNote || "";
+      if (!hasCompletionNoteContent(candidate)) {
+        setDetailsVisible(true);
+        setEditingCompletion(true);
+        pulseCompletionHighlight();
+        toast.show({
+          kind: "error",
+          message: t("Please fill in completion status before marking done"),
+        });
+        // Scroll the completion section into view on the next paint so the
+        // user sees the editor the toast just complained about.
+        window.requestAnimationFrame(() => {
+          completionSectionRef.current?.scrollIntoView({
+            block: "center",
+            behavior: "smooth",
+          });
+        });
+        return;
+      }
+    }
+    onToggleDone();
+  }, [todo.done, todo.completionNote, onToggleDone, pulseCompletionHighlight, toast, t]);
 
   // Flush unsaved description edits when the page is going away (refresh /
   // browser tab close). The editor's own unmount-cleanup in
@@ -2830,6 +2905,30 @@ function TodoItem({
     };
   }, [editingDesc]);
 
+  // Same pattern for the completion-note editor. Two independent pagehide
+  // listeners are cheaper than merging them and easier to reason about.
+  useEffect(() => {
+    if (!editingCompletion) return;
+    const flush = () => {
+      const latest = latestCompletionRef.current;
+      if (latest === todoCompletionRef.current) return;
+      try {
+        void fetch("/api/todos", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: todoIdRef.current, completionNote: latest }),
+          keepalive: true,
+        });
+      } catch {
+        // Best-effort — see description flush above.
+      }
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [editingCompletion]);
+
   return (
     <div
       onContextMenu={handleContextMenu}
@@ -2847,7 +2946,7 @@ function TodoItem({
         style={{ display: "flex", alignItems: "center", gap: 8 }}
       >
         <button
-          onClick={onToggleDone}
+          onClick={handleToggleDone}
           aria-label={t("Toggle done")}
           style={{
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -3009,9 +3108,83 @@ function TodoItem({
           </div>
         </div>
       ))}
-      {lightboxIndex !== null && gallery.length > 0 && !todo.done && (
+      {detailsVisible && (
+        <div style={{ marginLeft: 22 }} ref={completionSectionRef}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              marginTop: 4,
+              marginBottom: 2,
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: 0.4,
+              color: todo.done ? "var(--text-muted)" : "var(--text-dim)",
+            }}
+          >
+            <span>{t("Completion status")}</span>
+            {todo.done && todo.completionNote && hasCompletionNoteContent(todo.completionNote) && (
+              <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+                · {t("filled")}
+              </span>
+            )}
+          </div>
+          {editingCompletion ? (
+            <div
+              style={{
+                // No border in edit mode — the RichTextEditor's own toolbar +
+                // content area carry the chrome. When a failed mark-done
+                // attempt pulses `completionHighlight`, swap to a subtle red
+                // background tint as the cue.
+                background: completionHighlight ? "rgba(239, 68, 68, 0.1)" : "transparent",
+                borderRadius: 3,
+                transition: "background-color 0.3s",
+              }}
+            >
+              <RichTextEditor
+                defaultValue={todo.completionNote ?? ""}
+                onSave={commitCompletion}
+                onCancel={() => setEditingCompletion(false)}
+                onChange={handleCompletionEditorChange}
+                placeholder={t("Add completion status...")}
+              />
+            </div>
+          ) : (
+            <div
+              onDoubleClick={() => setEditingCompletion(true)}
+              style={{
+                minHeight: 18,
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: todo.completionNote ? "var(--text)" : "var(--text-dim)",
+                cursor: "text",
+                padding: "2px 0",
+                borderLeft: `2px solid ${completionHighlight ? "#ef4444" : "transparent"}`,
+                paddingLeft: 6,
+                transition: "border-color 0.3s",
+              }}
+            >
+              {todo.completionNote && hasCompletionNoteContent(todo.completionNote) ? (
+                <TodoDescriptionView
+                  html={todo.completionNote}
+                  searchTerm={searchTerm}
+                  onImageClick={(src) => {
+                    const idx = completionGallery.findIndex((g) => g.src === src);
+                    if (idx >= 0) setLightboxIndex(idx);
+                  }}
+                />
+              ) : (
+                <span style={{ fontStyle: "italic" }}>{t("Add completion status...")}</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {lightboxIndex !== null && combinedGallery.length > 0 && !todo.done && (
         <ImageLightbox
-          images={gallery}
+          images={combinedGallery}
           index={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onIndexChange={setLightboxIndex}

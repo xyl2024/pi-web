@@ -123,13 +123,15 @@ const userTodosListTool = defineTool<typeof ListParams, ListDetails>({
   name: "user_todos_list",
   label: "User Todos List",
   description:
-    "Look up the user's pi-web todos and return a lightweight summary (no description, no images). " +
-    "Each item exposes id, todo_name (title), status ('done' or 'processing'), create_time and due_time (epoch ms), and tags. " +
+    "Look up the user's pi-web todos and return a lightweight summary (no full description, no images). " +
+    "Each item exposes id, todo_name (title), status ('done' or 'processing'), create_time and due_time (epoch ms), tags, " +
+    "and — for done items — completion_note (rich-text HTML) and completed_at (epoch ms). " +
+    "completion_note is omitted for active todos and for legacy done rows that pre-date the completion_note column. " +
     "Filters: status (default 'all'); tags (OR-semantics, case-insensitive); create_time_window / due_time_window ({ start?, end? }) " +
     "in epoch ms with half-open [start, end) semantics. Either side of a window may be omitted. " +
     "due_time_window excludes todos without a deadline (they cannot satisfy a time bound). " +
     "Sort: active todos first by soonest deadline (todos without a deadline sink to the bottom), then completed by most recently completed. " +
-    "Use the returned id with user_todo_description to fetch the full description and embedded images. " +
+    "Use the returned id with user_todo_description to fetch the full description, full completion note, and embedded images for both fields. " +
     `Pass limit (default ${DEFAULT_LIST_LIMIT}, max ${MAX_LIST_LIMIT}) if you expect a large result; the response includes a 'truncated' flag.`,
   parameters: ListParams,
   executionMode: "sequential",
@@ -147,9 +149,11 @@ const userTodoDescriptionTool = defineTool<typeof DescriptionParams, Description
   name: "user_todo_description",
   label: "User Todo Description",
   description:
-    "Fetch the full description of a single todo by id. " +
-    "Returns content (the description text, may contain markdown image references like ![alt](/api/todo-images/<filename>)) " +
+    "Fetch the full description and completion note of a single todo by id. " +
+    "Returns content (the description HTML, may contain <img src='/api/todo-images/<filename>'> references) " +
     "and images (an array of { filename, url, mime } for every image referenced in the description — url is an absolute URL with origin). " +
+    "For done todos, also returns completion_note (rich-text HTML, possibly empty for legacy rows), " +
+    "completion_images (embedded image references inside the completion note), and completed_at (epoch ms). " +
     "If id does not match any todo, returns an error result with details.error = 'not_found' instead of throwing.",
   parameters: DescriptionParams,
   executionMode: "sequential",

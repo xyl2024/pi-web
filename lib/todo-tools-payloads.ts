@@ -49,6 +49,16 @@ export interface ListItem {
   create_time: number;
   due_time?: number;
   tags: Tag[];
+  /**
+   * The completion note (rich-text HTML, same allowlist as description). Only
+   * present when the todo is `done` and the note has non-whitespace content —
+   * older rows pre-dating the completion_note column will be missing this
+   * field. Use `user_todo_description` to fetch the full HTML with embedded
+   * image references.
+   */
+  completion_note?: string;
+  /** Epoch ms when the todo was last marked done. Only present for done todos. */
+  completed_at?: number;
 }
 
 export interface ListDetails {
@@ -68,6 +78,17 @@ export interface DescriptionDetails {
   id: string;
   content: string;
   images: DescriptionImage[];
+  /**
+   * The completion note (rich-text HTML, same allowlist as the description
+   * content). Empty string when the todo is not yet done or when no note has
+   * been written. Legacy rows pre-dating the completion_note column always
+   * return "" here, even if `status` is "done".
+   */
+  completion_note: string;
+  /** Embedded image references inside the completion note, if any. */
+  completion_images: DescriptionImage[];
+  /** Epoch ms when the todo was last marked done, or undefined if active. */
+  completed_at?: number;
 }
 
 export interface NotFoundDetails {
@@ -80,7 +101,7 @@ export interface NotFoundDetails {
 // ---------------------------------------------------------------------------
 
 export function todoToListItem(t: Todo): ListItem {
-  return {
+  const item: ListItem = {
     id: t.id,
     todo_name: t.title,
     status: t.done ? "done" : "processing",
@@ -88,18 +109,33 @@ export function todoToListItem(t: Todo): ListItem {
     due_time: t.deadline,
     tags: t.tags,
   };
+  // Only surface completion fields for done todos. Active todos never have a
+  // completion note, and the absence-vs-empty distinction helps the agent
+  // tell a "still active" todo from a "done but pre-completion-note-column"
+  // legacy row.
+  if (t.done) {
+    if (t.completionNote !== undefined) item.completion_note = t.completionNote;
+    if (t.completedAt !== undefined) item.completed_at = t.completedAt;
+  }
+  return item;
 }
 
 export interface BuildDescriptionPayload {
   id: string;
   content: string;
   images: DescriptionImage[];
+  completion_note: string;
+  completion_images: DescriptionImage[];
+  completed_at?: number;
 }
 
 /**
  * Pure helper backing `user_todo_description`: extract image references from
  * the description, resolve each to an absolute URL + mime, and return the
- * payload. Exported so tests can call it directly.
+ * payload. Exported so tests can call it directly. Also packages the
+ * completion note + its images so a single tool call gives the agent the
+ * full picture (plan, outcome, embedded screenshots) without needing the
+ * list tool's summary first.
  */
 export function buildDescriptionPayload(todo: Todo): BuildDescriptionPayload {
   const rawContent = todo.description ?? "";
@@ -109,7 +145,21 @@ export function buildDescriptionPayload(todo: Todo): BuildDescriptionPayload {
     url: todoImageUrl(filename),
     mime: mimeForTodoImageFilename(filename),
   }));
-  return { id: todo.id, content: rawContent, images };
+  const rawCompletion = todo.completionNote ?? "";
+  const completionFilenames = extractTodoImageFilenames(rawCompletion);
+  const completionImages: DescriptionImage[] = completionFilenames.map((filename) => ({
+    filename,
+    url: todoImageUrl(filename),
+    mime: mimeForTodoImageFilename(filename),
+  }));
+  return {
+    id: todo.id,
+    content: rawContent,
+    images,
+    completion_note: rawCompletion,
+    completion_images: completionImages,
+    completed_at: todo.completedAt,
+  };
 }
 
 export function buildDescriptionEchoText(todo: Todo, payload: BuildDescriptionPayload): string {
@@ -118,9 +168,29 @@ export function buildDescriptionEchoText(todo: Todo, payload: BuildDescriptionPa
     ? `${payload.content.slice(0, MAX_DESC_TEXT)}…[truncated]`
     : payload.content;
   const header = `Todo: ${todo.title}  [id=${todo.id}]  (${payload.images.length} image${payload.images.length === 1 ? "" : "s"})`;
-  if (payload.images.length > 0) return `${header}\n${echoed}`;
-  if (payload.content.length > 0) return `${header}\n${echoed}`;
-  return `${header}\n(description is empty)`;
+  const parts: string[] = [header];
+  if (payload.content.length > 0) {
+    parts.push(echoed);
+  } else {
+    parts.push("(description is empty)");
+  }
+  // Append the completion section only when there's something to show — keeps
+  // the active-todo echo compact. Legacy done todos without a completion note
+  // get the "(no completion note recorded)" hint so the agent can tell the
+  // data shape apart from "todo is still active".
+  if (todo.done) {
+    const completionTruncated = payload.completion_note.length > MAX_DESC_TEXT;
+    const completionEchoed = completionTruncated
+      ? `${payload.completion_note.slice(0, MAX_DESC_TEXT)}…[truncated]`
+      : payload.completion_note;
+    const completionHeader = `Completion (${payload.completion_images.length} image${payload.completion_images.length === 1 ? "" : "s"})`;
+    if (payload.completion_note.length > 0) {
+      parts.push(`${completionHeader}\n${completionEchoed}`);
+    } else {
+      parts.push(`${completionHeader}\n(no completion note recorded)`);
+    }
+  }
+  return parts.join("\n");
 }
 
 export interface ListPayloadParams {
@@ -156,8 +226,9 @@ function fmtDate(epochMs?: number): string {
 function fmtListLine(item: ListItem): string {
   const check = item.status === "done" ? "[x]" : "[ ]";
   const due = item.due_time !== undefined ? `  (due ${fmtDate(item.due_time)})` : "";
+  const completed = item.completed_at !== undefined ? `  (completed ${fmtDate(item.completed_at)})` : "";
   const tagPart = item.tags.length > 0 ? `  (tags: ${item.tags.map((t) => t.name).join(", ")})` : "";
-  return `${check} ${item.todo_name}${due}${tagPart}  [id=${item.id}]`;
+  return `${check} ${item.todo_name}${due}${completed}${tagPart}  [id=${item.id}]`;
 }
 
 /**

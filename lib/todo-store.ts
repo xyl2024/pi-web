@@ -13,6 +13,7 @@
 import { getDb } from "@/lib/db";
 import DOMPurify from "isomorphic-dompurify";
 import { buildDescriptionSanitizeConfig } from "@/lib/description-sanitize";
+import { hasCompletionNoteContent } from "@/lib/completion-note";
 
 export interface Tag {
   name: string;
@@ -23,6 +24,7 @@ export interface Todo {
   id: string;
   title: string;
   description?: string;
+  completionNote?: string;
   done: boolean;
   createdAt: number;
   completedAt?: number;
@@ -43,6 +45,7 @@ export type DeadlineFilter = "overdue" | "today" | "thisWeek" | "noDeadline";
 export interface TodoCreateInput {
   title: string;
   description?: string;
+  completionNote?: string;
   deadline?: number;
   tags?: (Tag | string)[];
 }
@@ -50,6 +53,7 @@ export interface TodoCreateInput {
 export interface TodoUpdateInput {
   title?: string;
   description?: string;
+  completionNote?: string;
   done?: boolean;
   deadline?: number | null;
   tags?: (Tag | string)[] | null;
@@ -153,6 +157,26 @@ export function normalizeDescription(value: unknown): string | undefined {
 }
 
 /**
+ * Sanitize a todo completion note (HTML) for storage. Same shape as
+ * `normalizeDescription` — pass-through when `undefined`, throws on
+ * non-string, DOMPurify + length cap. Reuses the same allowlist because the
+ * completion note is the same kind of "user-authored rich text" as the
+ * description; keeping them aligned means a single change to
+ * `lib/description-sanitize.ts` covers both.
+ */
+export function normalizeCompletionNote(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") {
+    throw new TodoValidationError("completionNote must be a string", "completionNote");
+  }
+  if (value.length > MAX_DESCRIPTION_LENGTH) {
+    throw new TodoValidationError("completionNote is too long", "completionNote");
+  }
+  if (value.length === 0) return "";
+  return DOMPurify.sanitize(value, buildDescriptionSanitizeConfig({ allowStyle: true }));
+}
+
+/**
  * Normalize a tag list: trim each entry, drop empties, dedupe case-insensitively
  * (preserving the first occurrence's original casing and color). Used at every
  * write site so the stored array is always canonical.
@@ -220,6 +244,7 @@ interface TodoRow {
   id: string;
   title: string;
   description: string | null;
+  completion_note: string | null;
   done: number;
   created_at: number;
   completed_at: number | null;
@@ -258,6 +283,7 @@ function rowToTodo(row: TodoRow): Todo {
     id: row.id,
     title: row.title,
     description: row.description ?? undefined,
+    completionNote: row.completion_note ?? undefined,
     done: row.done === 1,
     createdAt: row.created_at,
     completedAt: row.completed_at ?? undefined,
@@ -273,6 +299,7 @@ function rowToTodo(row: TodoRow): Todo {
 export function createTodo(_filePath: string, input: TodoCreateInput): Todo {
   const title = validateTitle(input.title);
   const description = normalizeDescription(input.description);
+  const completionNote = normalizeCompletionNote(input.completionNote);
   const deadline = validateOptionalDeadline(input.deadline);
   const tags = normalizeTags(input.tags);
 
@@ -289,9 +316,9 @@ export function createTodo(_filePath: string, input: TodoCreateInput): Todo {
 
   const insert = db.transaction(() => {
     db.prepare(
-      `INSERT INTO todos (id, title, description, done, created_at, deadline)
-       VALUES (?, ?, ?, 0, ?, ?)`,
-    ).run(id, title, description ?? null, createdAt, deadline ?? null);
+      `INSERT INTO todos (id, title, description, completion_note, done, created_at, deadline)
+       VALUES (?, ?, ?, ?, 0, ?, ?)`,
+    ).run(id, title, description ?? null, completionNote ?? null, createdAt, deadline ?? null);
     const tagStmt = db.prepare(
       `INSERT INTO todo_tags (todo_id, tag, color) VALUES (?, ?, ?)`,
     );
@@ -306,6 +333,7 @@ export function createTodo(_filePath: string, input: TodoCreateInput): Todo {
     id,
     title,
     description,
+    completionNote,
     done: false,
     createdAt,
     deadline,
@@ -354,9 +382,39 @@ export function updateTodo(_filePath: string, id: string, patch: TodoUpdateInput
         next.description = normalized;
       }
     }
+    if (patch.completionNote !== undefined) {
+      // Same null→undefined convention as `description`: undefined is the
+      // "clear" path; empty string is a valid completion note (would later
+      // fail the mark-done guard if the todo were then marked done).
+      const normalized = normalizeCompletionNote(patch.completionNote);
+      if (normalized === undefined) {
+        delete next.completionNote;
+      } else {
+        next.completionNote = normalized;
+      }
+    }
     if (patch.done !== undefined) {
       if (typeof patch.done !== "boolean") {
         throw new TodoValidationError("done must be a boolean", "done");
+      }
+      // Mark-done guard: when transitioning to done=true (or patching done
+      // on a row that's already done=true), the completion note must
+      // already have non-whitespace content. We check the *post-patch*
+      // value: either the patch supplied a new one, or we fall back to
+      // the row's current value. Legacy rows that pre-date the
+      // completion_note column are NULL — those won't reach this path
+      // unless the user re-toggles them, at which point the explicit
+      // completionNote must be supplied.
+      if (patch.done) {
+        const candidate = patch.completionNote !== undefined
+          ? normalizeCompletionNote(patch.completionNote) ?? ""
+          : (next.completionNote ?? "");
+        if (!hasCompletionNoteContent(candidate)) {
+          throw new TodoValidationError(
+            "completionNote is required to mark as done",
+            "completionNote",
+          );
+        }
       }
       // Server manages completedAt: false→true stamps, true→false clears.
       if (patch.done !== next.done) {
@@ -383,12 +441,13 @@ export function updateTodo(_filePath: string, id: string, patch: TodoUpdateInput
 
     db.prepare(
       `UPDATE todos
-         SET title = ?, description = ?, done = ?,
+         SET title = ?, description = ?, completion_note = ?, done = ?,
              completed_at = ?, deadline = ?
        WHERE id = ?`,
     ).run(
       next.title,
       next.description ?? null,
+      next.completionNote ?? null,
       next.done ? 1 : 0,
       next.completedAt ?? null,
       next.deadline ?? null,

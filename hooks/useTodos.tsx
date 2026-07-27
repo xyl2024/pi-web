@@ -16,6 +16,7 @@ export interface Todo {
   id: string;
   title: string;
   description?: string;
+  completionNote?: string;
   done: boolean;
   createdAt: number;
   completedAt?: number;
@@ -23,14 +24,14 @@ export interface Todo {
   tags: Tag[];
 }
 
-export type TodoPatch = Partial<Pick<Todo, "title" | "description" | "done" | "deadline" | "tags">>;
+export type TodoPatch = Partial<Pick<Todo, "title" | "description" | "completionNote" | "done" | "deadline" | "tags">>;
 
 interface TodoContextValue {
   todos: Todo[];
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  addTodo: (title: string, opts?: { description?: string; deadline?: number; tags?: Tag[] }) => Promise<Todo | null>;
+  addTodo: (title: string, opts?: { description?: string; completionNote?: string; deadline?: number; tags?: Tag[] }) => Promise<Todo | null>;
   updateTodo: (id: string, patch: TodoPatch) => Promise<void>;
   deleteTodo: (id: string) => Promise<void>;
   toggleDone: (id: string) => Promise<void>;
@@ -109,10 +110,11 @@ export function TodoProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
-  const addTodo = useCallback(async (title: string, opts?: { description?: string; deadline?: number; tags?: Tag[] }): Promise<Todo | null> => {
+  const addTodo = useCallback(async (title: string, opts?: { description?: string; completionNote?: string; deadline?: number; tags?: Tag[] }): Promise<Todo | null> => {
     const trimmed = title.trim();
     if (trimmed.length === 0) return null;
     const description = opts?.description;
+    const completionNote = opts?.completionNote;
     // Default new todos to today (end-of-day) — matches the convention the
     // deadline picker uses so the "Due today" tone lights up immediately.
     const deadline = opts?.deadline ?? new Date(new Date().setHours(23, 59, 59, 999)).getTime();
@@ -123,6 +125,7 @@ export function TodoProvider({ children }: { children: ReactNode }) {
       id: tempId,
       title: trimmed,
       description,
+      completionNote,
       done: false,
       createdAt: Date.now(),
       deadline,
@@ -133,7 +136,7 @@ export function TodoProvider({ children }: { children: ReactNode }) {
       const res = await fetch("/api/todos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: trimmed, description, deadline, tags }),
+        body: JSON.stringify({ title: trimmed, description, completionNote, deadline, tags }),
       });
       if (!res.ok) {
         const { error } = (await res.json().catch(() => ({ error: "" }))) as { error?: string };

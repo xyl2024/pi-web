@@ -32,18 +32,20 @@ export async function GET() {
   }
 }
 
-// POST /api/todos  body: { title: string; description?: string; deadline?: number; tags?: string[] }
+// POST /api/todos  body: { title: string; description?: string; completionNote?: string; deadline?: number; tags?: string[] }
 export async function POST(req: Request) {
   const startedAt = Date.now();
   try {
     const body = (await req.json().catch(() => ({}))) as {
-      title?: unknown; description?: unknown; deadline?: unknown; tags?: unknown;
+      title?: unknown; description?: unknown; completionNote?: unknown; deadline?: unknown; tags?: unknown;
     };
     // Preserve pre-refactor behavior: silently drop non-string description on create.
     const description = typeof body.description === "string" ? body.description : undefined;
+    const completionNote = typeof body.completionNote === "string" ? body.completionNote : undefined;
     const todo = createTodo(TODOS_FILE, {
       title: body.title as string,
       description,
+      completionNote,
       deadline: body.deadline as number | undefined,
       tags: Array.isArray(body.tags) ? (body.tags as (Tag | string)[]) : undefined,
     });
@@ -56,12 +58,12 @@ export async function POST(req: Request) {
   }
 }
 
-// PATCH /api/todos  body: { id: string; title?: string; description?: string; done?: boolean; deadline?: number | null; tags?: string[] | null }
+// PATCH /api/todos  body: { id: string; title?: string; description?: string; completionNote?: string; done?: boolean; deadline?: number | null; tags?: string[] | null }
 export async function PATCH(req: Request) {
   const startedAt = Date.now();
   try {
     const body = (await req.json().catch(() => ({}))) as {
-      id?: unknown; title?: unknown; description?: unknown; done?: unknown; deadline?: unknown; tags?: unknown;
+      id?: unknown; title?: unknown; description?: unknown; completionNote?: unknown; done?: unknown; deadline?: unknown; tags?: unknown;
     };
     if (typeof body.id !== "string") {
       return NextResponse.json({ error: "id must be a string" }, { status: 400 });
@@ -69,6 +71,7 @@ export async function PATCH(req: Request) {
     const todo = updateTodo(TODOS_FILE, body.id, {
       title: body.title as string | undefined,
       description: body.description as string | undefined,
+      completionNote: body.completionNote as string | undefined,
       done: body.done as boolean | undefined,
       deadline: body.deadline as number | null | undefined,
       tags: body.tags === null
