@@ -11,6 +11,7 @@ import { useContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { Tooltip } from "@/components/Tooltip";
 import { DatePicker } from "./DatePicker";
+import { TodoMonthCalendar, type CalendarMonth } from "./TodoMonthCalendar";
 import { extractImagesFromHtml, ImageLightbox } from "./ImageLightbox";
 import { TodoDescriptionView } from "./TodoDescriptionView";
 import { highlightMatch } from "./HighlightText";
@@ -57,6 +58,29 @@ const SORT_OPTIONS: ReadonlyArray<{ key: SortKey; labelKey: string; direction: "
   { key: "deadline", labelKey: "Sort by due date", direction: "asc" },
 ];
 
+function sortTodos(
+  todos: Todo[],
+  sortOption: (typeof SORT_OPTIONS)[number],
+  activeFirst: boolean,
+): Todo[] {
+  return [...todos].sort((a, b) => {
+    if (activeFirst && a.done !== b.done) return a.done ? 1 : -1;
+
+    const sortKey = sortOption.key;
+    if (sortKey === "deadline" || sortKey === "completedAt") {
+      const aVal = a[sortKey];
+      const bVal = b[sortKey];
+      if (aVal === undefined && bVal === undefined) return b.createdAt - a.createdAt;
+      if (aVal === undefined) return 1;
+      if (bVal === undefined) return -1;
+      return sortOption.direction === "asc" ? aVal - bVal : bVal - aVal;
+    }
+
+    return sortOption.direction === "asc"
+      ? a.createdAt - b.createdAt
+      : b.createdAt - a.createdAt;
+  });
+}
 /**
  * Read and validate a persisted Filters object from localStorage. Falls back to
  * DEFAULT_FILTERS for any field that doesn't match the expected shape so a
@@ -272,6 +296,12 @@ function startOfDay(ts: number): number {
   return d.getTime();
 }
 
+function startOfNextDay(ts: number): number {
+  const date = new Date(startOfDay(ts));
+  date.setDate(date.getDate() + 1);
+  return date.getTime();
+}
+
 function formatDateForInput(ts: number): string {
   const d = new Date(ts);
   const y = d.getFullYear();
@@ -315,7 +345,7 @@ function CalendarIcon({ size = 11 }: { size?: number }) {
 }
 
 export function TodoPanel() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { todos, loading, refresh, addTodo, updateTodo, deleteTodo, toggleDone, exportTodo, renameTag, deleteTag, setTagColor } = useTodos();
   const confirm = useConfirm();
   const toast = useToast();
@@ -323,6 +353,11 @@ export function TodoPanel() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [calendarSelectedDay, setCalendarSelectedDay] = useState<number | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<CalendarMonth>(() => {
+    const date = new Date();
+    return { year: date.getFullYear(), month: date.getMonth() };
+  });
 
   // Hydrate persisted filter preference after mount (SSR-safe: defaults above
   // match what the server renders, then we sync from localStorage).
@@ -346,6 +381,11 @@ export function TodoPanel() {
       // localStorage unavailable — in-memory state is still updated.
     }
   }, []);
+
+  const handleFiltersChange = useCallback((next: Filters) => {
+    setCalendarSelectedDay(null);
+    applyFiltersChange(next);
+  }, [applyFiltersChange]);
 
   const filterActive = viewFilters.status !== "all" || viewFilters.deadline !== "all" || viewFilters.dateRange.from != null || viewFilters.dateRange.to != null || viewFilters.tags.length > 0;
 
@@ -387,11 +427,10 @@ export function TodoPanel() {
     // valid SortKey is in SORT_OPTIONS, but a stale Filters shape from a
     // future migration shouldn't crash the list.
     const sortOption = SORT_OPTIONS.find((o) => o.key === viewFilters.sort) ?? SORT_OPTIONS[0];
-    const sortKey = sortOption.key;
     const wantedTags = viewFilters.tags.length > 0
       ? new Set(viewFilters.tags.map((t) => t.toLowerCase()))
       : null;
-    return [...todos]
+    const filtered = [...todos]
       .filter((x) => {
         if (viewFilters.status === "active" && x.done) return false;
         if (viewFilters.status === "done" && !x.done) return false;
@@ -432,34 +471,38 @@ export function TodoPanel() {
       .filter((x) => {
         if (!wantedTags) return true;
         return x.tags.some((t) => wantedTags.has(t.name.toLowerCase()));
-      })
-      .sort((a, b) => {
-        // status="all" keeps the existing "active first, done last" partition
-        // regardless of the chosen sort key — see plan Q4. Items within the
-        // same partition get the user's chosen order below.
-        if (viewFilters.status === "all" && a.done !== b.done) {
-          return a.done ? 1 : -1;
-        }
-        // For deadline / completedAt, todos with no value float to the end so
-        // the user always sees the most actionable items on top; within that
-        // "unspecified" tail, secondary-order by createdAt desc so the order
-        // matches what the user sees when filtering "No deadline". The legacy
-        // `?? 0` fallback (which mishandled undefined as 1970-01-01) is gone.
-        if (sortKey === "deadline" || sortKey === "completedAt") {
-          const aVal = a[sortKey];
-          const bVal = b[sortKey];
-          if (aVal === undefined && bVal === undefined) {
-            return (b.createdAt ?? 0) - (a.createdAt ?? 0);
-          }
-          if (aVal === undefined) return 1;
-          if (bVal === undefined) return -1;
-          return sortOption.direction === "asc" ? aVal - bVal : bVal - aVal;
-        }
-        const av = a[sortKey];
-        const bv = b[sortKey];
-        return sortOption.direction === "asc" ? av - bv : bv - av;
       });
+    return sortTodos(filtered, sortOption, viewFilters.status === "all");
   }, [todos, viewFilters, searchTerm, startOfToday, startOfTomorrow, endOfThisWeek, startOfThisMonth, endOfThisMonth]);
+
+  const calendarSortOption = SORT_OPTIONS.find((o) => o.key === viewFilters.sort) ?? SORT_OPTIONS[0];
+  const calendarTodos = useMemo(
+    () => sortTodos(todos, calendarSortOption, true),
+    [todos, calendarSortOption],
+  );
+  const displayedTodos = useMemo(() => {
+    if (calendarSelectedDay == null) return visible;
+    const dayEnd = startOfNextDay(calendarSelectedDay);
+    return calendarTodos.filter((todo) => todo.deadline != null && todo.deadline >= calendarSelectedDay && todo.deadline < dayEnd);
+  }, [calendarSelectedDay, calendarTodos, visible]);
+
+  const handleCalendarSelectDay = useCallback((ts: number) => {
+    const dayEnd = startOfNextDay(ts);
+    const hasTodos = todos.some((todo) => todo.deadline != null && todo.deadline >= ts && todo.deadline < dayEnd);
+    if (!hasTodos) return;
+    if (calendarSelectedDay === ts) {
+      setCalendarSelectedDay(null);
+      return;
+    }
+    applyFiltersChange({ ...DEFAULT_FILTERS, sort: viewFilters.sort });
+    setSearchTerm("");
+    setCalendarSelectedDay(ts);
+  }, [applyFiltersChange, calendarSelectedDay, todos, viewFilters.sort]);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setCalendarSelectedDay(null);
+    setSearchTerm(value);
+  }, []);
 
   const handleCreate = async (input: { title: string; tags?: string[] }): Promise<boolean> => {
     const trimmed = input.title.trim();
@@ -538,7 +581,7 @@ export function TodoPanel() {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg)" }}>
       <FilterBar
         filters={viewFilters}
-        onFiltersChange={applyFiltersChange}
+        onFiltersChange={handleFiltersChange}
         filterOpen={filterOpen}
         onFilterOpenChange={setFilterOpen}
         filterActive={filterActive}
@@ -546,7 +589,7 @@ export function TodoPanel() {
         onSortOpenChange={setSortOpen}
         onCreate={handleCreate}
         searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
+        onSearchChange={handleSearchChange}
         tagSuggestions={tagSuggestions}
         tagCounts={tagCounts}
         onRenameTag={handleRenameTag}
@@ -555,18 +598,18 @@ export function TodoPanel() {
         onRefresh={refresh}
         refreshing={loading}
       />
-      <div style={{ flex: 1, overflowY: "auto", padding: "4px 6px" }}>
+      <div style={{ flex: 2, minHeight: 0, overflowY: "auto", padding: "4px 6px" }}>
         {loading && todos.length === 0 && (
           <div style={{ padding: "16px 12px", fontSize: 12, color: "var(--text-muted)", textAlign: "center" }}>
             {t("Loading...")}
           </div>
         )}
-        {!loading && visible.length === 0 && (
+        {!loading && displayedTodos.length === 0 && (
           <div style={{ padding: "16px 12px", fontSize: 12, color: "var(--text-dim)", textAlign: "center" }}>
             {searchTerm.trim() ? t("No matches") : t("No todos")}
           </div>
         )}
-        {visible.map((todo) => (
+        {displayedTodos.map((todo) => (
           <TodoItem
             key={todo.id}
             todo={todo}
@@ -578,6 +621,17 @@ export function TodoPanel() {
             tagSuggestions={tagSuggestions}
           />
         ))}
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", boxShadow: "0 -6px 14px var(--bg-subtle)" }}>
+        <TodoMonthCalendar
+          todos={calendarTodos}
+          month={calendarMonth}
+          today={now}
+          selectedDay={calendarSelectedDay}
+          locale={locale}
+          onMonthChange={setCalendarMonth}
+          onSelectDay={handleCalendarSelectDay}
+        />
       </div>
     </div>
   );

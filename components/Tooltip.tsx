@@ -4,16 +4,19 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { ReactNode } from "react";
 
 interface Props {
-  content: string;
+  content: ReactNode;
   children: ReactNode;
   side?: "top" | "right" | "bottom" | "left";
   align?: "start" | "center" | "end";
+  delayDuration?: number;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function Tooltip({ content, children, side, align }: Props) {
+export function Tooltip({ content, children, side, align, delayDuration = 500, open, onOpenChange }: Props) {
   return (
-    <TooltipPrimitive.Provider delayDuration={500}>
-      <TooltipPrimitive.Root>
+    <TooltipPrimitive.Provider delayDuration={delayDuration}>
+      <TooltipPrimitive.Root open={open} onOpenChange={onOpenChange}>
         <TooltipPrimitive.Trigger asChild>
           {children}
         </TooltipPrimitive.Trigger>

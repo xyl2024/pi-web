@@ -414,6 +414,15 @@ export const ZH_TRANSLATIONS = {
   "Today": "今天",
   "Clear": "清除",
   "Deadline removed": "已清除截止日期",
+  "Calendar": "月历",
+  "Monday": "一",
+  "Tuesday": "二",
+  "Wednesday": "三",
+  "Thursday": "四",
+  "Friday": "五",
+  "Saturday": "六",
+  "Sunday": "日",
+  "{n} todos": "{n} 项待办",
 
   // Todo description rich-text editor (Tiptap)
   "Bold": "加粗",
