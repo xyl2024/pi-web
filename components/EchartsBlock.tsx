@@ -21,26 +21,29 @@ function loadLib(): Promise<typeof echarts> {
 // the user's own assistant session, so the trust boundary is the same as any
 // other rendered assistant output. Every evaluation is wrapped in try/catch so
 // a malformed option can never take down the surrounding page.
-function evalOption(code: string, lib: typeof echarts): unknown {
-  // JS-style `option = <expr>` body: assign to a local `option` and return
-  // its final value, so the author doesn't need to write `return option;`
-  // themselves. Trailing semicolons and follow-up statements that mutate
-  // `option` are supported. The bare `return (${code})` path below can't
-  // handle this shape — a trailing `;` inside `(...)` is a syntax error.
-  if (/^\s*option\s*=/.test(code)) {
-    try {
-      return new Function("echarts", `var option;\n${code}\nreturn option;`)(lib);
-    } catch {
-      // fall through to the expression / statement-body paths
-    }
-  }
+//
+// Returns a Promise so the caller can `await` uniformly. The async
+// statement-body path wraps the block in an async IIFE, which unlocks
+// `await` inside the block — `const data = await fetch(...); option = {
+// series: [{ data }] };` renders the chart once the fetch settles.
+async function evalOption(code: string, lib: typeof echarts): Promise<unknown> {
   try {
-    // Common case: the block is an object-literal expression.
+    // Fast path: bare expression — `{ ... }`, `[...]`, an identifier, etc.
+    // Parens make an object literal parse as a value, not a block. Stays
+    // sync so the common case pays no async IIFE overhead.
     return new Function("echarts", `return (${code})`)(lib);
   } catch {
-    // Fallback: the author wrote a statement body ending in `return option`.
-    return new Function("echarts", code)(lib);
+    // Not a valid expression — fall through to the async statement-body path.
   }
+  // Async statement body: the IIFE wrapper lets the user `await`, and the
+  // appended `return option` propagates the final value once any awaits
+  // settle. `typeof` against an undeclared identifier returns `"undefined"`
+  // without throwing, so it's safe even when the block never references
+  // `option`.
+  return new Function(
+    "echarts",
+    `return (async () => { ${code}\n;return typeof option !== "undefined" ? option : undefined; })();`,
+  )(lib);
 }
 
 const CHART_HEIGHT = 400;
@@ -61,11 +64,15 @@ interface Props {
  * MessageView, FileViewer, ShowFileRenderer, and TodoDescriptionView to detect
  * ```echarts blocks and replace react-markdown's default `pre > code` fallback
  * with an actual ECharts chart. The block body is JS that evaluates to an
- * ECharts `option` object — either a bare object-literal expression
- * `{ ... }`, or a JS-style assignment `option = { ... }` (single or
- * multi-line, optional trailing semicolons). The assignment form doesn't
- * need a trailing `return option;` — the final value of `option` is
- * returned automatically.
+ * ECharts `option` object — either a bare expression (`{ ... }`, `[...]`,
+ * etc.) or a statement body that assigns to `option`. Statement bodies may
+ * declare helpers above the assignment and don't need a trailing
+ * `return option;` — the final value of `option` is returned automatically.
+ *
+ * `await` is supported: the block body is wrapped in an async IIFE so users
+ * can write `const data = await fetch(...); option = { series: [{ data }]
+ * };` and have the chart render once the await settles. Until then the
+ * block shows a "Rendering…" placeholder.
  */
 export function EchartsBlock({ code, isStreaming }: Props) {
   const { t } = useI18n();
@@ -75,6 +82,10 @@ export function EchartsBlock({ code, isStreaming }: Props) {
   const [copied, setCopied] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"rendered" | "source">("rendered");
+  // Eval result is state, not a useMemo, because eval is async — `await`
+  // inside the block makes the result a Promise.
+  const [option, setOption] = useState<object | null>(null);
+  const [evalError, setEvalError] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
@@ -102,23 +113,31 @@ export function EchartsBlock({ code, isStreaming }: Props) {
     return v || (isDark ? "#1a1a1a" : "#ffffff");
   }, [preset, isDark]);
 
-  // Evaluate the code into an option object. Object identity changes only when
-  // the source changes, so the render effect below doesn't re-init on every
-  // parent render.
-  const { option, error: evalError } = useMemo<{
-    option: object | null;
-    error: string | null;
-  }>(() => {
-    if (!lib) return { option: null, error: null };
-    try {
-      const opt = evalOption(code, lib);
-      if (!opt || typeof opt !== "object") {
-        return { option: null, error: "Evaluated value is not an ECharts option object" };
-      }
-      return { option: opt, error: null };
-    } catch (e) {
-      return { option: null, error: e instanceof Error ? e.message : String(e) };
-    }
+  // Evaluate the code into an option object whenever `code` or `lib` changes.
+  // Reset to `null` first so a previous chart doesn't flash while the new
+  // eval settles. The `cancelled` flag discards stale results when `code`
+  // changes mid-flight (e.g. fast token stream during streaming).
+  useEffect(() => {
+    if (!lib) return;
+    setOption(null);
+    setEvalError(null);
+    let cancelled = false;
+    evalOption(code, lib)
+      .then((opt) => {
+        if (cancelled) return;
+        if (opt && typeof opt === "object") {
+          setOption(opt as object);
+        } else {
+          setEvalError("Evaluated value is not an ECharts option object");
+        }
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setEvalError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [code, lib]);
 
   // Init / update the chart whenever the option, theme, or view mode changes.
