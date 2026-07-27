@@ -7,9 +7,10 @@ interface Props {
   content: string;
   children: ReactNode;
   side?: "top" | "right" | "bottom" | "left";
+  align?: "start" | "center" | "end";
 }
 
-export function Tooltip({ content, children, side }: Props) {
+export function Tooltip({ content, children, side, align }: Props) {
   return (
     <TooltipPrimitive.Provider delayDuration={500}>
       <TooltipPrimitive.Root>
@@ -19,6 +20,7 @@ export function Tooltip({ content, children, side }: Props) {
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
             side={side}
+            align={align}
             sideOffset={5}
             style={{
               zIndex: 9999,

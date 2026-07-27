@@ -2844,9 +2844,8 @@ function TodoItem({
       <div
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
-        style={{ position: "relative" }}
+        style={{ display: "flex", alignItems: "center", gap: 8 }}
       >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <button
           onClick={onToggleDone}
           aria-label={t("Toggle done")}
@@ -2909,7 +2908,7 @@ function TodoItem({
             }}
           />
         ) : (
-          <Tooltip content={todo.title}>
+          <Tooltip content={todo.title} side="top" align="start">
             <span
               onClick={() => setDetailsVisible((v) => !v)}
               onDoubleClick={() => { setTitleDraft(todo.title); setEditingTitle(true); }}
@@ -2939,51 +2938,38 @@ function TodoItem({
             </span>
           </Tooltip>
         )}
+        {!editingTitle && hovering && todo.tags.length > 0 && (
+          <div
+            style={{
+              display: "flex", gap: 4, alignItems: "center",
+              flexShrink: 0,
+            }}
+          >
+            {todo.tags.map((tg, i) => (
+              <span
+                key={`${tg.name}-${i}`}
+                style={{
+                  display: "inline-flex", alignItems: "center",
+                  padding: "1px 8px",
+                  fontSize: 11,
+                  background: tg.color ?? "var(--bg-panel)",
+                  color: tg.color ? tagContrastText(tg.color) : "var(--text-muted)",
+                  border: tg.color ? "none" : "1px solid var(--border)",
+                  borderRadius: 10,
+                  lineHeight: 1.5,
+                }}
+              >
+                {tg.name}
+              </span>
+            ))}
+          </div>
+        )}
         <DeadlineControl
           todo={todo}
           open={deadlinePickerOpen}
           onOpenChange={setDeadlinePickerOpen}
           onChange={(v) => onUpdate({ deadline: v })}
         />
-      </div>
-      {!editingTitle && hovering && todo.tags.length > 0 ? (
-        <div
-          // Absolutely positioned to float just below the title row without
-          // pushing the description (or sibling todos) down — `pointerEvents:
-          // none` keeps the overlay from blocking clicks on whatever sits
-          // beneath it. Read-only chips don't need to receive events anyway.
-          style={{
-            position: "absolute",
-            top: "calc(100% + 2px)",
-            left: 22,
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 4,
-            alignItems: "center",
-            zIndex: 2,
-            pointerEvents: "none",
-            maxWidth: "calc(100% - 28px)",
-          }}
-        >
-          {todo.tags.map((tg, i) => (
-            <span
-              key={`${tg.name}-${i}`}
-              style={{
-                display: "inline-flex", alignItems: "center",
-                padding: "1px 8px",
-                fontSize: 11,
-                background: tg.color ?? "var(--bg-panel)",
-                color: tg.color ? tagContrastText(tg.color) : "var(--text-muted)",
-                border: tg.color ? "none" : "1px solid var(--border)",
-                borderRadius: 10,
-                lineHeight: 1.5,
-              }}
-            >
-              {tg.name}
-            </span>
-          ))}
-        </div>
-      ) : null}
       </div>
       {detailsVisible && (editingDesc && !todo.done ? (
         <RichTextEditor
