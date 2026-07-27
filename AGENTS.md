@@ -269,8 +269,6 @@ app/api/
   translate/route.ts                POST { text, provider, modelId, target } — in-memory LLM call, no disk
   weixin/{login,login/verify-code,logout,status,contacts,test-send,inbound,workspace}
                                     WeChat login, contacts, send/receive, push-to-workspace
-  finance/{route,[id]/route,export/route}.ts
-                                    CRUD + zip export for the finance ledger (~/.pi-web/finance.db)
   notes/{route,notes-tags/{route,color/route}}.ts + note-images/{route,[filename]/route}.ts
                                     notes CRUD, tag rename/color, image upload/serve
   rss/{feeds/{route,[id]/route,[id]/articles/route},articles/{[id]/route,mark-all-read/route},fetch/route}.ts
@@ -319,8 +317,8 @@ lib/
                             + startup.ts (instrumentation bootstrap)
   wechat/                   WeChat client + workspace push utilities + inbound monitor + state
   fonts/                    vendored LXGW WenKai webfonts (woff2, subsetted) + OFL + README
-  finance-{db,schema,store,preset-categories}.ts + notes-{db,store} + rss-{db,schema,sanitize,store}.ts
-                                    DB handles + validation + CRUD for the three side features
+  notes-{db,store} + rss-{db,schema,sanitize,store}.ts
+                                    DB handles + validation + CRUD for the two side features
   note-image-upload.ts + rss/{loop,startup}.ts  one-shot image upload + self-rescheduling RSS poll loop
 
 components/
@@ -377,8 +375,6 @@ components/
   WeChatSettingsSection.tsx
                             WeChat login + send-to-workspace settings
   ReplayBar.tsx            replay controls above ChatWindow (rewind/step through earlier turns)
-  FinancePanel.tsx + FinanceEntryModal.tsx + FinanceQuickEntry.tsx + FinanceStatsCards.tsx
-  + FinanceTransactionList.tsx  right-panel tab for the finance ledger
   NotesPanel.tsx           right-panel tab for markdown notes + tags
   RssPanel.tsx             right-panel tab for RSS feeds / articles / read state
 
@@ -396,7 +392,6 @@ hooks/
                             per-turn tool-call statistics reducer + provider
   useDragDrop.ts            drag-and-drop file/image upload
   useAudio.ts               tone for agent-end notifications
-  useFinance.ts             single-snapshot GET finance ledger + mutate via /api/finance
   useNotes.tsx              notes provider + tag list + image upload
   useRss.ts                 RSS feeds/articles polling + mark-read actions
 

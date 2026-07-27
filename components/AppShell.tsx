@@ -15,7 +15,6 @@ import { JsonPanel } from "./JsonPanel";
 import { CanvasPanel } from "./CanvasPanel";
 import { DiffPanel } from "./DiffPanel";
 import { RssPanel } from "./RssPanel";
-import { FinancePanel } from "./FinancePanel";
 import { TokensPanel } from "./TokensPanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 
@@ -27,7 +26,6 @@ const JSON_TAB_ID = "json:global";
 const CANVAS_TAB_ID = "canvas:global";
 const DIFF_TAB_ID = "diff:global";
 const RSS_TAB_ID = "rss:global";
-const FINANCE_TAB_ID = "finance:global";
 const TOKENS_TAB_ID = "tokens:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
@@ -564,16 +562,6 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [t]);
 
-  // Open the Finance (daily-accounting) panel — same pattern.
-  const handleOpenFinanceTab = useCallback(() => {
-    setFileTabs((prev) => {
-      if (prev.some((tab) => tab.kind === "finance")) return prev;
-      return [{ kind: "finance", id: FINANCE_TAB_ID, label: t("Finance") }, ...prev];
-    });
-    setActiveFileTabId(FINANCE_TAB_ID);
-    setRightPanelState("normal");
-  }, [t]);
-
   // Open the Token-audit panel.
   const handleOpenTokensTab = useCallback(() => {
     setFileTabs((prev) => {
@@ -690,7 +678,6 @@ export function AppShell() {
     openToolCallsTab: handleOpenToolCallsTab,
     openJsonTab: handleOpenJsonTab,
     openDiffTab: handleOpenDiffTab,
-    openFinanceTab: handleOpenFinanceTab,
     openTokensTab: handleOpenTokensTab,
     toggleSidebar: () => setSidebarOpen((v) => !v),
     toggleRightPanel: () => setRightPanelState((v) => v === "closed" ? "normal" : "closed"),
@@ -703,7 +690,6 @@ export function AppShell() {
     handleOpenTodoTab, handleOpenFavoritesTab, handleOpenCanvasTab,
     handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenJsonTab,
     handleOpenDiffTab,
-    handleOpenFinanceTab,
     handleOpenTokensTab,
     toggleFocus, agentControls,
     selectedSession, newSessionCwd, activeCwd,
@@ -1132,8 +1118,6 @@ export function AppShell() {
             <DiffPanel />
           ) : activeFileTab?.kind === "rss" ? (
             <RssPanel />
-          ) : activeFileTab?.kind === "finance" ? (
-            <FinancePanel />
           ) : activeFileTab?.kind === "tokens" ? (
             <TokensPanel onSelectSession={handleSelectSession} />
           ) : (
@@ -1191,27 +1175,6 @@ export function AppShell() {
             <polyline points="8 12 11 15 17 9" />
           </svg>
         </button>
-        </Tooltip>
-        {/* Open Finance (daily-accounting) panel */}
-        <Tooltip content={t("Finance")}>
-          <button
-            onClick={handleOpenFinanceTab}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center",
-              width: 36, height: 36, padding: 0,
-              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
-              color: activeFileTab?.kind === "finance" ? "var(--accent)" : "var(--text-muted)",
-              cursor: "pointer", transition: "color 0.12s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = activeFileTab?.kind === "finance" ? "var(--accent)" : "var(--text-muted)"; }}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="4.5" width="12" height="9" rx="1.5" />
-              <path d="M2 7h12" />
-              <circle cx="11.5" cy="10.5" r="0.8" fill="currentColor" stroke="none" />
-            </svg>
-          </button>
         </Tooltip>
         {/* Open canvas — single global whiteboard */}
         <Tooltip content={activeFileTab?.kind === "canvas" ? t("Hide canvas") : t("Open canvas")}>
