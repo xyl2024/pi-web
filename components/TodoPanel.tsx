@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useI18n, type Locale } from "@/hooks/useI18n";
-import { useTodos, type Tag, type Todo } from "@/hooks/useTodos";
+import { useTodos, type Tag, type Todo, type Priority } from "@/hooks/useTodos";
 import { hasCompletionNoteContent } from "@/lib/completion-note";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -19,19 +19,31 @@ import { TAG_COLOR_PRESETS, tagContrastText } from "@/lib/todo-color-presets";
 
 type StatusFilter = "all" | "active" | "done";
 type DeadlineFilter = "all" | "overdue" | "today" | "thisWeek" | "thisMonth" | "noDeadline";
-type SortKey = "createdAt" | "completedAt" | "deadline";
 
 type Filters = {
   status: StatusFilter;
   deadline: DeadlineFilter;
   dateRange: { from: number | null; to: number | null };
   tags: string[];
-  sort: SortKey;
+  /**
+   * Multi-select priority filter. Empty array = no filter (show all). When
+   * non-empty, a todo is included iff its `priority` matches one of the
+   * entries, OR (when the array contains the literal `"none"`) it has no
+   * priority set. The list view always sorts by priority regardless —
+   * this only narrows which rows are visible.
+   */
+  priorityFilters: (Priority | "none")[];
 };
 
 type DeadlineTone = "overdue" | "today" | "future";
 
-const DEFAULT_FILTERS: Filters = { status: "all", deadline: "all", dateRange: { from: null, to: null }, tags: [], sort: "createdAt" };
+const DEFAULT_FILTERS: Filters = {
+  status: "all",
+  deadline: "all",
+  dateRange: { from: null, to: null },
+  tags: [],
+  priorityFilters: [],
+};
 
 // Persists the user's filter preference across tab close/reopen and page reload.
 // Follows the i18n hydration pattern (hooks/useI18n.tsx) — lazy default + useEffect read.
@@ -46,45 +58,49 @@ const DEADLINE_VALUES: ReadonlySet<DeadlineFilter> = new Set([
   "thisMonth",
   "noDeadline",
 ]);
-const SORT_VALUES: ReadonlySet<SortKey> = new Set(["createdAt", "completedAt", "deadline"]);
+const PRIORITY_FILTER_VALUES: ReadonlySet<Priority | "none"> = new Set<Priority | "none">([
+  "high",
+  "medium",
+  "low",
+  "none",
+]);
 
-// Sort picker options. Direction is implicit per key (matches the well-known
-// intuition: deadlines ascending shows what's due soonest first; created /
-// completed timestamps descending shows "newest first"). Keeping these grouped
-// in one place so the comparator and the popover agree on the order and label.
-const SORT_OPTIONS: ReadonlyArray<{ key: SortKey; labelKey: string; direction: "asc" | "desc" }> = [
-  { key: "createdAt", labelKey: "Sort by created time", direction: "desc" },
-  { key: "completedAt", labelKey: "Sort by completed time", direction: "desc" },
-  { key: "deadline", labelKey: "Sort by due date", direction: "asc" },
-];
+// Higher rank = closer to the top of the list. Mirrors `priorityRank` in
+// lib/todo-store.ts (server-side sort) — kept in sync by hand. `undefined`
+// (DB NULL / never set) ranks last so users always see the things they
+// actually marked first.
+function priorityRank(p: Priority | undefined): number {
+  switch (p) {
+    case "high":
+      return 3;
+    case "medium":
+      return 2;
+    case "low":
+      return 1;
+    default:
+      return 0;
+  }
+}
 
-function sortTodos(
-  todos: Todo[],
-  sortOption: (typeof SORT_OPTIONS)[number],
-  activeFirst: boolean,
-): Todo[] {
+// Comparator used by the todo list and the month calendar. Active todos
+// always sort ahead of completed ones (the "now vs. archive" split);
+// inside each bucket, priority desc → createdAt desc.
+function sortByPriorityThenCreatedAt(todos: Todo[], activeFirst: boolean): Todo[] {
   return [...todos].sort((a, b) => {
     if (activeFirst && a.done !== b.done) return a.done ? 1 : -1;
-
-    const sortKey = sortOption.key;
-    if (sortKey === "deadline" || sortKey === "completedAt") {
-      const aVal = a[sortKey];
-      const bVal = b[sortKey];
-      if (aVal === undefined && bVal === undefined) return b.createdAt - a.createdAt;
-      if (aVal === undefined) return 1;
-      if (bVal === undefined) return -1;
-      return sortOption.direction === "asc" ? aVal - bVal : bVal - aVal;
-    }
-
-    return sortOption.direction === "asc"
-      ? a.createdAt - b.createdAt
-      : b.createdAt - a.createdAt;
+    const ap = priorityRank(a.priority);
+    const bp = priorityRank(b.priority);
+    if (ap !== bp) return bp - ap;
+    return b.createdAt - a.createdAt;
   });
 }
+
 /**
  * Read and validate a persisted Filters object from localStorage. Falls back to
  * DEFAULT_FILTERS for any field that doesn't match the expected shape so a
- * corrupt or stale entry can never crash the panel.
+ * corrupt or stale entry can never crash the panel. Any `sort` field carried
+ * over from a pre-priority release is silently dropped — the new sort order
+ * (priority → createdAt) is hardcoded and not user-toggleable.
  */
 function parsePersistedFilters(raw: string | null): Filters {
   if (!raw) return DEFAULT_FILTERS;
@@ -105,10 +121,13 @@ function parsePersistedFilters(raw: string | null): Filters {
     const tags = Array.isArray(o.tags) && o.tags.every((t) => typeof t === "string")
       ? (o.tags as string[])
       : [];
-    const sort = SORT_VALUES.has(o.sort as SortKey)
-      ? (o.sort as SortKey)
-      : DEFAULT_FILTERS.sort;
-    return { status, deadline, dateRange: { from, to }, tags, sort };
+    const pfRaw = o.priorityFilters;
+    const priorityFilters: (Priority | "none")[] =
+      Array.isArray(pfRaw) &&
+      pfRaw.every((v): v is Priority | "none" => typeof v === "string" && PRIORITY_FILTER_VALUES.has(v as Priority | "none"))
+        ? (pfRaw as (Priority | "none")[])
+        : DEFAULT_FILTERS.priorityFilters;
+    return { status, deadline, dateRange: { from, to }, tags, priorityFilters };
   } catch {
     return DEFAULT_FILTERS;
   }
@@ -351,7 +370,6 @@ export function TodoPanel() {
   const toast = useToast();
   const [viewFilters, setViewFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [sortOpen, setSortOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [calendarSelectedDay, setCalendarSelectedDay] = useState<number | null>(null);
   const [calendarMonth, setCalendarMonth] = useState<CalendarMonth>(() => {
@@ -387,7 +405,7 @@ export function TodoPanel() {
     applyFiltersChange(next);
   }, [applyFiltersChange]);
 
-  const filterActive = viewFilters.status !== "all" || viewFilters.deadline !== "all" || viewFilters.dateRange.from != null || viewFilters.dateRange.to != null || viewFilters.tags.length > 0;
+  const filterActive = viewFilters.status !== "all" || viewFilters.deadline !== "all" || viewFilters.dateRange.from != null || viewFilters.dateRange.to != null || viewFilters.tags.length > 0 || viewFilters.priorityFilters.length > 0;
 
   const [now] = useState(() => Date.now());
   const startOfToday = startOfDay(now);
@@ -422,14 +440,16 @@ export function TodoPanel() {
   }, [todos]);
 
   const visible = useMemo(() => {
-    // Direction comes from SORT_OPTIONS (defined alongside the picker so the
-    // comparator and the UI agree). Default to "desc" defensively — every
-    // valid SortKey is in SORT_OPTIONS, but a stale Filters shape from a
-    // future migration shouldn't crash the list.
-    const sortOption = SORT_OPTIONS.find((o) => o.key === viewFilters.sort) ?? SORT_OPTIONS[0];
+    // The list is always sorted by priority desc -> createdAt desc, with
+    // active todos always above completed ones (when the user hasn't
+    // already filtered down to one bucket). The priority filter is
+    // applied here, before sorting, so set-based membership checks stay
+    // cheap.
     const wantedTags = viewFilters.tags.length > 0
       ? new Set(viewFilters.tags.map((t) => t.toLowerCase()))
       : null;
+    const pf = viewFilters.priorityFilters;
+    const priorityWanted = pf.length > 0 ? new Set(pf) : null;
     const filtered = [...todos]
       .filter((x) => {
         if (viewFilters.status === "active" && x.done) return false;
@@ -471,14 +491,22 @@ export function TodoPanel() {
       .filter((x) => {
         if (!wantedTags) return true;
         return x.tags.some((t) => wantedTags.has(t.name.toLowerCase()));
+      })
+      .filter((x) => {
+        if (!priorityWanted) return true;
+        const key: Priority | "none" = x.priority ?? "none";
+        return priorityWanted.has(key);
       });
-    return sortTodos(filtered, sortOption, viewFilters.status === "all");
+    return sortByPriorityThenCreatedAt(filtered, viewFilters.status === "all");
   }, [todos, viewFilters, searchTerm, startOfToday, startOfTomorrow, endOfThisWeek, startOfThisMonth, endOfThisMonth]);
 
-  const calendarSortOption = SORT_OPTIONS.find((o) => o.key === viewFilters.sort) ?? SORT_OPTIONS[0];
+  // The month calendar projects every todo onto a day grid; per-day
+  // ordering follows the same priority-then-createdAt rule so a high-
+  // priority todo always sits above a medium-priority one when both
+  // fall on the same date.
   const calendarTodos = useMemo(
-    () => sortTodos(todos, calendarSortOption, true),
-    [todos, calendarSortOption],
+    () => sortByPriorityThenCreatedAt(todos, true),
+    [todos],
   );
   const displayedTodos = useMemo(() => {
     if (calendarSelectedDay == null) return visible;
@@ -494,10 +522,10 @@ export function TodoPanel() {
       setCalendarSelectedDay(null);
       return;
     }
-    applyFiltersChange({ ...DEFAULT_FILTERS, sort: viewFilters.sort });
+    applyFiltersChange({ ...DEFAULT_FILTERS });
     setSearchTerm("");
     setCalendarSelectedDay(ts);
-  }, [applyFiltersChange, calendarSelectedDay, todos, viewFilters.sort]);
+  }, [applyFiltersChange, calendarSelectedDay, todos]);
 
   const handleSearchChange = useCallback((value: string) => {
     setCalendarSelectedDay(null);
@@ -585,8 +613,6 @@ export function TodoPanel() {
         filterOpen={filterOpen}
         onFilterOpenChange={setFilterOpen}
         filterActive={filterActive}
-        sortOpen={sortOpen}
-        onSortOpenChange={setSortOpen}
         onCreate={handleCreate}
         searchTerm={searchTerm}
         onSearchChange={handleSearchChange}
@@ -643,8 +669,6 @@ function FilterBar({
   filterOpen,
   onFilterOpenChange,
   filterActive,
-  sortOpen,
-  onSortOpenChange,
   onCreate,
   searchTerm,
   onSearchChange,
@@ -661,8 +685,6 @@ function FilterBar({
   filterOpen: boolean;
   onFilterOpenChange: (open: boolean) => void;
   filterActive: boolean;
-  sortOpen: boolean;
-  onSortOpenChange: (open: boolean) => void;
   onCreate: (input: { title: string; tags?: string[] }) => Promise<boolean>;
   searchTerm: string;
   onSearchChange: (v: string) => void;
@@ -775,43 +797,6 @@ function FilterBar({
             onChange={onFiltersChange}
             onClose={() => onFilterOpenChange(false)}
             tagSuggestions={tagSuggestions}
-          />
-        )}
-      </div>
-      <div style={{ position: "relative", flexShrink: 0 }}>
-        <button
-          onClick={() => onSortOpenChange(!sortOpen)}
-          aria-haspopup="dialog"
-          aria-expanded={sortOpen}
-          aria-label={t("Sort")}
-          title={t("Sort")}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            width: 22, height: 22, padding: 0,
-            flexShrink: 0,
-            background: sortOpen ? "var(--bg-selected)" : "transparent",
-            border: "1px solid var(--border)",
-            borderRadius: 4,
-            cursor: "pointer",
-            color: sortOpen ? "var(--text)" : "var(--text-muted)",
-            transition: "background 0.1s, color 0.1s",
-            fontFamily: "inherit",
-          }}
-        >
-          <svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-            <line x1="2.5" y1="2" x2="7.5" y2="2" />
-            <polyline points="6,0.5 7.5,2 6,3.5" />
-            <line x1="2.5" y1="5" x2="7.5" y2="5" />
-            <polyline points="4,3.5 2.5,5 4,6.5" />
-            <line x1="2.5" y1="8" x2="7.5" y2="8" />
-            <polyline points="6,6.5 7.5,8 6,9.5" />
-          </svg>
-        </button>
-        {sortOpen && (
-          <SortPopover
-            value={filters.sort}
-            onChange={(key) => onFiltersChange({ ...filters, sort: key })}
-            onClose={() => onSortOpenChange(false)}
           />
         )}
       </div>
@@ -1332,6 +1317,35 @@ function FilterPopover({
     onChange({ ...filters, tags: next });
   };
 
+  const togglePriority = (value: Priority | "none") => {
+    const next = filters.priorityFilters.includes(value)
+      ? filters.priorityFilters.filter((p) => p !== value)
+      : [...filters.priorityFilters, value];
+    onChange({ ...filters, priorityFilters: next });
+  };
+
+  // Color swatch + glyph mirrored from PriorityChip so the filter row is
+  // immediately recognizable to anyone who has seen the chip in the list.
+  const prioritySwatch = (value: Priority | "none"): { bg: string; fg: string; glyph: string } => {
+    switch (value) {
+      case "high":
+        return { bg: "#ef4444", fg: "#ffffff", glyph: "!" };
+      case "medium":
+        return { bg: "#f97316", fg: "#ffffff", glyph: "=" };
+      case "low":
+        return { bg: "#3b82f6", fg: "#ffffff", glyph: "↓" };
+      case "none":
+        return { bg: "transparent", fg: "var(--text-dim)", glyph: "" };
+    }
+  };
+
+  const PRIORITY_FILTER_OPTIONS: { value: Priority | "none"; labelKey: string }[] = [
+    { value: "high", labelKey: "High priority" },
+    { value: "medium", labelKey: "Medium priority" },
+    { value: "low", labelKey: "Low priority" },
+    { value: "none", labelKey: "No priority" },
+  ];
+
   const renderOption = <K extends string>(
     options: { key: K; labelKey: string }[],
     current: K,
@@ -1491,6 +1505,75 @@ function FilterPopover({
       </div>
       <div>
         <div style={{ fontSize: 10, color: "var(--text-dim)", padding: "2px 8px 4px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          {t("Filter by priority")}
+        </div>
+        <div role="group" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          {PRIORITY_FILTER_OPTIONS.map((o) => {
+            const checked = filters.priorityFilters.includes(o.value);
+            const swatch = prioritySwatch(o.value);
+            return (
+              <button
+                key={o.value}
+                type="button"
+                role="checkbox"
+                aria-checked={checked}
+                onClick={() => togglePriority(o.value)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "4px 8px",
+                  fontSize: 11,
+                  textAlign: "left",
+                  background: checked ? "var(--bg-selected)" : "transparent",
+                  border: "none",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  color: checked ? "var(--text)" : "var(--text-muted)",
+                  fontFamily: "inherit",
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    width: 10, height: 10, flexShrink: 0,
+                    border: `1.2px solid ${checked ? "var(--accent)" : "var(--text-dim)"}`,
+                    borderRadius: 2,
+                    background: checked ? "var(--accent)" : "transparent",
+                    color: "var(--bg)",
+                  }}
+                >
+                  {checked && (
+                    <svg width="7" height="7" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="2 5 4.5 7.5 8.5 2.5" />
+                    </svg>
+                  )}
+                </span>
+                {/* Mini priority swatch so the filter row previews the same
+                    color the chip uses in the list — see PriorityChip below. */}
+                <span
+                  aria-hidden
+                  style={{
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    width: 14, height: 14, flexShrink: 0,
+                    borderRadius: "50%",
+                    background: swatch.bg,
+                    color: swatch.fg,
+                    border: o.value === "none" ? "1px dashed var(--text-dim)" : "none",
+                    fontSize: 9,
+                    fontWeight: 600,
+                    lineHeight: 1,
+                  }}
+                >
+                  {swatch.glyph}
+                </span>
+                {t(o.labelKey)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div>
+        <div style={{ fontSize: 10, color: "var(--text-dim)", padding: "2px 8px 4px", textTransform: "uppercase", letterSpacing: 0.5 }}>
           {t("Filter by tags")}
         </div>
         {tagSuggestions.length === 0 ? (
@@ -1580,30 +1663,128 @@ function FilterPopover({
   );
 }
 
+// Priority chip palette + glyph. The same color/glyph triple is reused by
+// the Filter popover's preview swatch (FilterPopover.prioritySwatch) and
+// by the inline chip on each todo row — keep them all in sync here.
+const PRIORITY_PALETTE: Record<Priority, { bg: string; fg: string; glyph: string; labelKey: string }> = {
+  high:   { bg: "#ef4444", fg: "#ffffff", glyph: "!", labelKey: "High priority" },
+  medium: { bg: "#f97316", fg: "#ffffff", glyph: "=", labelKey: "Medium priority" },
+  low:    { bg: "#3b82f6", fg: "#ffffff", glyph: "↓", labelKey: "Low priority" },
+};
+
 /**
- * Sort picker. Mirrors FilterPopover's outside-click + ESC dismissal so a
- * user can muscle-memory-bounce between the two. Each option carries an
- * implicit `direction` from SORT_OPTIONS; we render a ↑/↓ marker inline so the
- * "soonest first" / "newest first" semantic is visible without a separate
- * toggle button.
+ * A constant circular indicator rendered to the left of a todo's title when
+ * its priority is set. Clicking it opens a small popover with three levels
+ * plus a "Clear" option. `undefined` priority means no chip — the title
+ * renders flush against the checkbox to keep the row visually calm.
+ *
+ * The round icon carries the semantic so the user can identify priorities
+ * without depending solely on color; this is also helpful for color-blind
+ * users (the chip + dot is a redundant encoding of the same info).
  */
-function SortPopover({
+function PriorityChip({
   value,
   onChange,
+}: {
+  value: Priority;
+  onChange: (next: Priority | null) => void;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement | null>(null);
+  const palette = PRIORITY_PALETTE[value];
+
+  useEffect(() => {
+    if (!open) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (rootRef.current && e.target instanceof Node && !rootRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <span ref={rootRef} style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+      <Tooltip content={t(palette.labelKey)} side="top" align="start">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((v) => !v);
+          }}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-label={t("Set priority")}
+          title={t("Set priority")}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 14, height: 14,
+            borderRadius: "50%",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+            background: palette.bg,
+            color: palette.fg,
+            fontSize: 9,
+            fontWeight: 700,
+            lineHeight: 1,
+            fontFamily: "inherit",
+          }}
+        >
+          {palette.glyph}
+        </button>
+      </Tooltip>
+      {open && (
+        <PriorityPopover
+          current={value}
+          onSelect={(next) => {
+            onChange(next);
+            setOpen(false);
+          }}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </span>
+  );
+}
+
+/**
+ * Picker rendered when a PriorityChip is clicked. Mirrors SortPopover's
+ * outside-click + Esc handling, but emits an explicit "clear" option
+ * (passing `null`) in addition to the three enum values. The currently
+ * selected priority is shown with a filled dot — same affordance as
+ * StatusFilter and DeadlineFilter, so the pattern stays consistent.
+ */
+function PriorityPopover({
+  current,
+  onSelect,
   onClose,
 }: {
-  value: SortKey;
-  onChange: (next: SortKey) => void;
+  current: Priority;
+  onSelect: (next: Priority | null) => void;
   onClose: () => void;
 }) {
   const { t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
-
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
-      if (!ref.current) return;
-      if (e.target instanceof Node && ref.current.contains(e.target)) return;
-      onClose();
+      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target)) {
+        onClose();
+      }
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -1619,17 +1800,61 @@ function SortPopover({
     };
   }, [onClose]);
 
+  // Use the same local order as priorityRank (high > medium > low). `null`
+  // is rendered as a separate "Clear" entry after a thin divider so it
+  // doesn't get confused with a normal priority choice.
+  const choices: { key: Priority | "clear"; selected: boolean; onClick: () => void; render: () => React.ReactNode }[] = [
+    {
+      key: "high",
+      selected: current === "high",
+      onClick: () => onSelect("high"),
+      render: () => (
+        <span aria-hidden style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 14, height: 14, borderRadius: "50%", background: PRIORITY_PALETTE.high.bg, color: PRIORITY_PALETTE.high.fg, fontSize: 9, fontWeight: 700 }}>
+          {PRIORITY_PALETTE.high.glyph}
+        </span>
+      ),
+    },
+    {
+      key: "medium",
+      selected: current === "medium",
+      onClick: () => onSelect("medium"),
+      render: () => (
+        <span aria-hidden style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 14, height: 14, borderRadius: "50%", background: PRIORITY_PALETTE.medium.bg, color: PRIORITY_PALETTE.medium.fg, fontSize: 9, fontWeight: 700 }}>
+          {PRIORITY_PALETTE.medium.glyph}
+        </span>
+      ),
+    },
+    {
+      key: "low",
+      selected: current === "low",
+      onClick: () => onSelect("low"),
+      render: () => (
+        <span aria-hidden style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 14, height: 14, borderRadius: "50%", background: PRIORITY_PALETTE.low.bg, color: PRIORITY_PALETTE.low.fg, fontSize: 9, fontWeight: 700 }}>
+          {PRIORITY_PALETTE.low.glyph}
+        </span>
+      ),
+    },
+    {
+      key: "clear",
+      selected: false,
+      onClick: () => onSelect(null),
+      render: () => (
+        <span aria-hidden style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 14, height: 14, borderRadius: "50%", border: "1px dashed var(--text-dim)" }} />
+      ),
+    },
+  ];
+
   return (
     <div
       ref={ref}
       role="dialog"
-      aria-label={t("Sort")}
+      aria-label={t("Set priority")}
       style={{
         position: "absolute",
         top: "calc(100% + 4px)",
-        right: 0,
+        left: 0,
         zIndex: 10,
-        minWidth: 168,
+        minWidth: 152,
         padding: 6,
         background: "var(--bg-panel)",
         border: "1px solid var(--border)",
@@ -1641,49 +1866,70 @@ function SortPopover({
       }}
     >
       <div style={{ fontSize: 10, color: "var(--text-dim)", padding: "2px 8px 4px", textTransform: "uppercase", letterSpacing: 0.5 }}>
-        {t("Sort")}
+        {t("Priority")}
       </div>
       <div role="radiogroup" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        {SORT_OPTIONS.map((o) => {
-          const selected = value === o.key;
-          const arrow = o.direction === "asc" ? "↑" : "↓";
-          return (
-            <button
-              key={o.key}
-              role="radio"
-              aria-checked={selected}
-              onClick={() => onChange(o.key)}
+        {choices.slice(0, 3).map((c) => (
+          <button
+            key={c.key}
+            type="button"
+            role="radio"
+            aria-checked={c.selected}
+            onClick={c.onClick}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "4px 8px",
+              fontSize: 11,
+              textAlign: "left",
+              background: c.selected ? "var(--bg-selected)" : "transparent",
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer",
+              color: c.selected ? "var(--text)" : "var(--text-muted)",
+              fontFamily: "inherit",
+            }}
+          >
+            <span
+              aria-hidden
               style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "4px 8px",
-                fontSize: 11,
-                textAlign: "left",
-                background: selected ? "var(--bg-selected)" : "transparent",
-                border: "none",
-                borderRadius: 4,
-                cursor: "pointer",
-                color: selected ? "var(--text)" : "var(--text-muted)",
-                fontFamily: "inherit",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 10, height: 10, flexShrink: 0,
+                border: `1.2px solid ${c.selected ? "var(--accent)" : "var(--text-dim)"}`,
+                borderRadius: "50%",
               }}
             >
-              <span
-                aria-hidden
-                style={{
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  width: 10, height: 10, flexShrink: 0,
-                  border: `1.2px solid ${selected ? "var(--accent)" : "var(--text-dim)"}`,
-                  borderRadius: "50%",
-                }}
-              >
-                {selected && (
-                  <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--accent)" }} />
-                )}
-              </span>
-              <span style={{ flex: 1 }}>{t(o.labelKey)}</span>
-              <span style={{ color: "var(--text-dim)", fontSize: 10 }}>{arrow}</span>
-            </button>
-          );
-        })}
+              {c.selected && (
+                <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--accent)" }} />
+              )}
+            </span>
+            {c.render()}
+            {c.key === "high" && t("High priority")}
+            {c.key === "medium" && t("Medium priority")}
+            {c.key === "low" && t("Low priority")}
+          </button>
+        ))}
+        <div style={{ height: 1, background: "var(--border)", margin: "4px 8px" }} />
+        <button
+          type="button"
+          role="radio"
+          aria-checked={false}
+          onClick={() => onSelect(null)}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "4px 8px",
+            fontSize: 11,
+            textAlign: "left",
+            background: "transparent",
+            border: "none",
+            borderRadius: 4,
+            cursor: "pointer",
+            color: "var(--text-muted)",
+            fontFamily: "inherit",
+          }}
+        >
+          {choices[3].render()}
+          {t("Clear")}
+        </button>
       </div>
     </div>
   );
@@ -2706,7 +2952,7 @@ function TodoItem({
 }: {
   todo: Todo;
   onToggleDone: () => void;
-  onUpdate: (patch: { title?: string; description?: string; completionNote?: string; done?: boolean; deadline?: number; tags?: Tag[] }) => void;
+  onUpdate: (patch: { title?: string; description?: string; completionNote?: string; done?: boolean; deadline?: number; tags?: Tag[]; priority?: Priority | null }) => void;
   onDelete: () => void;
   onExport: () => Promise<void>;
   searchTerm: string;
@@ -2782,6 +3028,33 @@ function TodoItem({
           setEditingTitle(true);
         },
       },
+      {
+        // Right-click fallback for the priority chip click — useful when the
+        // user is mousing over the title text rather than the small chip
+        // icon, or on touch devices that don't have a hover affordance.
+        // The visible chip on the row already shows the current value, so
+        // we deliberately do not mark the active option here.
+        key: "set-priority-high",
+        label: t("High priority"),
+        onSelect: () => onUpdate({ priority: "high" }),
+      },
+      {
+        key: "set-priority-medium",
+        label: t("Medium priority"),
+        onSelect: () => onUpdate({ priority: "medium" }),
+      },
+      {
+        key: "set-priority-low",
+        label: t("Low priority"),
+        onSelect: () => onUpdate({ priority: "low" }),
+      },
+      ...(todo.priority !== undefined
+        ? [{
+            key: "clear-priority",
+            label: t("No priority"),
+            onSelect: () => onUpdate({ priority: null }),
+          }]
+        : []),
       {
         key: "set-deadline",
         label: todo.deadline !== undefined ? t("Change deadline") : t("Set deadline"),
@@ -3020,6 +3293,15 @@ function TodoItem({
             </svg>
           )}
         </button>
+        {/* Priority chip sits between the checkbox and the chevron. Rendered
+            only when a priority is set; the title then slides over so an unset
+            todo still reads flush against the checkbox. */}
+        {todo.priority && (
+          <PriorityChip
+            value={todo.priority}
+            onChange={(next) => onUpdate({ priority: next })}
+          />
+        )}
         <span
           aria-hidden="true"
           style={{

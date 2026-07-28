@@ -50,6 +50,13 @@ export interface ListItem {
   due_time?: number;
   tags: Tag[];
   /**
+   * User-facing priority. Omitted (not `null`) when no priority is set —
+   * the field is part of the lightweight summary so the agent can decide
+   * which rows to fetch first, but doesn't bloat the default listing for
+   * todos that never had one.
+   */
+  priority?: "high" | "medium" | "low";
+  /**
    * The completion note (rich-text HTML, same allowlist as description). Only
    * present when the todo is `done` and the note has non-whitespace content —
    * older rows pre-dating the completion_note column will be missing this
@@ -109,6 +116,9 @@ export function todoToListItem(t: Todo): ListItem {
     due_time: t.deadline,
     tags: t.tags,
   };
+  // Only surface priority when set — todos without one stay compact in the
+  // summary view, matching how the user-facing list renders.
+  if (t.priority !== undefined) item.priority = t.priority;
   // Only surface completion fields for done todos. Active todos never have a
   // completion note, and the absence-vs-empty distinction helps the agent
   // tell a "still active" todo from a "done but pre-completion-note-column"
@@ -225,10 +235,11 @@ function fmtDate(epochMs?: number): string {
 
 function fmtListLine(item: ListItem): string {
   const check = item.status === "done" ? "[x]" : "[ ]";
+  const priority = item.priority !== undefined ? `  (priority: ${item.priority})` : "";
   const due = item.due_time !== undefined ? `  (due ${fmtDate(item.due_time)})` : "";
   const completed = item.completed_at !== undefined ? `  (completed ${fmtDate(item.completed_at)})` : "";
   const tagPart = item.tags.length > 0 ? `  (tags: ${item.tags.map((t) => t.name).join(", ")})` : "";
-  return `${check} ${item.todo_name}${due}${completed}${tagPart}  [id=${item.id}]`;
+  return `${check} ${item.todo_name}${priority}${due}${completed}${tagPart}  [id=${item.id}]`;
 }
 
 /**

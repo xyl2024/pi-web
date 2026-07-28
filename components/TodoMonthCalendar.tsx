@@ -77,6 +77,15 @@ function heatmapBackground(count: number, maxCount: number): string | undefined 
   return `color-mix(in srgb, var(--accent) ${opacity}%, transparent)`;
 }
 
+// Mirrored from PRIORITY_PALETTE in components/TodoPanel.tsx — kept narrow
+// here so the tooltip doesn't pull the entire TodoPanel into a separate
+// import surface (and to keep this file self-contained).
+const CALENDAR_PRIORITY_DOT: Record<NonNullable<Todo["priority"]>, { bg: string; glyph: string }> = {
+  high:   { bg: "#ef4444", glyph: "!" },
+  medium: { bg: "#f97316", glyph: "=" },
+  low:    { bg: "#3b82f6", glyph: "↓" },
+};
+
 function DayTooltipContent({ todos, t }: { todos: Todo[]; t: (key: string) => string }): ReactNode {
   return (
     <div style={{ maxHeight: "min(60vh, 240px)", overflowY: "auto", minWidth: 160 }}>
@@ -88,16 +97,47 @@ function DayTooltipContent({ todos, t }: { todos: Todo[]; t: (key: string) => st
           <div
             key={todo.id}
             style={{
-              display: "-webkit-box",
-              WebkitBoxOrient: "vertical",
-              WebkitLineClamp: 2,
-              overflow: "hidden",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 6,
               textDecoration: todo.done ? "line-through" : "none",
               opacity: todo.done ? 0.5 : 1,
               wordBreak: "break-word",
             }}
           >
-            {todo.title}
+            {todo.priority && (
+              <span
+                aria-hidden
+                title={todo.priority}
+                style={{
+                  flexShrink: 0,
+                  marginTop: 2,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 10,
+                  height: 10,
+                  borderRadius: "50%",
+                  background: CALENDAR_PRIORITY_DOT[todo.priority].bg,
+                  color: "#ffffff",
+                  fontSize: 7,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                }}
+              >
+                {CALENDAR_PRIORITY_DOT[todo.priority].glyph}
+              </span>
+            )}
+            <span
+              style={{
+                display: "-webkit-box",
+                WebkitBoxOrient: "vertical",
+                WebkitLineClamp: 2,
+                overflow: "hidden",
+              }}
+            >
+              {todo.title}
+            </span>
           </div>
         ))}
       </div>

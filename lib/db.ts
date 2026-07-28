@@ -38,7 +38,8 @@ const SCHEMA = `
     done            INTEGER NOT NULL DEFAULT 0,
     created_at      INTEGER NOT NULL,
     completed_at    INTEGER,
-    deadline        INTEGER
+    deadline        INTEGER,
+    priority        TEXT
   );
 
   CREATE TABLE IF NOT EXISTS todo_tags (
@@ -58,6 +59,11 @@ const SCHEMA = `
     ON todos(done, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_todos_done_completed_at
     ON todos(done, completed_at DESC);
+  -- The (done, priority, created_at) composite index lives in
+  -- ensurePriorityColumn — it depends on the priority column having
+  -- been ALTER'd in, so it must run after that, not inside the SCHEMA
+  -- block (which is a single atomic exec and would fail on legacy DBs
+  -- where the table exists without the column).
   CREATE INDEX IF NOT EXISTS idx_todo_tags_tag
     ON todo_tags(tag);
 `;
@@ -91,6 +97,7 @@ export function getDb(): Database.Database {
   db.exec(SCHEMA);
   ensureTagColorColumn(db);
   ensureCompletionNoteColumn(db);
+  ensurePriorityColumn(db);
 
   globalThis.__piTodosDb = db;
   migrateFromJsonIfNeeded(db, dbPath);
@@ -122,6 +129,38 @@ function ensureCompletionNoteColumn(db: Database.Database): void {
   const cols = db.prepare("PRAGMA table_info(todos)").all() as { name: string }[];
   if (cols.some((c) => c.name === "completion_note")) return;
   db.exec("ALTER TABLE todos ADD COLUMN completion_note TEXT");
+}
+
+/**
+ * One-shot column addition for `todos.priority`. Stores an optional
+ * `"high" | "medium" | "low"` enum (see `Priority` in lib/todo-store.ts).
+ * Legacy rows read back with `priority = NULL`, treated as "no priority
+ * set" by both the store and the UI. No backfill is performed: leaving
+ * NULL means these rows sort to the end of every priority-aware listing.
+ *
+ * Also creates the composite index that backs the
+ * "(active first) -> priority desc -> createdAt desc" sort. The index is
+ * created here (not inside the SCHEMA block) so legacy DBs see the column
+ * before the index tries to reference it — otherwise `db.exec(SCHEMA)`
+ * on a pre-existing todos.db would throw "no such column: priority" and
+ * break `getDb()` on production cold starts.
+ */
+function ensurePriorityColumn(db: Database.Database): void {
+  const cols = db.prepare("PRAGMA table_info(todos)").all() as { name: string }[];
+  if (cols.some((c) => c.name === "priority")) {
+    // Column exists (fresh DB or already-migrated). Make sure the index
+    // is also present (idempotent CREATE).
+    db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_todos_done_priority_created_at " +
+        "ON todos(done, priority, created_at DESC)",
+    );
+    return;
+  }
+  db.exec("ALTER TABLE todos ADD COLUMN priority TEXT");
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_todos_done_priority_created_at " +
+      "ON todos(done, priority, created_at DESC)",
+  );
 }
 
 /**

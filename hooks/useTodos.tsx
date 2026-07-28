@@ -12,6 +12,11 @@ export interface Tag {
   color?: string;
 }
 
+// Mirrors lib/todo-store.ts `Priority`. Kept narrow (3 values) so a stray
+// `medium` vs `Medium` mismatch is caught at compile time instead of the
+// server returning a 400.
+export type Priority = "high" | "medium" | "low";
+
 export interface Todo {
   id: string;
   title: string;
@@ -22,9 +27,26 @@ export interface Todo {
   completedAt?: number;
   deadline?: number;
   tags: Tag[];
+  /**
+   * User-facing priority. `undefined` means the user never set one — such
+   * rows sort to the bottom of every priority-aware listing and render no
+   * chip in the UI.
+   */
+  priority?: Priority;
 }
 
-export type TodoPatch = Partial<Pick<Todo, "title" | "description" | "completionNote" | "done" | "deadline" | "tags">>;
+// `priority` is the only field where `null` has meaning distinct from
+// "omit the key" — it explicitly clears the column. Reflect that by
+// declaring the patch type by hand instead of `Partial<Pick<...>>`.
+export type TodoPatch = {
+  title?: string;
+  description?: string;
+  completionNote?: string;
+  done?: boolean;
+  deadline?: number;
+  tags?: Tag[];
+  priority?: Priority | null;
+};
 
 interface TodoContextValue {
   todos: Todo[];
@@ -161,15 +183,31 @@ export function TodoProvider({ children }: { children: ReactNode }) {
       const optimisticCompletedAt = patch.done === undefined
         ? x.completedAt
         : (patch.done ? Date.now() : undefined);
-      return { ...x, ...patch, completedAt: optimisticCompletedAt };
+      const { priority: patchPriority, ...rest } = patch;
+      // `patch.priority === null` means "clear" — drop the field so the
+      // optimistic Todo keeps `priority` as `undefined` (matches DB NULL).
+      // Any other patch value (Priority or undefined) is a normal spread.
+      const next: Todo = { ...x, ...rest, completedAt: optimisticCompletedAt };
+      if (patchPriority === undefined) {
+        // No change.
+      } else if (patchPriority === null) {
+        delete next.priority;
+      } else {
+        next.priority = patchPriority;
+      }
+      return next;
     }));
     if (!snapshot) return;
     try {
-      // JSON.stringify drops `undefined` fields, so an explicit clear of deadline
-      // would look identical to "no change" to the server. Send `null` instead.
+      // JSON.stringify drops `undefined` fields, so an explicit clear of
+      // deadline or priority would look identical to "no change" to the
+      // server. Send `null` instead.
       const body: Record<string, unknown> = { id, ...patch };
       if ("deadline" in patch && patch.deadline === undefined) {
         body.deadline = null;
+      }
+      if ("priority" in patch && patch.priority === undefined) {
+        body.priority = null;
       }
       const res = await fetch("/api/todos", {
         method: "PATCH",

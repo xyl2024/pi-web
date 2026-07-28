@@ -20,6 +20,20 @@ export interface Tag {
   color?: string;
 }
 
+/**
+ * User-facing priority of a todo. `undefined` (DB NULL) means "not set" —
+ * the row sorts to the end of every priority-aware listing. Storing the
+ * enum as a string (not an integer) keeps the column self-describing and
+ * aligns with the other union types in this file (`StatusFilter`,
+ * `DeadlineFilter`).
+ */
+export type Priority = "high" | "medium" | "low";
+export const PRIORITY_VALUES: ReadonlySet<Priority> = new Set<Priority>([
+  "high",
+  "medium",
+  "low",
+]);
+
 export interface Todo {
   id: string;
   title: string;
@@ -30,6 +44,7 @@ export interface Todo {
   completedAt?: number;
   deadline?: number;
   tags: Tag[];
+  priority?: Priority;
 }
 
 export const MAX_TITLE_LENGTH = 200;
@@ -48,6 +63,7 @@ export interface TodoCreateInput {
   completionNote?: string;
   deadline?: number;
   tags?: (Tag | string)[];
+  priority?: Priority | null;
 }
 
 export interface TodoUpdateInput {
@@ -57,6 +73,13 @@ export interface TodoUpdateInput {
   done?: boolean;
   deadline?: number | null;
   tags?: (Tag | string)[] | null;
+  /**
+   * Set, change, or clear the priority. Omit to leave it untouched. Pass
+   * `null` to clear; pass a valid `Priority` to set/overwrite. Stored as
+   * TEXT in `todos.priority`; legacy rows without a value read back as
+   * `undefined` (and the UI treats that as "no priority set").
+   */
+  priority?: Priority | null;
 }
 
 export interface TodoListOptions {
@@ -131,6 +154,19 @@ function validateOptionalDeadline(value: unknown): number | undefined {
     throw new TodoValidationError("deadline must be a number", "deadline");
   }
   return value;
+}
+
+function normalizePriority(value: unknown): Priority | undefined {
+  if (value === undefined) return undefined;
+  // `null` (only ever sent by PATCH callers) explicitly clears the column.
+  if (value === null) return undefined;
+  if (typeof value !== "string" || !PRIORITY_VALUES.has(value as Priority)) {
+    throw new TodoValidationError(
+      "priority must be one of: high, medium, low",
+      "priority",
+    );
+  }
+  return value as Priority;
 }
 
 /**
@@ -249,6 +285,7 @@ interface TodoRow {
   created_at: number;
   completed_at: number | null;
   deadline: number | null;
+  priority: string | null;
   tags_json?: string;
 }
 
@@ -279,6 +316,14 @@ function parseTagsJson(raw: string | undefined): Tag[] {
 }
 
 function rowToTodo(row: TodoRow): Todo {
+  // Defensively narrow: a corrupt / future-shaped `priority` value should
+  // never blow up — the UI treats anything other than a known enum as
+  // "no priority" by rendering nothing.
+  const priorityRaw = row.priority;
+  const priority: Priority | undefined =
+    priorityRaw && PRIORITY_VALUES.has(priorityRaw as Priority)
+      ? (priorityRaw as Priority)
+      : undefined;
   return {
     id: row.id,
     title: row.title,
@@ -289,6 +334,7 @@ function rowToTodo(row: TodoRow): Todo {
     completedAt: row.completed_at ?? undefined,
     deadline: row.deadline ?? undefined,
     tags: parseTagsJson(row.tags_json),
+    priority,
   };
 }
 
@@ -302,6 +348,7 @@ export function createTodo(_filePath: string, input: TodoCreateInput): Todo {
   const completionNote = normalizeCompletionNote(input.completionNote);
   const deadline = validateOptionalDeadline(input.deadline);
   const tags = normalizeTags(input.tags);
+  const priority = normalizePriority(input.priority);
 
   const id = generateTodoId();
   const createdAt = Date.now();
@@ -316,9 +363,9 @@ export function createTodo(_filePath: string, input: TodoCreateInput): Todo {
 
   const insert = db.transaction(() => {
     db.prepare(
-      `INSERT INTO todos (id, title, description, completion_note, done, created_at, deadline)
-       VALUES (?, ?, ?, ?, 0, ?, ?)`,
-    ).run(id, title, description ?? null, completionNote ?? null, createdAt, deadline ?? null);
+      `INSERT INTO todos (id, title, description, completion_note, done, created_at, deadline, priority)
+       VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+    ).run(id, title, description ?? null, completionNote ?? null, createdAt, deadline ?? null, priority ?? null);
     const tagStmt = db.prepare(
       `INSERT INTO todo_tags (todo_id, tag, color) VALUES (?, ?, ?)`,
     );
@@ -338,6 +385,7 @@ export function createTodo(_filePath: string, input: TodoCreateInput): Todo {
     createdAt,
     deadline,
     tags,
+    priority,
   };
 }
 
@@ -438,11 +486,23 @@ export function updateTodo(_filePath: string, id: string, patch: TodoUpdateInput
         next.tags = normalizeTags(patch.tags);
       }
     }
+    if (patch.priority !== undefined) {
+      // normalizePriority returns `undefined` for both "no change" (key
+      // omitted — we never reach this branch) and "clear" (`null` in).
+      // Distinguish via the original value so clearing works while a
+      // missing `priority` key in the patch is a true no-op.
+      if (patch.priority === null) {
+        delete next.priority;
+      } else {
+        const normalized = normalizePriority(patch.priority);
+        next.priority = normalized;
+      }
+    }
 
     db.prepare(
       `UPDATE todos
          SET title = ?, description = ?, completion_note = ?, done = ?,
-             completed_at = ?, deadline = ?
+             completed_at = ?, deadline = ?, priority = ?
        WHERE id = ?`,
     ).run(
       next.title,
@@ -451,6 +511,7 @@ export function updateTodo(_filePath: string, id: string, patch: TodoUpdateInput
       next.done ? 1 : 0,
       next.completedAt ?? null,
       next.deadline ?? null,
+      next.priority ?? null,
       id,
     );
     db.prepare(`DELETE FROM todo_tags WHERE todo_id = ?`).run(id);
@@ -646,11 +707,11 @@ function startOfDay(ts: number): number {
  * `deadline === undefined` cannot satisfy "due after X".
  *
  * Sort order when `done` is unspecified:
- *   1. Active todos first, sorted by `deadline` ascending (soonest first;
- *      todos without a deadline sink to the bottom).
+ *   1. Active todos first, sorted by `priority` descending (high > medium >
+ *      low > unset), tiebroken by `createdAt` descending (newest first).
  *   2. Completed todos last, sorted by `completedAt` descending.
  * When `done === true`, only completed todos are returned (by `completedAt`
- * desc); when `done === false`, only active todos (by `deadline` asc, then
+ * desc); when `done === false`, only active todos (by priority desc, then
  * by `createdAt` desc as a tiebreaker).
  */
 export function listTodos(_filePath: string, opts: TodoListOptions = {}): Todo[] {
@@ -717,19 +778,16 @@ export function listTodos(_filePath: string, opts: TodoListOptions = {}): Todo[]
     return true;
   });
 
-  // Sort: group active vs done, then order within each group. `undefined`
-  // deadlines sink to the bottom of the active group so the agent sees the
-  // most-urgent items first.
+  // Sort: group active vs done, then order within each group. Unset
+  // priority (`undefined`) sorts to the very bottom of the active group so
+  // a busy user always sees the things they actually marked first; tiebreak
+  // is `createdAt` desc so the newest within a priority bucket wins.
   const active = filtered.filter((x) => !x.done);
   const done = filtered.filter((x) => x.done);
-  const cmpActive = (a: Todo, b: Todo): number => {
-    if (a.deadline === undefined && b.deadline === undefined) {
-      // Tiebreaker: most recently created first.
-      return b.createdAt - a.createdAt;
-    }
-    if (a.deadline === undefined) return 1;
-    if (b.deadline === undefined) return -1;
-    if (a.deadline !== b.deadline) return a.deadline - b.deadline;
+  const cmpByPriorityThenCreatedAt = (a: Todo, b: Todo): number => {
+    const ap = priorityRank(a.priority);
+    const bp = priorityRank(b.priority);
+    if (ap !== bp) return bp - ap;
     return b.createdAt - a.createdAt;
   };
   const cmpDone = (a: Todo, b: Todo): number => {
@@ -737,7 +795,7 @@ export function listTodos(_filePath: string, opts: TodoListOptions = {}): Todo[]
     const bv = b.completedAt ?? 0;
     return bv - av;
   };
-  active.sort(cmpActive);
+  active.sort(cmpByPriorityThenCreatedAt);
   done.sort(cmpDone);
   const ordered = [...active, ...done];
 
@@ -745,4 +803,20 @@ export function listTodos(_filePath: string, opts: TodoListOptions = {}): Todo[]
     return ordered.slice(0, opts.limit);
   }
   return ordered;
+}
+
+// Higher rank = closer to the top of the active list. `undefined` (DB NULL,
+// legacy rows, "never set") is rank 0, behind every explicit choice —
+// matches the user-facing semantics in components/TodoPanel.tsx.
+function priorityRank(p: Priority | undefined): number {
+  switch (p) {
+    case "high":
+      return 3;
+    case "medium":
+      return 2;
+    case "low":
+      return 1;
+    default:
+      return 0;
+  }
 }

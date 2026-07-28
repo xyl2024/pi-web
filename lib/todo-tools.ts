@@ -124,13 +124,14 @@ const userTodosListTool = defineTool<typeof ListParams, ListDetails>({
   label: "User Todos List",
   description:
     "Look up the user's pi-web todos and return a lightweight summary (no full description, no images). " +
-    "Each item exposes id, todo_name (title), status ('done' or 'processing'), create_time and due_time (epoch ms), tags, " +
+    "Each item exposes id, todo_name (title), status ('done' or 'processing'), priority ('high'/'medium'/'low' — omitted when unset), " +
+    "create_time and due_time (epoch ms), tags, " +
     "and — for done items — completion_note (rich-text HTML) and completed_at (epoch ms). " +
     "completion_note is omitted for active todos and for legacy done rows that pre-date the completion_note column. " +
     "Filters: status (default 'all'); tags (OR-semantics, case-insensitive); create_time_window / due_time_window ({ start?, end? }) " +
     "in epoch ms with half-open [start, end) semantics. Either side of a window may be omitted. " +
     "due_time_window excludes todos without a deadline (they cannot satisfy a time bound). " +
-    "Sort: active todos first by soonest deadline (todos without a deadline sink to the bottom), then completed by most recently completed. " +
+    "Sort: active todos first by priority desc (high > medium > low > unset), tied by createdAt desc (newest first); completed by most recently completed. " +
     "Use the returned id with user_todo_description to fetch the full description, full completion note, and embedded images for both fields. " +
     `Pass limit (default ${DEFAULT_LIST_LIMIT}, max ${MAX_LIST_LIMIT}) if you expect a large result; the response includes a 'truncated' flag.`,
   parameters: ListParams,

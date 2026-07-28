@@ -9,6 +9,7 @@ import {
   deleteTodo,
   TodoValidationError,
   TodoNotFoundError,
+  type Priority,
   type Tag,
 } from "@/lib/todo-store";
 
@@ -32,12 +33,12 @@ export async function GET() {
   }
 }
 
-// POST /api/todos  body: { title: string; description?: string; completionNote?: string; deadline?: number; tags?: string[] }
+// POST /api/todos  body: { title: string; description?: string; completionNote?: string; deadline?: number; tags?: string[]; priority?: "high"|"medium"|"low" }
 export async function POST(req: Request) {
   const startedAt = Date.now();
   try {
     const body = (await req.json().catch(() => ({}))) as {
-      title?: unknown; description?: unknown; completionNote?: unknown; deadline?: unknown; tags?: unknown;
+      title?: unknown; description?: unknown; completionNote?: unknown; deadline?: unknown; tags?: unknown; priority?: unknown;
     };
     // Preserve pre-refactor behavior: silently drop non-string description on create.
     const description = typeof body.description === "string" ? body.description : undefined;
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
       completionNote,
       deadline: body.deadline as number | undefined,
       tags: Array.isArray(body.tags) ? (body.tags as (Tag | string)[]) : undefined,
+      priority: body.priority as Priority | null | undefined,
     });
     log.info("todo created", { id: todo.id, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ todo });
@@ -58,12 +60,12 @@ export async function POST(req: Request) {
   }
 }
 
-// PATCH /api/todos  body: { id: string; title?: string; description?: string; completionNote?: string; done?: boolean; deadline?: number | null; tags?: string[] | null }
+// PATCH /api/todos  body: { id: string; title?: string; description?: string; completionNote?: string; done?: boolean; deadline?: number | null; tags?: string[] | null; priority?: "high"|"medium"|"low"|null }
 export async function PATCH(req: Request) {
   const startedAt = Date.now();
   try {
     const body = (await req.json().catch(() => ({}))) as {
-      id?: unknown; title?: unknown; description?: unknown; completionNote?: unknown; done?: unknown; deadline?: unknown; tags?: unknown;
+      id?: unknown; title?: unknown; description?: unknown; completionNote?: unknown; done?: unknown; deadline?: unknown; tags?: unknown; priority?: unknown;
     };
     if (typeof body.id !== "string") {
       return NextResponse.json({ error: "id must be a string" }, { status: 400 });
@@ -79,6 +81,7 @@ export async function PATCH(req: Request) {
         : Array.isArray(body.tags)
           ? (body.tags as (Tag | string)[])
           : undefined,
+      priority: body.priority as Priority | null | undefined,
     });
     log.info("todo updated", { id: todo.id, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ todo });
