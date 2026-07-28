@@ -3511,7 +3511,7 @@ function TodoItem({
           )}
         </div>
       )}
-      {lightboxIndex !== null && combinedGallery.length > 0 && !todo.done && (
+      {lightboxIndex !== null && combinedGallery.length > 0 && (
         <ImageLightbox
           images={combinedGallery}
           index={lightboxIndex}
