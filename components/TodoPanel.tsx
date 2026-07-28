@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { useI18n, type Locale } from "@/hooks/useI18n";
+import { useI18n } from "@/hooks/useI18n";
 import { useTodos, type Tag, type Todo, type Priority } from "@/hooks/useTodos";
 import { hasCompletionNoteContent } from "@/lib/completion-note";
 import { useToast } from "@/components/Toast";
@@ -321,20 +321,13 @@ function startOfNextDay(ts: number): number {
   return date.getTime();
 }
 
-function formatDateForInput(ts: number): string {
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function formatDeadline(deadline: number, now: number = Date.now(), locale: Locale = "en"): { label: string; tone: DeadlineTone; daysAhead: number } {
+function formatDeadline(deadline: number, now: number = Date.now()): { label: string; tone: DeadlineTone; daysAhead: number } {
   const todayStart = startOfDay(now);
   const todayEnd = todayStart + 24 * 60 * 60 * 1000 - 1;
-  const dateLabel = formatDateForInput(deadline);
-  const weekday = new Intl.DateTimeFormat(locale, { weekday: "short" }).format(new Date(deadline));
-  const label = `${dateLabel} ${weekday}`;
+  const d = new Date(deadline);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const label = `${m}-${day}`;
   if (deadline < todayStart) return { label, tone: "overdue", daysAhead: 0 };
   if (deadline <= todayEnd) return { label, tone: "today", daysAhead: 0 };
   const daysAhead = Math.round((startOfDay(deadline) - todayStart) / (24 * 60 * 60 * 1000));
@@ -3549,7 +3542,7 @@ function DeadlineControl({
   onOpenChange: (open: boolean) => void;
   onChange: (v: number | undefined) => void;
 }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
 
   if (todo.deadline === undefined) {
     return (
@@ -3593,7 +3586,7 @@ function DeadlineControl({
     );
   }
 
-  const { label, tone, daysAhead } = formatDeadline(todo.deadline, Date.now(), locale);
+  const { label, tone, daysAhead } = formatDeadline(todo.deadline);
   const color = todo.done
     ? "var(--text-dim)"
     : tone === "overdue" ? "#ef4444" : tone === "today" ? "var(--accent)" : "#f97316";
