@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo, RefObject } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, RefObject, UIEvent } from "react";
 import type { AgentMessage, AssistantMessage, TextContent } from "@/lib/types";
 
 interface Props {
@@ -11,6 +11,20 @@ interface Props {
 }
 
 const MINIMAP_WIDTH = 36;
+const PANEL_WIDTH = 220;
+const PANEL_GAP = 8;
+const PANEL_MAX = 480;
+const PANEL_VERTICAL_MARGIN = 16;
+const PREVIEW_LEN = 40;
+const ROW_STEP = 12;
+const PANEL_ROW_HEIGHT = 24; // padding 4+4 + lineHeight 16
+
+// Unicode-safe slice (handles emoji + CJK without breaking surrogate pairs)
+function truncatePreview(text: string, max: number): string {
+  const chars = Array.from(text);
+  if (chars.length <= max) return text;
+  return chars.slice(0, max).join("") + "…";
+}
 
 function getMessagePreview(msg: AgentMessage | Partial<AgentMessage>): string {
   if (msg.role === "user") {
@@ -72,6 +86,9 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
   const [mouseYRatio, setMouseYRatio] = useState<number | null>(null);
   const [containerHeight, setContainerHeight] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const panelScrollRef = useRef<HTMLDivElement>(null);
+  const panelRectRef = useRef<DOMRect | null>(null);
+  const [panelHoverIndex, setPanelHoverIndex] = useState<number | null>(null);
 
   const allMessages = useMemo(
     () => (streamingMessage ? [...messages, streamingMessage] : messages) as (AgentMessage | Partial<AgentMessage>)[],
@@ -168,10 +185,28 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
     return () => ro.disconnect();
   }, [visible]);
 
-  // Compact centered layout: lines stacked with a small fixed step, centered vertically
-  const TOOLTIP_HEIGHT = 22;
-  const TOOLTIP_GAP = 2;
-  const ROW_STEP = 12;
+  // Keep the panel's screen rect fresh while hovered (scroll + resize update positions)
+  useEffect(() => {
+    if (!minimapHovered) {
+      panelRectRef.current = null;
+      setPanelHoverIndex(null);
+      return;
+    }
+    const el = panelScrollRef.current;
+    if (!el) return;
+    const update = () => {
+      panelRectRef.current = el.getBoundingClientRect();
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [minimapHovered]);
+
   const minimapHeightPx = containerHeight || 600;
 
   const nodeCenterPx = useCallback(
@@ -183,44 +218,55 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
     [nodes.length, minimapHeightPx]
   );
 
-  const tooltipPositions = useMemo(() => {
-    if (!minimapHovered || nodes.length === 0) return [];
-    const stackH = Math.max(0, nodes.length - 1) * ROW_STEP;
-    const startCenter = minimapHeightPx / 2 - stackH / 2;
-    const positions = nodes.map((_, i) =>
-      Math.round(startCenter + i * ROW_STEP - TOOLTIP_HEIGHT / 2)
-    );
-    for (let pass = 0; pass < 10; pass++) {
-      for (let i = 1; i < positions.length; i++) {
-        const minTop = positions[i - 1] + TOOLTIP_HEIGHT + TOOLTIP_GAP;
-        if (positions[i] < minTop) positions[i] = minTop;
-      }
-      for (let i = positions.length - 2; i >= 0; i--) {
-        const maxTop = positions[i + 1] - TOOLTIP_HEIGHT - TOOLTIP_GAP;
-        if (positions[i] > maxTop) positions[i] = maxTop;
-      }
-    }
-    // Re-center the whole tooltip block vertically
-    if (positions.length > 0) {
-      const blockTop = positions[0];
-      const blockBottom = positions[positions.length - 1] + TOOLTIP_HEIGHT;
-      const shift = minimapHeightPx / 2 - (blockTop + blockBottom) / 2;
-      for (let i = 0; i < positions.length; i++) positions[i] += shift;
-    }
-    for (let i = 0; i < positions.length; i++) {
-      positions[i] = Math.max(0, Math.min(minimapHeightPx - TOOLTIP_HEIGHT, positions[i]));
-    }
-    return positions;
-  }, [minimapHovered, nodes, minimapHeightPx]);
+  // Panel geometry: dynamic height = content size, capped at PANEL_MAX
+  const contentHeight = nodes.length * PANEL_ROW_HEIGHT;
+  const panelHeight = Math.min(PANEL_MAX, contentHeight);
+  const panelTop = Math.max(
+    PANEL_VERTICAL_MARGIN,
+    ((containerHeight || minimapHeightPx) - panelHeight) / 2
+  );
 
-  if (!visible || nodes.length === 0) return null;
+  // Independent scrolling: forward wheel deltas to the panel instead of the chat
+  const handlePanelWheel = useCallback((e: UIEvent<HTMLDivElement>) => {
+    const el = panelScrollRef.current;
+    if (!el) return;
+    // React's synthetic onWheel is non-passive by default; preventDefault works here.
+    e.preventDefault();
+    e.stopPropagation();
+    const native = e.nativeEvent as unknown as WheelEvent;
+    el.scrollTop += native.deltaY;
+  }, []);
 
   // Node nearest to the current mouse position (for hover highlight)
+  // When the cursor is over the panel, snap to the row directly under it (panel-local coords).
+  // Otherwise fall back to the tick stack math (centered within the chat container).
   const mouseY = mouseYRatio !== null ? mouseYRatio * minimapHeightPx : null;
-  const nearestIndex = mouseY !== null
+  const tickNearestIndex = nodes.length > 0 && mouseY !== null
     ? nodes.reduce((best, node) =>
         Math.abs(nodeCenterPx(node.index) - mouseY) < Math.abs(nodeCenterPx(best) - mouseY) ? node.index : best, 0)
     : null;
+  const nearestIndex = panelHoverIndex !== null ? panelHoverIndex : tickNearestIndex;
+
+  // Auto-scroll panel to bottom when new messages arrive while user is at the tail
+  const lastIndex = nodes.length - 1;
+  const atTail = lastIndex >= 0 && (activeIndex === lastIndex || nearestIndex === lastIndex);
+  useEffect(() => {
+    if (!minimapHovered || !atTail) return;
+    const el = panelScrollRef.current;
+    if (!el) return;
+    if (el.scrollHeight <= el.clientHeight) return;
+    el.scrollTop = el.scrollHeight;
+  }, [nodes.length, minimapHovered, atTail]);
+
+  // Single click handler: collapse panel and jump to the clicked message
+  const handleJump = useCallback((node: NodeInfo) => {
+    jumpTo(node);
+    setMinimapHovered(false);
+  }, [jumpTo]);
+
+  if (!visible || nodes.length === 0) return null;
+
+  const wrapperWidth = MINIMAP_WIDTH + (minimapHovered ? PANEL_WIDTH + PANEL_GAP : 0);
 
   return (
     <div
@@ -230,9 +276,22 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
       onMouseMove={(e) => {
         const rect = e.currentTarget.getBoundingClientRect();
         setMouseYRatio((e.clientY - rect.top) / rect.height);
+        // If the cursor is inside the panel, anchor the highlight to the row under it
+        const pr = panelRectRef.current;
+        const panelEl = panelScrollRef.current;
+        if (pr && panelEl && nodes.length > 0) {
+          if (e.clientX >= pr.left && e.clientX <= pr.right &&
+              e.clientY >= pr.top && e.clientY <= pr.bottom) {
+            const localY = e.clientY - pr.top + panelEl.scrollTop;
+            const idx = Math.floor(localY / PANEL_ROW_HEIGHT);
+            setPanelHoverIndex(Math.max(0, Math.min(nodes.length - 1, idx)));
+            return;
+          }
+        }
+        setPanelHoverIndex(null);
       }}
       style={{
-        width: MINIMAP_WIDTH,
+        width: wrapperWidth,
         position: "absolute",
         right: 0,
         top: 0,
@@ -242,91 +301,149 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
         background: "transparent",
         overflow: "visible",
         zIndex: 5,
+        transition: "width 120ms ease",
       }}
     >
-      {/* Message lines — compact centered stack, click to jump */}
-      {nodes.map((node) => {
-        const color = getNodeColor(node.msg);
-        const isActive = activeIndex === node.index;
+      {/* Tick strip — 36px compact centered stack, click to jump */}
+      <div
+        style={{
+          position: "absolute",
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: MINIMAP_WIDTH,
+        }}
+      >
+        {nodes.map((node) => {
+          const color = getNodeColor(node.msg);
+          const isActive = activeIndex === node.index;
+          const isNearest = nearestIndex === node.index;
 
-        return (
-          <div
-            key={node.index}
-            onClick={() => jumpTo(node)}
-            style={{
-              position: "absolute",
-              top: nodeCenterPx(node.index),
-              transform: "translateY(-50%)",
-              left: 0,
-              right: 0,
-              height: "10px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              zIndex: 2,
-            }}
-          >
-            {/* Horizontal line: shorter and dimmer when inactive, full size when active */}
+          return (
             <div
+              key={node.index}
               style={{
-                width: isActive ? 14 : 9,
-                height: 3,
-                borderRadius: 1.5,
-                background: color.bg,
-                opacity: isActive ? 1 : 0.28,
-                boxShadow: isActive ? `0 0 0 1px ${color.border}` : "none",
-                flexShrink: 0,
-                transition: "opacity 0.1s, box-shadow 0.1s, width 0.1s",
-              }}
-            />
-          </div>
-        );
-      })}
-
-      {/* Tooltips for all nodes, collision-free positions */}
-      {minimapHovered && nodes.map((node, i) => {
-        const preview = getMessagePreview(node.msg);
-        const color = getNodeColor(node.msg);
-        const isNearest = nearestIndex === node.index;
-        if (!preview || tooltipPositions.length === 0) return null;
-        return (
-          <div
-            key={node.index}
-            style={{
-              position: "absolute",
-              top: tooltipPositions[i],
-              right: "100%",
-              marginRight: 6,
-              background: "var(--bg)",
-              borderTop: `1px solid ${isNearest ? color.border : "var(--border)"}`,
-              borderRight: `1px solid ${isNearest ? color.border : "var(--border)"}`,
-              borderBottom: `1px solid ${isNearest ? color.border : "var(--border)"}`,
-              borderLeft: `2px solid ${color.border}`,
-              borderRadius: 4,
-              padding: "2px 7px",
-              width: 200,
-              zIndex: 100,
-              pointerEvents: "none",
-              opacity: 1,
-              transition: "top 0.1s",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                color: isNearest ? "var(--text)" : "var(--text-muted)",
-                lineHeight: 1.4,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
+                position: "absolute",
+                top: nodeCenterPx(node.index),
+                transform: "translateY(-50%)",
+                left: 0,
+                right: 0,
+                height: "10px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                pointerEvents: "none",
+                zIndex: 2,
               }}
             >
-              {preview}
+              <div
+                style={{
+                  width: isActive ? 14 : 9,
+                  height: 3,
+                  borderRadius: 1.5,
+                  background: color.bg,
+                  opacity: isActive ? 1 : (isNearest ? 0.65 : 0.28),
+                  boxShadow: isActive
+                    ? `0 0 0 1px ${color.border}`
+                    : (isNearest ? `0 0 0 1px ${color.border}` : "none"),
+                  flexShrink: 0,
+                  transition: "opacity 0.1s, box-shadow 0.1s, width 0.1s",
+                }}
+              />
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      {/* Scrollable message-list panel — fixed height, vertically centered, mounts on hover */}
+      {minimapHovered && (
+        <div
+          ref={panelScrollRef}
+          onWheel={handlePanelWheel}
+          onClick={(e) => {
+            const target = e.target as HTMLElement;
+            const row = target.closest<HTMLElement>("[data-node-index]");
+            if (!row) return;
+            const idx = Number(row.dataset.nodeIndex);
+            const node = nodes.find((n) => n.index === idx);
+            if (node) handleJump(node);
+          }}
+          style={{
+            position: "absolute",
+            right: MINIMAP_WIDTH + PANEL_GAP,
+            top: panelTop,
+            height: panelHeight,
+            width: PANEL_WIDTH,
+            background: "var(--bg-panel)",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            overflowY: "auto",
+            overflowX: "hidden",
+            zIndex: 100,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            opacity: 1,
+            transition: "opacity 120ms ease",
+          }}
+        >
+          {nodes.map((node) => {
+            const color = getNodeColor(node.msg);
+            const isActive = activeIndex === node.index;
+            const isNearest = nearestIndex === node.index;
+            const preview = getMessagePreview(node.msg);
+            const role = node.msg.role === "user" ? "U" : "A";
+
+            return (
+              <div
+                key={node.index}
+                data-node-index={node.index}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "4px 8px",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  lineHeight: "16px",
+                  background: isActive ? "var(--bg)" : "transparent",
+                  borderLeft: `2px solid ${isNearest ? color.border : "transparent"}`,
+                  color: isNearest ? "var(--text)" : "var(--text-muted)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                }}
+              >
+                <span
+                  style={{
+                    width: 4,
+                    height: 4,
+                    borderRadius: 2,
+                    background: color.bg,
+                    flexShrink: 0,
+                  }}
+                />
+                <span
+                  style={{
+                    flex: 1,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {preview ? truncatePreview(preview.replace(/\s+/g, " ").trim(), PREVIEW_LEN) : "(no text)"}
+                </span>
+                <span
+                  style={{
+                    flexShrink: 0,
+                    fontSize: 10,
+                    opacity: 0.7,
+                    color: "var(--text-dim)",
+                  }}
+                >
+                  {role}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
