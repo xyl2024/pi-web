@@ -133,19 +133,11 @@ export function TodoDescriptionView({
         );
       }
 
-      // <a> → force new-tab + noopener. The HTMLAttributes on Tiptap's Link
-      // extension should already emit these, but we re-assert here for content
-      // that came in from outside the editor (agent tool, copy-paste).
+      // <a> → render children as plain text without a clickable link.
+      // Todo details are intentionally not a hyperlink surface — no jumping
+      // out of the panel. Link text stays visible, just not interactive.
       if (el.name === "a") {
-        return (
-          <a
-            href={el.attribs?.href}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {domToReact(el.children as DOMNode[], { trim: true })}
-          </a>
-        );
+        return <>{domToReact(el.children as DOMNode[], { trim: true })}</>;
       }
 
       // <ul data-type="taskList"> → attach our class for CSS hit
