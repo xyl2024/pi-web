@@ -185,7 +185,7 @@ function DayCell({
   return (
     <Tooltip
       content={content}
-      delayDuration={isTouchDevice ? 0 : undefined}
+      delayDuration={0}
       open={isTouchDevice ? mobileTooltipOpen : count > 0 ? undefined : false}
       onOpenChange={isTouchDevice ? setMobileTooltipOpen : undefined}
     >
