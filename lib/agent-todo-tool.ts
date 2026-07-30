@@ -128,7 +128,7 @@ export const agentTodoTool = defineTool<typeof AgentTodoParams, AgentTodoDetails
   executionMode: "sequential",
   promptSnippet: "Manage a task list to track multi-step progress.",
   promptGuidelines: [
-    "Use `agent_todo` for complex work with 3+ steps, when the user gives you a list of tasks, or immediately after receiving new instructions to capture requirements. Skip it for single trivial tasks and purely conversational requests.",
+    "Use `agent_todo` only for complex work with 5+ steps. Before planning, explore first and judge the actual complexity — tasks with fewer than 5 steps do not need a todo. Skip for single trivial tasks and purely conversational requests; create tasks immediately when the user gives you a list or after receiving new instructions to capture requirements.",
     "When starting any task, mark it in_progress BEFORE beginning work. Mark it completed IMMEDIATELY when done — never batch completions. Exactly one task should be in_progress at a time.",
     "Never mark a task completed if tests are failing, the implementation is partial, or you hit unresolved errors — keep it in_progress and create a new task for the blocker instead.",
     "Task status is a 4-state machine: pending → in_progress → completed, plus deleted as a tombstone. Pass activeForm (present-continuous label, e.g. 'researching existing tool') when marking in_progress.",
