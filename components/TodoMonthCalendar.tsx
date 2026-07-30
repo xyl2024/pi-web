@@ -209,6 +209,7 @@ function DayCell({
           color: cell.isCurrentMonth ? "var(--text)" : "var(--text-dim)",
           opacity: cell.isCurrentMonth ? 1 : 0.42,
           boxShadow: todayCell ? "inset 0 0 0 1px var(--accent)" : undefined,
+          animation: todayCell ? "pi-today-cell-beat 1.6s ease-in-out infinite" : undefined,
           cursor: cell.isCurrentMonth && count > 0 ? "pointer" : "default",
           font: "inherit",
           transition: "background 0.12s, opacity 0.12s",
