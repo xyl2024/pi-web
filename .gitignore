@@ -44,3 +44,6 @@ next-env.d.ts
 volumes
 
 third
+
+# playwright-cli skill output
+/.playwright-cli/
