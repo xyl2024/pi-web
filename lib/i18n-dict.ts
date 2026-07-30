@@ -871,6 +871,7 @@ export const ZH_TRANSLATIONS = {
   "Cache read": "缓存读取",
   "Cache write": "缓存写入",
   "Cache hit rate": "缓存命中率",
+  "Cache hit": "缓存命中",
   "Total cost": "总费用",
   "Calls": "调用次数",
   "Duration": "耗时",

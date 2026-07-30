@@ -955,9 +955,13 @@ function formatUsage(usage: {
   cost: { total: number };
 }, t: ReturnType<typeof useI18n>["t"]): string {
   const parts = [];
-  if (usage.input) parts.push(`${usage.input.toLocaleString()} ${t("in")}`);
+  if (usage.input) {
+    const inputDenom = usage.input + usage.cacheRead;
+    const cacheHitRate = inputDenom > 0 ? usage.cacheRead / inputDenom : 0;
+    const hit = `（${t("Cache hit")}：${(cacheHitRate * 100).toFixed(1)}%）`;
+    parts.push(`${usage.input.toLocaleString()} ${t("in")}${hit}`);
+  }
   if (usage.output) parts.push(`${usage.output.toLocaleString()} ${t("out")}`);
-  if (usage.cacheRead) parts.push(`${usage.cacheRead.toLocaleString()} ${t("cache")}`);
   if (usage.cost?.total) parts.push(`$${usage.cost.total.toFixed(4)}`);
   return parts.join(" · ");
 }
