@@ -166,6 +166,7 @@ function DayCell({
 }) {
   const [mobileTooltipOpen, setMobileTooltipOpen] = useState(false);
   const count = todos.length;
+  const incompleteCount = todos.reduce((n, todo) => (todo.done ? n : n + 1), 0);
   const selected = cell.isCurrentMonth && selectedDay === cell.ts;
   const todayCell = cell.isCurrentMonth && isSameDay(cell.ts, today);
 
@@ -214,6 +215,21 @@ function DayCell({
         }}
       >
         <span style={{ lineHeight: 1.2, fontWeight: todayCell ? 600 : 400 }}>{cell.day}</span>
+        {incompleteCount > 0 && cell.isCurrentMonth && (
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              top: 4,
+              right: 4,
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "#22c55e",
+              boxShadow: "0 0 0 1px var(--bg-panel)",
+            }}
+          />
+        )}
         {count > 0 && cell.isCurrentMonth && (
           <span style={{ marginTop: 2, fontSize: 9, lineHeight: 1, opacity: 0.8 }}>
             {count}
