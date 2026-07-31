@@ -6,7 +6,6 @@ import { AGENT_TODO_TOOL_NAME } from "@/lib/agent-todo-tool-types";
 import { MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { Tooltip } from "./Tooltip";
-import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { AgentTodoPanel } from "./AgentTodoPanel";
 import { ReplayBar } from "./ReplayBar";
 import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
@@ -356,7 +355,10 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const { isDragOver, handleDragEnter, handleDragOver, handleDragLeave, handleDrop } = useDragDrop(onDrop);
 
   const visibleMessages = messages.filter((m) => m.role === "user" || m.role === "assistant");
-  const messageRefs = useMessageRefs(visibleMessages.length);
+  const messageRefs = useRef<(HTMLDivElement | null)[]>([]);
+  messageRefs.current = Array(visibleMessages.length)
+    .fill(null)
+    .map((_, i) => messageRefs.current[i] ?? null);
 
   // Replay is only active for a settled (non-streaming) session. When active,
   // the chat renders only messages[0..replayIndex]; toolResultsMap is still
@@ -717,12 +719,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
             <div ref={messagesEndRef} />
           </div>
         </div>
-        <ChatMinimap
-          messages={renderMessages}
-          streamingMessage={streamState.streamingMessage}
-          scrollContainer={scrollContainerRef}
-          messageRefs={messageRefs}
-        />
 
         {/* To-bottom button — shown when user scrolls up */}
         {showToBottom && (
