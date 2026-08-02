@@ -15,10 +15,11 @@
  * is negligible.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type * as echarts from "echarts";
 import { useI18n } from "@/hooks/useI18n";
 import { useTheme } from "@/hooks/useTheme";
+import { readThemeBg } from "@/components/EchartsBlock";
 
 // Dynamic import keeps echarts (~MB) out of the initial bundle. The promise is
 // memoized at module scope so successive charts reuse the same load — this is
@@ -67,6 +68,7 @@ export function EchartsChart({ option, height, ariaLabel }: Props) {
   // init time, so a theme switch needs dispose + re-init; doing the same on
   // option change keeps the lifecycle uniform and avoids edge cases where
   // setOption with a different series type only partially updates.
+  const bg = useMemo(() => readThemeBg(preset, isDark), [preset, isDark]);
   useEffect(() => {
     setRenderError(null);
     if (!lib || !containerRef.current) return;
@@ -74,7 +76,14 @@ export function EchartsChart({ option, height, ariaLabel }: Props) {
     const chart = lib.init(el, isDark ? "dark" : undefined, { renderer: "canvas" });
     chartRef.current = chart;
     try {
-      chart.setOption(option);
+      // Inject theme background so echarts' built-in "dark" theme (#100C2A)
+      // doesn't punch through. Spread `option` after so a user-supplied
+      // backgroundColor still wins.
+      const merged: echarts.EChartsCoreOption = {
+        backgroundColor: bg,
+        ...option,
+      };
+      chart.setOption(merged);
     } catch (e) {
       setRenderError(e instanceof Error ? e.message : String(e));
     }

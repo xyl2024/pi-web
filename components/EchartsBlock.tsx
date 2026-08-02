@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type * as echarts from "echarts";
 import { useI18n } from "@/hooks/useI18n";
-import { useTheme } from "@/hooks/useTheme";
+import { useTheme, type ThemePreset } from "@/hooks/useTheme";
 
 // Dynamic import keeps echarts (~MB) out of the initial bundle — only fetched
 // the first time an echarts block actually renders. The module promise is
@@ -12,6 +12,19 @@ let libPromise: Promise<typeof echarts> | null = null;
 function loadLib(): Promise<typeof echarts> {
   if (!libPromise) libPromise = import("echarts");
   return libPromise;
+}
+
+// Read the current --bg CSS variable so the chart canvas can match the active
+// theme. ECharts' built-in "dark" theme paints the canvas with #100C2A, which
+// clashes with every theme here — inject our own backgroundColor at setOption
+// time instead (exported so EchartsChart can use the same source of truth).
+export function readThemeBg(preset: ThemePreset, isDark: boolean): string {
+  void preset;
+  if (typeof document === "undefined") return isDark ? "#1a1a1a" : "#ffffff";
+  const v = getComputedStyle(document.documentElement)
+    .getPropertyValue("--bg")
+    .trim();
+  return v || (isDark ? "#1a1a1a" : "#ffffff");
 }
 
 // Evaluate the code block as JS that produces an ECharts `option`.
@@ -104,14 +117,7 @@ export function EchartsBlock({ code, isStreaming }: Props) {
 
   // Resolve the theme background so exported PNGs and the (opaque) chart area
   // match the surrounding UI. `preset` is read so this re-runs on theme change.
-  const bg = useMemo(() => {
-    void preset;
-    if (typeof document === "undefined") return isDark ? "#1a1a1a" : "#ffffff";
-    const v = getComputedStyle(document.documentElement)
-      .getPropertyValue("--bg")
-      .trim();
-    return v || (isDark ? "#1a1a1a" : "#ffffff");
-  }, [preset, isDark]);
+  const bg = useMemo(() => readThemeBg(preset, isDark), [preset, isDark]);
 
   // Evaluate the code into an option object whenever `code` or `lib` changes.
   // Reset to `null` first so a previous chart doesn't flash while the new
@@ -151,7 +157,14 @@ export function EchartsBlock({ code, isStreaming }: Props) {
     const chart = lib.init(el, isDark ? "dark" : undefined, { renderer: "canvas" });
     chartRef.current = chart;
     try {
-      chart.setOption(option as echarts.EChartsCoreOption);
+      // Inject the theme background so echarts' built-in "dark" theme
+      // (#100C2A) doesn't punch through. Spread `option` after our default so
+      // a user-supplied backgroundColor still wins.
+      const merged: echarts.EChartsCoreOption = {
+        backgroundColor: bg,
+        ...(option as echarts.EChartsCoreOption),
+      };
+      chart.setOption(merged);
     } catch (e) {
       setRenderError(e instanceof Error ? e.message : String(e));
     }
@@ -300,12 +313,18 @@ function EchartsFullscreen({
   isDark: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const { preset } = useTheme();
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const bg = readThemeBg(preset, isDark);
     const chart = lib.init(el, isDark ? "dark" : undefined, { renderer: "canvas" });
     try {
-      chart.setOption(option as echarts.EChartsCoreOption);
+      const merged: echarts.EChartsCoreOption = {
+        backgroundColor: bg,
+        ...(option as echarts.EChartsCoreOption),
+      };
+      chart.setOption(merged);
     } catch {
       // ignore — the inline block already surfaces render errors
     }
@@ -315,7 +334,7 @@ function EchartsFullscreen({
       ro.disconnect();
       chart.dispose();
     };
-  }, [lib, option, isDark]);
+  }, [lib, option, isDark, preset]);
   return (
     <div
       style={{
