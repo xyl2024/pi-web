@@ -780,7 +780,7 @@ function ThinkingBlock({ block, duration, keywords, isSearchMatch }: { block: Th
 
 
 function ToolCallBlock({ block, result, isRunning, duration, cwd }: { block: ToolCallContent; result?: ToolResultMessage; isRunning?: boolean; duration?: number; cwd?: string }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const inputStr = JSON.stringify(block.input, null, 2);
 
   // Result display
