@@ -740,17 +740,17 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       )}
 
       {isEmptyNew ? (
-        <div className="flex flex-1 flex-col items-center justify-center overflow-hidden px-4 py-8">
-          <div className="w-full max-w-[820px]">
+        <>
+          <div className="flex flex-1 items-end justify-center overflow-hidden px-4">
             <div
-              className="mb-3"
+              className="mb-3 w-full max-w-[820px]"
               style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 gap: 12,
-                marginLeft: 16,
-                marginRight: 16,
+                paddingLeft: 16,
+                paddingRight: 16,
                 fontFamily: "var(--font-mono)",
               }}
             >
@@ -766,9 +766,9 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                 </span>
               </div>
             </div>
-            {chatInputElement}
           </div>
-        </div>
+          <div className="relative">{chatInputElement}</div>
+        </>
       ) : (
       <>
       {replayActive && (
