@@ -43,15 +43,15 @@
 
 /* ── Preset: midnight (dark) ───────────────────────────────── */
 .theme-midnight {
-  --bg: #1a1a1a;
-  --bg-panel: #242424;
+  --bg: #24242a;
+  --bg-panel: #2e2e34;
   --bg-hover: #2e2e2e;
   --bg-selected: #383838;
   --border: #3a3a3a;
-  --text: #e8e8e8;
-  --text-muted: #9ca3af;
-  --text-dim: #6b7280;
-  --accent: #60a5fa;
+  --text: #bcbcbc;
+  --text-muted: #9a9894;
+  --text-dim: #8a8782;
+  --accent: #7aa2f7;
   --accent-hover: #93c5fd;
   --user-bg: #1e293b;
   --assistant-bg: #1a1a1a;
