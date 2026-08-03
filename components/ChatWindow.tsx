@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentMessage,
   AssistantContentBlock,
@@ -67,9 +67,15 @@ function phaseLabel(phase: AgentPhase, t: ReturnType<typeof useI18n>["t"]): stri
 // A "turn" runs from one anchor (user message or compaction summary) up to
 // the next anchor. The non-final assistant messages in a turn — thinking,
 // tool calls, intermediate text — are wrapped in a ProcessDetailsGroup so
-// users can collapse them and focus on the final answer. Active streaming
-// content lives in streamState.streamingMessage (rendered separately below)
-// so the folding only ever sees completed turns.
+// users can collapse them and focus on the final answer.
+//
+// While the agent is still running on the current turn (agentRunning is true
+// and the anchor is the last user message), the process is rendered inline
+// instead. Folding only kicks in once the whole turn finishes, so users see
+// the full think → tool-call → intermediate text flow as it streams and then
+// get a single collapsed summary at the end. Active streaming content for
+// the in-progress message still lives in streamState.streamingMessage and is
+// rendered separately below.
 
 function isGroupAnchor(msg: AgentMessage): boolean {
   if (msg.role === "user") return true;
@@ -930,26 +936,46 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                 );
                 const processCount = visibleProcessIndices.length + (finalProcessMessage ? 1 : 0);
 
+                // While the agent is still running on this turn, render the
+                // process inline instead of folding it. Folding only kicks in
+                // once the turn is complete (agentRunning flips back to false)
+                // so users see the full think → tool-call → intermediate text
+                // flow as it streams, then get a single collapsed summary at
+                // the end. Without this, each message_end would re-mount the
+                // fold group with a new key and snap it shut on every step.
+                const isCurrentTurnInProgress =
+                  agentRunning && userIdx === lastUserIdx && lastUserIdx !== -1;
+
+                const processChildren = (
+                  <Fragment>
+                    {visibleProcessIndices.map((i) => renderOne(i, { keySuffix: "process" }))}
+                    {finalProcessMessage &&
+                      renderOne(finalAssistantIdx, {
+                        messageOverride: finalProcessMessage,
+                        attachRef: false,
+                        keySuffix: "process-final",
+                        showTimestamp: false,
+                      })}
+                  </Fragment>
+                );
+
                 if (processCount > 0) {
-                  rendered.push(
-                    <ProcessDetailsGroup
-                      key={`process-${userIdx}-${finalAssistantIdx}`}
-                      messageCount={processCount}
-                      toolCallCount={
-                        countToolCallsInIndices(renderMessages, visibleProcessIndices) +
-                        countToolCallBlocks(split.processBlocks)
-                      }
-                    >
-                      {visibleProcessIndices.map((i) => renderOne(i, { keySuffix: "process" }))}
-                      {finalProcessMessage &&
-                        renderOne(finalAssistantIdx, {
-                          messageOverride: finalProcessMessage,
-                          attachRef: false,
-                          keySuffix: "process-final",
-                          showTimestamp: false,
-                        })}
-                    </ProcessDetailsGroup>,
-                  );
+                  if (isCurrentTurnInProgress) {
+                    rendered.push(<Fragment key={`process-${userIdx}`}>{processChildren}</Fragment>);
+                  } else {
+                    rendered.push(
+                      <ProcessDetailsGroup
+                        key={`process-${userIdx}`}
+                        messageCount={processCount}
+                        toolCallCount={
+                          countToolCallsInIndices(renderMessages, visibleProcessIndices) +
+                          countToolCallBlocks(split.processBlocks)
+                        }
+                      >
+                        {processChildren}
+                      </ProcessDetailsGroup>,
+                    );
+                  }
                 }
 
                 if (finalAnswerMessage) {
