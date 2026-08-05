@@ -344,15 +344,6 @@ function Header({
         gap: 10,
       }}
     >
-      {/* macOS traffic-light buttons (decorative) */}
-      <span
-        aria-hidden
-        style={{ display: "inline-flex", gap: 7, alignItems: "center" }}
-      >
-        <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#ff5f57", boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.15)" }} />
-        <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#febc2e", boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.15)" }} />
-        <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#28c840", boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.15)" }} />
-      </span>
       <span
         style={{
           position: "absolute",
