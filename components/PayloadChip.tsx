@@ -81,7 +81,7 @@ export function PayloadChip({ sessionId, entryId, pending }: Props) {
             padding: "1px 6px",
             height: 18,
             background: "transparent",
-            border: "1px solid var(--border)",
+            border: "1px solid transparent",
             borderRadius: 4,
             color: "var(--text-muted)",
             cursor: "pointer",
@@ -100,7 +100,7 @@ export function PayloadChip({ sessionId, entryId, pending }: Props) {
           onMouseLeave={(e) => {
             e.currentTarget.style.opacity = "0.75";
             e.currentTarget.style.color = "var(--text-muted)";
-            e.currentTarget.style.borderColor = "var(--border)";
+            e.currentTarget.style.borderColor = "transparent";
           }}
         >
           {showLoaded ? (
