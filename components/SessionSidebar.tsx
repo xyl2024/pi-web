@@ -157,7 +157,7 @@ function PiAgentTitle() {
   const [scrambling, setScrambling] = useState(false);
   const revertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const target = showVersion ? `${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}p${process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}` : "π";
+  const target = showVersion ? `${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}p${process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}` : "Pi Work";
   const display = useScramble(target, scrambling);
 
   const triggerScramble = useCallback((toVersion: boolean) => {
@@ -184,12 +184,15 @@ function PiAgentTitle() {
       onClick={handleClick}
       style={{
         background: "none", border: "none", padding: 0, cursor: "default",
-        fontWeight: 700, fontSize: 28, letterSpacing: "-0.02em", marginTop: -7,
+        fontWeight: 700, fontSize: 18, letterSpacing: "-0.01em",
         color: showVersion ? "var(--accent)" : "var(--text)",
-        minWidth: "3ch",
+        fontFamily: "var(--font-mono)",
+        whiteSpace: "nowrap",
       }}
     >
-      {display}
+      {display === "Pi Work" ? (
+        <>P<span style={{ color: "var(--accent)" }}>i</span> W<span style={{ color: "var(--accent)" }}>o</span>rk</>
+      ) : display}
     </button>
   );
 }
