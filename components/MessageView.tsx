@@ -591,7 +591,7 @@ function AssistantMessageView({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {blocks.map((block, i) => (
-          <BlockView key={i} block={block} toolResults={toolResults} isStreaming={isStreaming} streamingDuration={streamingDurations.get(i) ?? (block.type === "thinking" ? thinkingDurationFromFile : undefined)} toolCallDurations={toolCallDurations} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} />
+          <BlockView key={i} block={block} toolResults={toolResults} isStreaming={isStreaming} isLast={i === blocks.length - 1} streamingDuration={streamingDurations.get(i) ?? (block.type === "thinking" ? thinkingDurationFromFile : undefined)} toolCallDurations={toolCallDurations} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} />
         ))}
       </div>
 
@@ -645,12 +645,12 @@ function AssistantMessageView({
   );
 }
 
-function BlockView({ block, toolResults, isStreaming, streamingDuration, toolCallDurations, keywords, isSearchMatch, cwd }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; streamingDuration?: number; toolCallDurations?: Map<string, number>; keywords?: string[]; isSearchMatch?: boolean; cwd?: string }) {
+function BlockView({ block, toolResults, isStreaming, isLast, streamingDuration, toolCallDurations, keywords, isSearchMatch, cwd }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; isLast?: boolean; streamingDuration?: number; toolCallDurations?: Map<string, number>; keywords?: string[]; isSearchMatch?: boolean; cwd?: string }) {
   if (block.type === "text") {
     return <TextBlock block={block as TextContent} keywords={keywords} isSearchMatch={isSearchMatch} isStreaming={isStreaming} />;
   }
   if (block.type === "thinking") {
-    return <ThinkingBlock block={block as ThinkingContent} duration={streamingDuration} keywords={keywords} isSearchMatch={isSearchMatch} />;
+    return <ThinkingBlock block={block as ThinkingContent} duration={streamingDuration} keywords={keywords} isSearchMatch={isSearchMatch} isStreaming={isLast && isStreaming} />;
   }
   if (block.type === "toolCall") {
     const tc = block as ToolCallContent;
@@ -726,9 +726,25 @@ function TextBlock({ block, keywords, isSearchMatch, isStreaming }: { block: Tex
   );
 }
 
-function ThinkingBlock({ block, duration, keywords, isSearchMatch }: { block: ThinkingContent; duration?: number; keywords?: string[]; isSearchMatch?: boolean }) {
+function ThinkingBlock({ block, duration, keywords, isSearchMatch, isStreaming }: { block: ThinkingContent; duration?: number; keywords?: string[]; isSearchMatch?: boolean; isStreaming?: boolean }) {
   const { t } = useI18n();
-  const [expanded, setExpanded] = useState(true);
+  // A thinking block is "still being appended" only when it is the last block
+  // of the assistant message AND the message is currently streaming. Every
+  // other thinking block is considered finished and is auto-collapsed. A user
+  // click on the header is remembered (userExpandedRef) so the auto-collapse
+  // never overrides a manual expand.
+  const [expanded, setExpanded] = useState(!!isStreaming || !!isSearchMatch);
+  const userExpandedRef = useRef(false);
+  useEffect(() => {
+    if (!isStreaming && !userExpandedRef.current && !isSearchMatch) setExpanded(false);
+  }, [isStreaming, isSearchMatch]);
+  const toggle = () => {
+    setExpanded((v) => {
+      const next = !v;
+      if (next) userExpandedRef.current = true;
+      return next;
+    });
+  };
   return (
     <div
       style={{
@@ -739,7 +755,8 @@ function ThinkingBlock({ block, duration, keywords, isSearchMatch }: { block: Th
       }}
     >
       <button
-        onClick={() => setExpanded((v) => !v)}
+        onClick={toggle}
+        aria-expanded={expanded}
         style={{
           display: "flex",
           alignItems: "center",
