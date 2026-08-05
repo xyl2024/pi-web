@@ -233,6 +233,15 @@ pre, code {
   color: var(--text-muted);
 }
 
+/* Process details summary row — hover brightens the text */
+.process-summary {
+  color: var(--text-muted);
+  transition: color 0.12s;
+}
+.process-summary:hover {
+  color: var(--text);
+}
+
 /* File viewer markdown preview — larger headings */
 .markdown-file-preview h1 { font-size: 1.8em; }
 .markdown-file-preview h2 { font-size: 1.4em; }

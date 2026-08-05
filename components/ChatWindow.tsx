@@ -165,6 +165,7 @@ function ProcessDetailsGroup({
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((v) => !v)}
+        className="process-summary"
         style={{
           display: "flex",
           alignItems: "center",
@@ -174,12 +175,10 @@ function ProcessDetailsGroup({
           padding: "2px 0",
           border: "none",
           background: "transparent",
-          color: "var(--text-muted)",
           cursor: "pointer",
           fontSize: 12,
           textAlign: "left",
         }}
-        title={expanded ? t("Collapse process details") : t("Expand process details")}
       >
         <svg
           width="12"
