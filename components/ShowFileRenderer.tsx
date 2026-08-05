@@ -16,6 +16,10 @@ interface Props {
   filePath: string;
   /** Session working directory; used to resolve relative paths. */
   cwd?: string;
+  /** Fill the parent stage instead of natural size — used inside the
+   *  ShowFileGallery carousel so images letterbox within the fixed stage
+   *  and tall content scrolls internally instead of overflowing. */
+  fill?: boolean;
 }
 
 const IMAGE_EXTS = new Set([
@@ -51,7 +55,7 @@ function fileApiUrl(filePath: string): string {
   return `/api/files/${encodeFilePathForApi(filePath)}?type=read`;
 }
 
-export function ShowFileRenderer({ filePath, cwd }: Props) {
+export function ShowFileRenderer({ filePath, cwd, fill }: Props) {
   const { t } = useI18n();
   // Resolve relative paths against cwd so the URL points to the right file.
   const isAbsolute = filePath.startsWith("/")
@@ -73,30 +77,42 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
 
   if (category === "image") {
     const alt = filePath;
+    const containerStyle: React.CSSProperties = fill
+      ? {
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          border: "1px solid var(--border)",
+          borderRadius: 6,
+          overflow: "hidden",
+          background: "var(--bg)",
+          lineHeight: 0,
+        }
+      : {
+          position: "relative",
+          display: "block",
+          maxWidth: "100%",
+          border: "1px solid var(--border)",
+          borderRadius: 6,
+          overflow: "hidden",
+          background: "var(--bg)",
+          lineHeight: 0,
+        };
+    const imgStyle: React.CSSProperties = fill
+      ? { display: "block", maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }
+      : { display: "block", maxWidth: "100%", maxHeight: "60vh" };
     return (
       <>
-        <div
-          style={{
-            position: "relative",
-            display: "block",
-            maxWidth: "100%",
-            border: "1px solid var(--border)",
-            borderRadius: 6,
-            overflow: "hidden",
-            background: "var(--bg)",
-            lineHeight: 0,
-          }}
-        >
+        <div style={containerStyle}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={url}
             alt={alt}
             loading="lazy"
-            style={{
-              display: "block",
-              maxWidth: "100%",
-              maxHeight: "60vh",
-            }}
+            style={imgStyle}
           />
           <ExpandButton onClick={() => setLightbox({ kind: "image", src: url, alt })} />
         </div>
@@ -122,7 +138,8 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
         style={{
           display: "block",
           maxWidth: "100%",
-          maxHeight: "60vh",
+          maxHeight: fill ? "100%" : "60vh",
+          objectFit: fill ? "contain" : undefined,
           borderRadius: 6,
           border: "1px solid var(--border)",
           background: "#000",
@@ -144,7 +161,7 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
         style={{
           display: "block",
           width: "100%",
-          height: "70vh",
+          height: fill ? "100%" : "70vh",
           border: "1px solid var(--border)",
           borderRadius: 6,
           background: "var(--bg)",
@@ -158,6 +175,7 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
       <>
         <HtmlContent
           url={url}
+          fill={fill}
           onExpand={(node, title) => setLightbox({ kind: "content", title, node })}
         />
         {lightbox?.kind === "content" && (
@@ -170,11 +188,11 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
   }
 
   if (category === "markdown") {
-    return <MarkdownContent url={url} />;
+    return <MarkdownContent url={url} fill={fill} />;
   }
 
   if (category === "text") {
-    return <TextContent url={url} ext={ext} />;
+    return <TextContent url={url} ext={ext} fill={fill} />;
   }
 
   return (
@@ -193,7 +211,7 @@ export function ShowFileRenderer({ filePath, cwd }: Props) {
   );
 }
 
-function HtmlContent({ url, onExpand }: { url: string; onExpand: (node: React.ReactNode, title: string) => void }) {
+function HtmlContent({ url, fill, onExpand }: { url: string; fill?: boolean; onExpand: (node: React.ReactNode, title: string) => void }) {
   const { t } = useI18n();
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -269,7 +287,7 @@ function HtmlContent({ url, onExpand }: { url: string; onExpand: (node: React.Re
         style={{
           display: "block",
           width: "100%",
-          height: "70vh",
+          height: fill ? "100%" : "70vh",
           border: "none",
         }}
       />
@@ -297,7 +315,7 @@ function HtmlContent({ url, onExpand }: { url: string; onExpand: (node: React.Re
   );
 }
 
-function MarkdownContent({ url }: { url: string }) {
+function MarkdownContent({ url, fill }: { url: string; fill?: boolean }) {
   const { t } = useI18n();
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -395,7 +413,7 @@ function MarkdownContent({ url }: { url: string }) {
         borderRadius: 6,
         fontSize: 13,
         lineHeight: 1.6,
-        maxHeight: "60vh",
+        maxHeight: fill ? "100%" : "60vh",
         overflow: "auto",
       }}
     >
@@ -409,7 +427,7 @@ function MarkdownContent({ url }: { url: string }) {
   );
 }
 
-function TextContent({ url, ext }: { url: string; ext: string }) {
+function TextContent({ url, ext, fill }: { url: string; ext: string; fill?: boolean }) {
   const { t } = useI18n();
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -472,7 +490,7 @@ function TextContent({ url, ext }: { url: string; ext: string }) {
         fontSize: 12,
         lineHeight: 1.5,
         overflow: "auto",
-        maxHeight: "60vh",
+        maxHeight: fill ? "100%" : "60vh",
         background: "var(--bg)",
         border: "1px solid var(--border)",
         borderRadius: 6,

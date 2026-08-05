@@ -6,7 +6,6 @@ import remarkGfm from "remark-gfm";
 import { Tooltip } from "./Tooltip";
 import { useI18n } from "@/hooks/useI18n";
 import { useCollapseHeight } from "@/hooks/useCollapseHeight";
-import { ShowFileRenderer } from "./ShowFileRenderer";
 import { MermaidBlock } from "./MermaidBlock";
 import { EchartsBlock } from "./EchartsBlock";
 import { SvgBlock } from "./SvgBlock";
@@ -46,8 +45,9 @@ interface Props {
   highlightEntryId?: string | null;
   /** Whether this message contains a search match (for highlight) */
   isSearchMatch?: boolean;
-  /** Session working directory — used to render show_file tool calls */
-  cwd?: string;
+  /** Content rendered between the assistant message body and its footer row
+   *  (used by ChatWindow for the turn-level show_file gallery). */
+  afterContent?: React.ReactNode;
 }
 
 function formatTime(ts?: number): string | null {
@@ -86,7 +86,7 @@ function highlightKeywords(text: string, keywords?: string[], isSearchMatch?: bo
   return parts.length > 0 ? parts : text;
 }
 
-export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, keywords, highlightEntryId, isSearchMatch, cwd, sessionId }: Props) {
+export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, keywords, highlightEntryId, isSearchMatch, afterContent, sessionId }: Props) {
   const isFocused = !!(highlightEntryId && entryId === highlightEntryId);
 
   if (message.role === "user") {
@@ -99,7 +99,7 @@ export function MessageView({ message, isStreaming, toolResults, modelNames, ent
   if (message.role === "assistant") {
     return (
       <div className={isFocused ? "search-flash" : undefined}>
-        <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} showTimestamp={showTimestamp} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} sessionId={sessionId} entryId={entryId} />
+        <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} showTimestamp={showTimestamp} keywords={keywords} isSearchMatch={isSearchMatch} afterContent={afterContent} sessionId={sessionId} entryId={entryId} />
       </div>
     );
   }
@@ -383,7 +383,7 @@ function AssistantMessageView({
   showTimestamp,
   keywords,
   isSearchMatch,
-  cwd,
+  afterContent,
   sessionId,
   entryId,
 }: {
@@ -394,7 +394,7 @@ function AssistantMessageView({
   showTimestamp?: boolean;
   keywords?: string[];
   isSearchMatch?: boolean;
-  cwd?: string;
+  afterContent?: React.ReactNode;
   sessionId?: string;
   entryId?: string;
 }) {
@@ -533,9 +533,11 @@ function AssistantMessageView({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {blocks.map((block, i) => (
-          <BlockView key={i} block={block} toolResults={toolResults} isStreaming={isStreaming} isLast={i === blocks.length - 1} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} />
+          <BlockView key={i} block={block} toolResults={toolResults} isStreaming={isStreaming} isLast={i === blocks.length - 1} keywords={keywords} isSearchMatch={isSearchMatch} />
         ))}
       </div>
+
+      {afterContent}
 
       <div style={{
         display: "flex", alignItems: "center", gap: 8, marginTop: 8,
@@ -587,7 +589,7 @@ function AssistantMessageView({
   );
 }
 
-function BlockView({ block, toolResults, isStreaming, isLast, keywords, isSearchMatch, cwd }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; isLast?: boolean; keywords?: string[]; isSearchMatch?: boolean; cwd?: string }) {
+function BlockView({ block, toolResults, isStreaming, isLast, keywords, isSearchMatch }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; isLast?: boolean; keywords?: string[]; isSearchMatch?: boolean }) {
   if (block.type === "text") {
     return <TextBlock block={block as TextContent} keywords={keywords} isSearchMatch={isSearchMatch} isStreaming={isStreaming} />;
   }
@@ -597,7 +599,7 @@ function BlockView({ block, toolResults, isStreaming, isLast, keywords, isSearch
   if (block.type === "toolCall") {
     const tc = block as ToolCallContent;
     const result = toolResults?.get(tc.toolCallId);
-    return <ToolCallBlock block={tc} result={result} isRunning={isStreaming && !result} cwd={cwd} />;
+    return <ToolCallBlock block={tc} result={result} isRunning={isStreaming && !result} />;
   }
   return null;
 }
@@ -768,7 +770,8 @@ function ThinkingBlock({ block, keywords, isSearchMatch, isStreaming }: { block:
 }
 
 
-function ToolCallBlock({ block, result, isRunning, cwd }: { block: ToolCallContent; result?: ToolResultMessage; isRunning?: boolean; cwd?: string }) {
+function ToolCallBlock({ block, result, isRunning }: { block: ToolCallContent; result?: ToolResultMessage; isRunning?: boolean }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   // Height animation for expand/collapse — same pattern as the thinking block.
   const { contentRef, contentHeight, allowAnim } = useCollapseHeight<HTMLDivElement>();
@@ -827,6 +830,11 @@ function ToolCallBlock({ block, result, isRunning, cwd }: { block: ToolCallConte
         <span style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
           {getToolPreview(block)}
         </span>
+        {isShowFile && showFilePaths && (
+          <span style={{ color: "var(--text-dim)", fontSize: 11, flexShrink: 0, whiteSpace: "nowrap" }}>
+            ⬇ {t(showFilePaths.length === 1 ? "{n} file shown below" : "{n} files shown below").replace("{n}", String(showFilePaths.length))}
+          </span>
+        )}
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--text-dim)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
           <polyline points="2 3.5 5 6.5 8 3.5" />
         </svg>
@@ -871,23 +879,9 @@ function ToolCallBlock({ block, result, isRunning, cwd }: { block: ToolCallConte
         </div>
       </div>
 
-      {/* ── show_file inline renderer (below generic UI) ── */}
-      {isShowFile && showFilePaths && (
-        <div
-          style={{
-            padding: "10px",
-            borderTop: "1px solid rgba(34,197,94,0.2)",
-            background: "var(--bg)",
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-          }}
-        >
-          {showFilePaths.map((p, i) => (
-            <ShowFileRenderer key={`${i}-${p}`} filePath={p} cwd={cwd} />
-          ))}
-        </div>
-      )}
+      {/* ── show_file files are rendered by ChatWindow as a turn-level
+          gallery below the final answer, so they stay visible when the
+          tool-call card is folded. The card keeps a count hint above. ── */}
     </div>
   );
 }

@@ -13,9 +13,11 @@ import {
   countToolCallsByName,
   getAssistantErrorMessage,
   splitFinalAssistantBlocks,
+  collectShowFilePaths,
 } from "@/lib/message-display";
 import { AGENT_TODO_TOOL_NAME } from "@/lib/agent-todo-tool-types";
 import { MessageView } from "./MessageView";
+import { ShowFileRenderer } from "./ShowFileRenderer";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { Tooltip } from "./Tooltip";
 import { AgentTodoPanel } from "./AgentTodoPanel";
@@ -128,6 +130,190 @@ function withAssistantBlocks(
 
 /** How many tool names the process summary lists before falling back to "+N". */
 const MAX_TOOL_BREAKDOWN = 3;
+
+/** Turn-level gallery for show_file: renders every file referenced by the
+ *  turn's show_file calls below the final answer, so the files stay visible
+ *  even when the tool-call cards are folded into the process group. Only
+ *  rendered once the turn has settled (ChatWindow gates on isLiveTurn).
+ *
+ *  Carousel: one file at a time in a fixed-height stage (images letterbox
+ *  with object-fit: contain), glassy prev/next arrows, pill dots + counter
+ *  in a footer bar, and keyboard ←/→ navigation. */
+function ShowFileGallery({ paths, cwd }: { paths: string[]; cwd?: string }) {
+  const { t } = useI18n();
+  const [index, setIndex] = useState(0);
+  const [dir, setDir] = useState<1 | -1>(1);
+  const count = paths.length;
+  const safeIndex = count > 0 ? Math.min(index, count - 1) : 0;
+
+  const goTo = (i: number) => {
+    const next = ((i % count) + count) % count;
+    if (next === safeIndex) return;
+    // Direction follows the shortest arc around the circular track; ties (even
+    // count, exact opposite) prefer forward so prev/next feel consistent.
+    const delta = next - safeIndex;
+    const half = count / 2;
+    const d = delta > 0
+      ? (delta <= half ? delta : delta - count)
+      : (delta >= -half ? delta : delta + count);
+    setDir(d >= 0 ? 1 : -1);
+    setIndex(next);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowLeft") { e.preventDefault(); goTo(safeIndex - 1); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); goTo(safeIndex + 1); }
+  };
+
+  // Single file — no carousel chrome, natural size.
+  if (count === 1) {
+    return <ShowFileRenderer filePath={paths[0]} cwd={cwd} />;
+  }
+  if (count === 0) return null;
+
+  return (
+    <div
+      className="show-file-carousel"
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      role="region"
+      aria-label={t("File gallery")}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "clamp(260px, 62vh, 500px)",
+        border: "1px solid var(--border)",
+        borderRadius: 12,
+        background: "var(--bg-panel)",
+        overflow: "hidden",
+        outline: "none",
+      }}
+    >
+      {/* Stage: one file at a time, centered, slide-in on index change */}
+      <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
+        <div
+          key={safeIndex}
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "10px 44px 8px 44px",
+            animation: `${dir === 1 ? "gallery-slide-in-right" : "gallery-slide-in-left"} 0.32s cubic-bezier(0.22, 1, 0.36, 1)`,
+          }}
+        >
+          <ShowFileRenderer key={`${safeIndex}-${paths[safeIndex]}`} filePath={paths[safeIndex]} cwd={cwd} fill />
+        </div>
+
+        {count > 1 && (
+          <>
+            <GalleryArrow side="left" onClick={() => goTo(safeIndex - 1)} label={t("Previous")} />
+            <GalleryArrow side="right" onClick={() => goTo(safeIndex + 1)} label={t("Next")} />
+          </>
+        )}
+      </div>
+
+      {/* Footer: pill dots + counter */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          padding: "7px 12px",
+          borderTop: "1px solid var(--border)",
+          background: "var(--bg-subtle)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 5, minHeight: 12 }}>
+          {count <= 12 && paths.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => goTo(i)}
+              aria-label={t("Go to file {n}").replace("{n}", String(i + 1))}
+              aria-current={i === safeIndex}
+              style={{
+                width: i === safeIndex ? 18 : 6,
+                height: 6,
+                padding: 0,
+                border: "none",
+                borderRadius: 3,
+                cursor: "pointer",
+                background: i === safeIndex ? "var(--accent)" : "var(--text-dim)",
+                opacity: i === safeIndex ? 1 : 0.45,
+                transition: "width 0.2s ease, background 0.15s ease, opacity 0.15s ease",
+              }}
+            />
+          ))}
+        </div>
+        <span
+          style={{
+            flexShrink: 0,
+            fontSize: 11,
+            fontFamily: "var(--font-mono)",
+            color: "var(--text-muted)",
+            background: "var(--bg-selected)",
+            padding: "2px 8px",
+            borderRadius: 9,
+          }}
+        >
+          {safeIndex + 1} / {count}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Circular glassy arrow used by the ShowFileGallery carousel. */
+function GalleryArrow({ side, onClick, label }: { side: "left" | "right"; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      style={{
+        position: "absolute",
+        top: "50%",
+        transform: "translateY(-50%)",
+        left: side === "left" ? 6 : undefined,
+        right: side === "right" ? 6 : undefined,
+        zIndex: 2,
+        width: 30,
+        height: 30,
+        padding: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: "50%",
+        border: "1px solid rgba(255,255,255,0.22)",
+        background: "rgba(0,0,0,0.45)",
+        color: "#fff",
+        cursor: "pointer",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        opacity: 0.65,
+        transition: "opacity 0.15s ease, background 0.15s ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.opacity = "1";
+        e.currentTarget.style.background = "rgba(0,0,0,0.65)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.opacity = "0.65";
+        e.currentTarget.style.background = "rgba(0,0,0,0.45)";
+      }}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        {side === "left"
+          ? <polyline points="15 18 9 12 15 6" />
+          : <polyline points="9 18 15 12 9 6" />}
+      </svg>
+    </button>
+  );
+}
 
 function ProcessDetailsGroup({
   messageCount,
@@ -560,6 +746,17 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const replayActive = replayOpen && !streamState.isStreaming && !agentRunning;
   const renderMessages = replayActive ? messages.slice(0, replayIndex) : messages;
   const renderEntryIds = replayActive ? entryIds.slice(0, replayIndex) : entryIds;
+
+  // Last user message / last turn anchor (user OR compactionSummary) — used by
+  // the turn renderer and the streaming gallery below.
+  let lastUserIdx = -1;
+  for (let i = renderMessages.length - 1; i >= 0; i--) {
+    if (renderMessages[i].role === "user") { lastUserIdx = i; break; }
+  }
+  let lastAnchorIdx = -1;
+  for (let i = renderMessages.length - 1; i >= 0; i--) {
+    if (isGroupAnchor(renderMessages[i])) { lastAnchorIdx = i; break; }
+  }
   const replayLabel = (() => {
     const base = `${replayIndex} / ${messages.length}`;
     const m = messages[replayIndex - 1] as (AgentMessage & { timestamp?: number }) | undefined;
@@ -837,10 +1034,8 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                   toolResultsMap.set(msg.toolCallId, msg);
                 }
               }
-              let lastUserIdx = -1;
-              for (let i = renderMessages.length - 1; i >= 0; i--) {
-                if (renderMessages[i].role === "user") { lastUserIdx = i; break; }
-              }
+              // Last turn anchor (user OR compactionSummary) — computed in the
+              // component body so the streaming gallery below shares it.
               let refIdx = 0;
 
               // Render one message at idx. Optional messageOverride renders a
@@ -856,6 +1051,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                   attachRef?: boolean;
                   showTimestamp?: boolean;
                   keySuffix?: string;
+                  afterContent?: React.ReactNode;
                 } = {},
               ): React.ReactNode => {
                 const msg = opts.messageOverride ?? renderMessages[idx];
@@ -898,7 +1094,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                     keywords={searchKeywords}
                     highlightEntryId={highlightEntryId}
                     isSearchMatch={matchedEntryIds.has(renderEntryIds[idx])}
-                    cwd={session?.cwd}
+                    afterContent={opts.afterContent}
                     sessionId={session?.id}
                   />
                 );
@@ -973,6 +1169,19 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                 const isCurrentTurnInProgress =
                   agentRunning && userIdx === lastUserIdx && lastUserIdx !== -1;
 
+                // The gallery only renders once the turn is fully settled:
+                // while the agent is still working on this turn it is omitted
+                // entirely, so the streaming answer text isn't pushed around
+                // by files appearing beneath it.
+                const isLiveTurn = agentRunning && userIdx === lastAnchorIdx && lastAnchorIdx !== -1;
+
+                // Turn-level show_file gallery: every path referenced by the
+                // turn's show_file calls, in call order.
+                const turnPaths = collectShowFilePaths(renderMessages, userIdx + 1, endIdx);
+                const turnGallery = turnPaths.length > 0
+                  ? <ShowFileGallery paths={turnPaths} cwd={session?.cwd} />
+                  : null;
+
                 const processChildren = (
                   <Fragment>
                     {visibleProcessIndices.map((i) => renderOne(i, { keySuffix: "process" }))}
@@ -1007,8 +1216,14 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                     renderOne(finalAssistantIdx, {
                       messageOverride: finalAnswerMessage,
                       keySuffix: "answer",
+                      afterContent: isLiveTurn ? null : turnGallery,
                     }),
                   );
+                } else if (turnGallery && !isLiveTurn) {
+                  // No trailing answer — the gallery still renders at the
+                  // bottom of the turn's visible content (below the fold
+                  // group / inline process).
+                  rendered.push(<div key={`gallery-${userIdx}`}>{turnGallery}</div>);
                 }
 
                 idx = endIdx;
@@ -1017,7 +1232,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
             })()}
 
             {streamState.isStreaming && streamState.streamingMessage && (
-              <MessageView message={streamState.streamingMessage as AgentMessage} isStreaming modelNames={modelNames} cwd={session?.cwd} sessionId={session?.id} />
+              <MessageView message={streamState.streamingMessage as AgentMessage} isStreaming modelNames={modelNames} sessionId={session?.id} />
             )}
 
             {agentRunning && !streamState.streamingMessage && (

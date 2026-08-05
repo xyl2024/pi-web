@@ -11,6 +11,7 @@ import type {
   AssistantMessage,
   ThinkingContent,
 } from "./types";
+import { SHOW_FILE_TOOL_NAME } from "./show-file-tool-types";
 
 interface DisplayOptions {
   isStreaming?: boolean;
@@ -75,6 +76,40 @@ export function splitFinalAssistantBlocks(
     answerBlocks: blocks.slice(lastProcessIndex + 1),
     processBlocks: blocks.slice(0, lastProcessIndex + 1),
   };
+}
+
+/** Collect every path referenced by a list of assistant content blocks,
+ *  in order. Backs collectShowFilePaths for a single block list. */
+export function collectShowFilePathsFromBlocks(blocks: AssistantContentBlock[]): string[] {
+  const paths: string[] = [];
+  for (const b of blocks) {
+    if (b.type !== "toolCall") continue;
+    if (b.toolName !== SHOW_FILE_TOOL_NAME) continue;
+    const raw = b.input.paths;
+    if (!Array.isArray(raw)) continue;
+    for (const p of raw) {
+      if (typeof p === "string" && p.length > 0) paths.push(p);
+    }
+  }
+  return paths;
+}
+
+/** Collect every show_file path referenced across the message range
+ *  [from, to) in order. Used to render the turn-level file gallery below
+ *  the final answer instead of inside the foldable tool-call cards. */
+export function collectShowFilePaths(
+  messages: AgentMessage[],
+  from: number,
+  to: number,
+): string[] {
+  const paths: string[] = [];
+  const end = Math.min(to, messages.length);
+  for (let i = from; i < end; i++) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    paths.push(...collectShowFilePathsFromBlocks(msg.content ?? []));
+  }
+  return paths;
 }
 
 /** Count tool-call blocks by tool name across message indices plus extra
