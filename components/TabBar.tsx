@@ -89,7 +89,7 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
               paddingLeft: 12,
               paddingRight: 6,
               borderRight: "1px solid var(--border)",
-              background: isActive ? "var(--bg)" : "var(--bg-panel)",
+              background: "var(--bg-panel)",
               cursor: "pointer",
               fontSize: 12,
               color: isActive ? "var(--text)" : "var(--text-muted)",
@@ -98,7 +98,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onContextMe
               minWidth: 80,
               flexShrink: 0,
               userSelect: "none",
-              transition: "background 0.1s, color 0.1s",
+              transition: "box-shadow 0.1s, color 0.1s",
+              boxShadow: isActive ? "inset 0 -2px 0 var(--accent)" : "none",
             }}
           >
             <span
