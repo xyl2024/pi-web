@@ -10,7 +10,7 @@ import type {
   ToolResultMessage,
 } from "@/lib/types";
 import {
-  countToolCallBlocks,
+  countToolCallsByName,
   getAssistantErrorMessage,
   splitFinalAssistantBlocks,
 } from "@/lib/message-display";
@@ -118,22 +118,6 @@ function hasDisplayableProcessMessage(msg: AgentMessage): boolean {
   return blocks.some((b) => b.type === "thinking" || b.type === "toolCall");
 }
 
-/** Count tool-call blocks across a set of message indices. */
-function countToolCallsInIndices(
-  messages: AgentMessage[],
-  indices: number[],
-): number {
-  let n = 0;
-  for (const i of indices) {
-    const msg = messages[i];
-    if (msg?.role !== "assistant") continue;
-    for (const b of msg.content ?? []) {
-      if (b.type === "toolCall") n++;
-    }
-  }
-  return n;
-}
-
 /** Clone an assistant message with a different content array. */
 function withAssistantBlocks(
   message: AssistantMessage,
@@ -142,26 +126,50 @@ function withAssistantBlocks(
   return { ...message, content: blocks };
 }
 
+/** How many tool names the process summary lists before falling back to "+N". */
+const MAX_TOOL_BREAKDOWN = 3;
+
 function ProcessDetailsGroup({
   messageCount,
-  toolCallCount,
+  toolCallCounts,
   children,
 }: {
   messageCount: number;
-  toolCallCount: number;
+  toolCallCounts: Record<string, number>;
   children: React.ReactNode;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [expanded, setExpanded] = useState(false);
   // Height animation for expand/collapse — same pattern as the thinking block:
   // container height follows the rendered content via ResizeObserver.
   const { contentRef, contentHeight, allowAnim } = useCollapseHeight<HTMLDivElement>();
 
+  const toolCallCount = Object.values(toolCallCounts).reduce((s, n) => s + n, 0);
   const summary = t("{n} messages").replace("{n}", String(messageCount));
   const withCalls =
     toolCallCount > 0
       ? ` · ${t(toolCallCount === 1 ? "{n} tool call" : "{n} tool calls").replace("{n}", String(toolCallCount))}`
       : "";
+  // Per-tool breakdown: top tool names by call count (e.g. "· 3× bash、2× read").
+  // Only the top few fit in the single-line summary; when more tools were
+  // used, hovering the summary shows the full breakdown via Tooltip.
+  const toolEntries = Object.entries(toolCallCounts).sort((a, b) => b[1] - a[1]);
+  const toolSummary = (() => {
+    if (toolEntries.length === 0) return null;
+    const sep = locale === "zh" ? "、" : ", ";
+    const shown = toolEntries
+      .slice(0, MAX_TOOL_BREAKDOWN)
+      .map(([name, n]) => t("{n}× {tool}").replace("{n}", String(n)).replace("{tool}", name))
+      .join(sep);
+    const rest = toolEntries.length - Math.min(toolEntries.length, MAX_TOOL_BREAKDOWN);
+    return ` · ${shown}${rest > 0 ? ` ${t("+{n}").replace("{n}", String(rest))}` : ""}`;
+  })();
+  const toolFullList =
+    toolEntries.length > MAX_TOOL_BREAKDOWN
+      ? toolEntries
+          .map(([name, n]) => t("{n}× {tool}").replace("{n}", String(n)).replace("{tool}", name))
+          .join(locale === "zh" ? "、" : ", ")
+      : null;
 
   return (
     <div style={{ marginBottom: 14 }}>
@@ -211,6 +219,13 @@ function ProcessDetailsGroup({
         >
           {summary}
           {withCalls}
+          {toolSummary && (toolFullList ? (
+            <Tooltip content={toolFullList}>
+              <span>{toolSummary}</span>
+            </Tooltip>
+          ) : (
+            toolSummary
+          ))}
         </span>
       </button>
       <div
@@ -979,10 +994,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                       <ProcessDetailsGroup
                         key={`process-${userIdx}`}
                         messageCount={processCount}
-                        toolCallCount={
-                          countToolCallsInIndices(renderMessages, visibleProcessIndices) +
-                          countToolCallBlocks(split.processBlocks)
-                        }
+                        toolCallCounts={countToolCallsByName(renderMessages, visibleProcessIndices, split.processBlocks)}
                       >
                         {processChildren}
                       </ProcessDetailsGroup>,

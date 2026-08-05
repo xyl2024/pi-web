@@ -121,6 +121,8 @@ export const ZH_TRANSLATIONS = {
   "Thinking": "思考",
   "{n} tool call": "{n} 次工具调用",
   "{n} tool calls": "{n} 次工具调用",
+  "{n}× {tool}": "{n} 次 {tool}",
+  "+{n}": "+{n}",
   "No output": "无输出",
   "copy": "复制",
   "copied": "已复制",

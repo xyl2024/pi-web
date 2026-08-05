@@ -6,10 +6,10 @@
 // the per-turn "Process details" foldable group.
 
 import type {
+  AgentMessage,
   AssistantContentBlock,
   AssistantMessage,
   ThinkingContent,
-  ToolCallContent,
 } from "./types";
 
 interface DisplayOptions {
@@ -77,8 +77,26 @@ export function splitFinalAssistantBlocks(
   };
 }
 
-/** Count tool-call blocks in a list (used to summarise the process group). */
-export function countToolCallBlocks(blocks: AssistantContentBlock[]): number {
-  return blocks.filter((block): block is ToolCallContent => block.type === "toolCall")
-    .length;
+/** Count tool-call blocks by tool name across message indices plus extra
+ *  blocks (used to summarise the process group, e.g. "3× bash, 2× read"). */
+export function countToolCallsByName(
+  messages: AgentMessage[],
+  indices: number[],
+  extraBlocks: AssistantContentBlock[],
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  const tally = (blocks: AssistantContentBlock[]) => {
+    for (const b of blocks) {
+      if (b.type === "toolCall") {
+        counts[b.toolName] = (counts[b.toolName] ?? 0) + 1;
+      }
+    }
+  };
+  for (const i of indices) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    tally(msg.content ?? []);
+  }
+  tally(extraBlocks);
+  return counts;
 }
