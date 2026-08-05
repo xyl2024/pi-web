@@ -745,6 +745,11 @@ function ThinkingBlock({ block, duration, keywords, isSearchMatch, isStreaming }
       return next;
     });
   };
+  // Header preview when collapsed: collapse internal whitespace runs into
+  // single spaces so multi-line reasoning reads as one continuous snippet in
+  // the single-line header. The ellipsis in the JSX cuts off anything that
+  // overflows the available width.
+  const thinkingPreview = useMemo(() => block.thinking.replace(/\s+/g, " ").trim(), [block.thinking]);
   return (
     <div
       style={{
@@ -771,9 +776,36 @@ function ThinkingBlock({ block, duration, keywords, isSearchMatch, isStreaming }
           textAlign: "left",
         }}
       >
-        <span>{t("Thinking")}</span>
-        {duration !== undefined && (
-          <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-dim)", fontVariantNumeric: "tabular-nums" }}>{duration}s</span>
+        <span aria-hidden style={{ display: "inline-block", width: 10, color: "var(--text-dim)", transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.12s", flexShrink: 0 }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="9 6 15 12 9 18" />
+          </svg>
+        </span>
+        {expanded ? (
+          <>
+            <span>{t("Thinking")}</span>
+            {duration !== undefined && (
+              <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-dim)", fontVariantNumeric: "tabular-nums" }}>{duration}s</span>
+            )}
+          </>
+        ) : (
+          <>
+            <span
+              style={{
+                flex: 1,
+                minWidth: 0,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                color: "var(--text-muted)",
+              }}
+            >
+              {thinkingPreview}
+            </span>
+            {duration !== undefined && (
+              <span style={{ marginLeft: 6, fontSize: 11, color: "var(--text-dim)", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{duration}s</span>
+            )}
+          </>
         )}
       </button>
       {expanded && (
