@@ -14,13 +14,16 @@ interface Props {
 
 /**
  * Shared syntax-highlighted code block with language label and copy button.
- * Used by MessageView, FileViewer (markdown preview), and TodoDescriptionView
- * so the todo panel renders code blocks the same way as the file viewer.
+ * The header bar is hidden by default — the language label + copy button
+ * appear as a floating overlay when the block is hovered. Used by MessageView,
+ * FileViewer (markdown preview), and TodoDescriptionView so the todo panel
+ * renders code blocks the same way as the file viewer.
  */
 export function CodeBlock({ code, lang }: Props) {
   const { isDark } = useTheme();
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
   const copy = () => {
     copyText(code)
@@ -37,6 +40,8 @@ export function CodeBlock({ code, lang }: Props) {
 
   return (
     <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         position: "relative",
         marginTop: 8,
@@ -50,52 +55,6 @@ export function CodeBlock({ code, lang }: Props) {
           : "0 4px 14px rgba(0,0,0,0.08)",
       }}
     >
-      <div
-        style={{
-          position: "relative",
-          minHeight: 32,
-          padding: "0 12px",
-          background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)",
-          borderBottom: "1px solid var(--border)",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-        }}
-      >
-        <span
-          style={{
-            position: "absolute",
-            left: "50%",
-            transform: "translateX(-50%)",
-            fontSize: 11,
-            color: "var(--text-muted)",
-            fontFamily: "var(--font-sans)",
-            pointerEvents: "none",
-            maxWidth: "calc(100% - 120px)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {lang}
-        </span>
-        <button
-          onClick={copy}
-          style={{
-            marginLeft: "auto",
-            background: "none",
-            border: "none",
-            color: "var(--text-muted)",
-            cursor: "pointer",
-            fontSize: 11,
-            fontFamily: "var(--font-sans)",
-            padding: "2px 6px",
-            borderRadius: 4,
-          }}
-        >
-          {copied ? t("copied") : t("copy")}
-        </button>
-      </div>
       <SyntaxHighlighter
         language={lang || "text"}
         style={isDark ? vscDarkPlus : vs}
@@ -111,6 +70,55 @@ export function CodeBlock({ code, lang }: Props) {
       >
         {code}
       </SyntaxHighlighter>
+      <div
+        style={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "2px 6px 2px 10px",
+          borderRadius: 6,
+          background: isDark ? "rgba(30,30,30,0.9)" : "rgba(255,255,255,0.92)",
+          border: "1px solid var(--border)",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+          opacity: hovered ? 1 : 0,
+          pointerEvents: hovered ? "auto" : "none",
+          transition: "opacity 0.15s ease",
+        }}
+      >
+        {lang && (
+          <span
+            style={{
+              fontSize: 11,
+              color: "var(--text-muted)",
+              fontFamily: "var(--font-sans)",
+              maxWidth: 160,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {lang}
+          </span>
+        )}
+        <button
+          onClick={copy}
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            fontSize: 11,
+            fontFamily: "var(--font-sans)",
+            padding: "2px 6px",
+            borderRadius: 4,
+          }}
+        >
+          {copied ? t("copied") : t("copy")}
+        </button>
+      </div>
     </div>
   );
 }
