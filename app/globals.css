@@ -191,9 +191,11 @@ pre, code {
 .markdown-body ul { list-style: disc; }
 .markdown-body ol { list-style: decimal; }
 .markdown-body li { margin: 2px 0; }
-.markdown-body a { color: var(--accent); text-decoration: underline; }
+.markdown-body li::marker { color: var(--accent); }
+.markdown-body a { color: var(--accent); text-decoration: underline; transition: color 0.12s; }
+.markdown-body a:hover { color: var(--accent-hover); }
 .markdown-body blockquote {
-  border-left: 3px solid var(--border);
+  border-left: 3px solid var(--accent);
   margin: 4px 0;
   padding: 2px 10px;
   color: var(--text-muted);
@@ -210,6 +212,7 @@ pre, code {
   text-align: left;
 }
 .markdown-body th { background: var(--bg-panel); font-weight: 600; }
+.markdown-body tbody tr:nth-child(even) { background: var(--bg-subtle); }
 .markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
 .markdown-body img {
   max-width: 100%;
@@ -219,6 +222,9 @@ pre, code {
 }
 .markdown-body img[src*="/api/todo-images/"] {
   border: 1px solid var(--border);
+}
+.markdown-body input[type="checkbox"] {
+  accent-color: var(--accent);
 }
 
 /* File viewer markdown preview — larger headings */
