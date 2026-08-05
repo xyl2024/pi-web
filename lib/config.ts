@@ -24,9 +24,39 @@ export interface ExtensionsConfig {
   clawd_on_desk: BuiltinExtensionConfig;
 }
 
+// ── Right-side button bar visibility ──────────────────────────────────────
+// Each key is the user-facing id of a configurable right-bar tab button.
+// Missing keys default to true (visible) — both in defaults and in the parser.
+
+export type RightBarButtonId =
+  | "todos"
+  | "canvas"
+  | "translate"
+  | "json"
+  | "diff"
+  | "rss"
+  | "favorites"
+  | "tokens"
+  | "toolCalls";
+
+export const RIGHT_BAR_BUTTON_IDS: readonly RightBarButtonId[] = [
+  "todos",
+  "canvas",
+  "translate",
+  "json",
+  "diff",
+  "rss",
+  "favorites",
+  "tokens",
+  "toolCalls",
+] as const;
+
+export type RightSideBarConfig = Record<RightBarButtonId, boolean>;
+
 export interface PiWebConfig {
   dangerous_patterns: DangerousPatternsConfig;
   extensions: ExtensionsConfig;
+  right_side_bar: RightSideBarConfig;
 }
 
 const DEFAULT_DANGEROUS_PATTERNS: DangerousPatternsConfig = {
@@ -34,11 +64,24 @@ const DEFAULT_DANGEROUS_PATTERNS: DangerousPatternsConfig = {
   timeout_ms: 300_000,
 };
 
+const DEFAULT_RIGHT_SIDE_BAR: RightSideBarConfig = {
+  todos: true,
+  canvas: true,
+  translate: true,
+  json: true,
+  diff: true,
+  rss: true,
+  favorites: true,
+  tokens: true,
+  toolCalls: true,
+};
+
 const DEFAULT_CONFIG: PiWebConfig = {
   dangerous_patterns: DEFAULT_DANGEROUS_PATTERNS,
   extensions: {
     clawd_on_desk: { enabled: false },
   },
+  right_side_bar: { ...DEFAULT_RIGHT_SIDE_BAR },
 };
 
 function parseDangerousPatterns(raw: unknown): DangerousPatternsConfig {
@@ -58,6 +101,17 @@ function parseDangerousPatterns(raw: unknown): DangerousPatternsConfig {
     ? timeoutRaw
     : DEFAULT_DANGEROUS_PATTERNS.timeout_ms;
   return { rules, timeout_ms };
+}
+
+function parseRightSideBar(raw: unknown): RightSideBarConfig {
+  const out: RightSideBarConfig = { ...DEFAULT_RIGHT_SIDE_BAR };
+  if (!raw || typeof raw !== "object") return out;
+  const obj = raw as Record<string, unknown>;
+  for (const key of RIGHT_BAR_BUTTON_IDS) {
+    if (typeof obj[key] === "boolean") out[key] = obj[key] as boolean;
+    // missing or non-boolean → keep default (true)
+  }
+  return out;
 }
 
 const CONFIG_DIR = join(homedir(), ".pi-web");
@@ -108,6 +162,7 @@ export function readConfig(): PiWebConfig {
       extensions: {
         clawd_on_desk: { enabled: clawdOnDeskEnabled },
       },
+      right_side_bar: parseRightSideBar(cfg.right_side_bar),
     };
   } catch (err) {
     log.warn("failed to read config, resetting to defaults", { error: String(err) });

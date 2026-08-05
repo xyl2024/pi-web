@@ -319,6 +319,9 @@ export const ZH_TRANSLATIONS = {
   "Markdown content appended after the built-in system prompt.": "在系统内置提示词之后追加的 Markdown 内容。",
   "Append system prompt saved": "追加系统提示词已保存",
   "Failed to save append system prompt": "保存追加系统提示词失败",
+  // Settings / right-side button bar visibility
+  "Right-side buttons": "右侧按钮",
+  "Choose which buttons appear in the right-side bar. Hidden buttons can still be opened from the command palette. Changes apply immediately.": "选择在右侧按钮栏显示的按钮。隐藏的按钮仍可通过命令面板打开，修改会立即生效。",
   // File explorer (rename/delete/copy/context menu)
   "Delete file?": "删除文件？",
   "Delete folder?": "删除文件夹？",

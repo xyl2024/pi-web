@@ -17,16 +17,6 @@ import { DiffPanel } from "./DiffPanel";
 import { RssPanel } from "./RssPanel";
 import { TokensPanel } from "./TokensPanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
-
-const TODO_TAB_ID = "todo:global";
-const FAVORITES_TAB_ID = "favorites:global";
-const TRANSLATE_TAB_ID = "translate:global";
-const TOOL_CALLS_TAB_ID = "toolCalls:global";
-const JSON_TAB_ID = "json:global";
-const CANVAS_TAB_ID = "canvas:global";
-const DIFF_TAB_ID = "diff:global";
-const RSS_TAB_ID = "rss:global";
-const TOKENS_TAB_ID = "tokens:global";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
 import { Tooltip } from "./Tooltip";
@@ -44,6 +34,20 @@ import { useInboxUnreadCount } from "@/hooks/useInboxUnreadCount";
 import { useToast } from "./Toast";
 import { useContextMenu, type ContextMenuItem } from "./ContextMenu";
 import type { SessionInfo, SessionSearchResult } from "@/lib/types";
+import {
+  TODO_TAB_ID,
+  FAVORITES_TAB_ID,
+  TRANSLATE_TAB_ID,
+  TOOL_CALLS_TAB_ID,
+  JSON_TAB_ID,
+  CANVAS_TAB_ID,
+  DIFF_TAB_ID,
+  RSS_TAB_ID,
+  TOKENS_TAB_ID,
+  RIGHT_BAR_ID_FOR_TAB_KIND,
+} from "@/lib/types";
+import type { RightSideBarConfig, RightBarButtonId } from "@/lib/config";
+import { useEnsureSettings } from "@/hooks/settingsStore";
 import type { ChatInputHandle } from "./ChatInput";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { buildCommands, type Command, type CommandContext } from "@/lib/commands";
@@ -59,6 +63,14 @@ interface ToolInfo {
 const LEFT_PANEL_RATIO = 0.18;
 const RIGHT_PANEL_RATIO = 0.32;
 
+// True while settings haven't been fetched (or the fetch failed).
+// Until then, all right-bar buttons render as visible — the conservative
+// default that matches the on-disk default config.
+function isButtonVisible(cfg: RightSideBarConfig | null, id: RightBarButtonId): boolean {
+  if (cfg === null) return true;
+  return cfg[id] !== false;
+}
+
 export function AppShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -67,6 +79,8 @@ export function AppShell() {
   const toast = useToast();
   const cm = useContextMenu();
   const { unread: inboxUnread } = useInboxUnreadCount();
+  const settings = useEnsureSettings();
+  const rightSideBarConfig = settings?.right_side_bar ?? null;
 
   useEffect(() => {
     if (window.parent === window) return;
@@ -422,10 +436,19 @@ export function AppShell() {
   // Default-open the Todos tab on initial mount. Covers both first entry
   // and refresh (a refresh tears down and remounts the tree, so this
   // runs again). After mount, the user's open/close choices take over.
+  // Gated by the right-side bar config so users who hide the Todos button
+  // don't see a brief flash of the panel auto-opened then auto-closed.
+  // The ref ensures this decision is made exactly once — toggling the
+  // Todos visibility later via SettingsModal must not re-trigger the
+  // default-open.
+  const defaultOpenDecidedRef = useRef(false);
   useEffect(() => {
+    if (defaultOpenDecidedRef.current) return;
+    if (rightSideBarConfig === null) return; // settings haven't loaded yet — wait
+    defaultOpenDecidedRef.current = true;
+    if (rightSideBarConfig.todos === false) return;
     handleOpenTodoTab();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [rightSideBarConfig, handleOpenTodoTab]);
 
   // Open the favorites tab — same pattern as todos / file tabs.
   const handleOpenFavoritesTab = useCallback(() => {
@@ -681,6 +704,19 @@ export function AppShell() {
 
   const activeFileTab = fileTabs.find((t) => t.id === activeFileTabId) ?? null;
   const activeRightPanelKind = rightPanelState === "closed" ? null : activeFileTab?.kind ?? null;
+
+  // When the user hides a button whose panel is currently active, the right
+  // panel would otherwise sit open with no toggle in the bar. Auto-close the
+  // panel — the tab itself stays in the tab strip so re-enabling the button
+  // and clicking it again reopens the same view.
+  useEffect(() => {
+    if (rightPanelState === "closed") return;
+    if (activeRightPanelKind === null) return;
+    const id = RIGHT_BAR_ID_FOR_TAB_KIND[activeRightPanelKind];
+    if (id === undefined) return; // "file" kind — no configurable button
+    if (isButtonVisible(rightSideBarConfig, id)) return;
+    setRightPanelState("closed");
+  }, [rightPanelState, activeRightPanelKind, rightSideBarConfig]);
 
   // ── Command palette context + command list ──
   // Re-built whenever any input changes (cheap; buildCommands is O(N) where
@@ -1181,6 +1217,7 @@ export function AppShell() {
         </button>
         </Tooltip>
         {/* Open todos — always visible */}
+        {isButtonVisible(rightSideBarConfig, "todos") && (
         <Tooltip content={t("Open todos")} side="left">
         <button
           onClick={() => handleToggleRightPanelTab(TODO_TAB_ID, handleOpenTodoTab)}
@@ -1200,7 +1237,9 @@ export function AppShell() {
           </svg>
         </button>
         </Tooltip>
+        )}
         {/* Open canvas — single global whiteboard */}
+        {isButtonVisible(rightSideBarConfig, "canvas") && (
         <Tooltip content={activeRightPanelKind === "canvas" ? t("Hide canvas") : t("Open canvas")} side="left">
           <button
             onClick={handleToggleCanvasTab}
@@ -1220,7 +1259,9 @@ export function AppShell() {
             </svg>
           </button>
         </Tooltip>
+        )}
         {/* Open translate — always visible */}
+        {isButtonVisible(rightSideBarConfig, "translate") && (
         <Tooltip content={t("Open translate")} side="left">
         <button
           onClick={() => handleToggleRightPanelTab(TRANSLATE_TAB_ID, handleOpenTranslateTab)}
@@ -1244,7 +1285,9 @@ export function AppShell() {
           </svg>
         </button>
         </Tooltip>
+        )}
         {/* Open JSON formatter panel */}
+        {isButtonVisible(rightSideBarConfig, "json") && (
         <Tooltip content={t("JSON")} side="left">
           <button
             onClick={() => handleToggleRightPanelTab(JSON_TAB_ID, handleOpenJsonTab)}
@@ -1264,7 +1307,9 @@ export function AppShell() {
             </svg>
           </button>
         </Tooltip>
+        )}
         {/* Open diff panel */}
+        {isButtonVisible(rightSideBarConfig, "diff") && (
         <Tooltip content={t("Open Diff")} side="left">
           <button
             onClick={() => handleToggleRightPanelTab(DIFF_TAB_ID, handleOpenDiffTab)}
@@ -1284,7 +1329,9 @@ export function AppShell() {
             </svg>
           </button>
         </Tooltip>
+        )}
         {/* Open RSS panel */}
+        {isButtonVisible(rightSideBarConfig, "rss") && (
         <Tooltip content={t("RSS")} side="left">
           <button
             onClick={() => handleToggleRightPanelTab(RSS_TAB_ID, handleOpenRssTab)}
@@ -1305,6 +1352,7 @@ export function AppShell() {
 </svg>
         </button>
         </Tooltip>
+        )}
         {/* Expand/collapse — only when panel is open and has tabs */}
         {rightPanelState !== "closed" && fileTabs.length > 0 && (
           <Tooltip content={rightPanelState === "expanded" ? t("Collapse file panel") : t("Expand file panel")} side="left">
@@ -1336,6 +1384,7 @@ export function AppShell() {
         {/* Favorites + Tool Calls + Focus — grouped at the bottom of the button bar */}
         <div style={{ marginTop: "auto" }}>
           {/* Open favorites — always visible */}
+          {isButtonVisible(rightSideBarConfig, "favorites") && (
           <Tooltip content={t("Open favorites")} side="left">
           <button
             onClick={() => handleToggleRightPanelTab(FAVORITES_TAB_ID, handleOpenFavoritesTab)}
@@ -1354,7 +1403,9 @@ export function AppShell() {
             </svg>
           </button>
           </Tooltip>
+          )}
           {/* Open Token audit panel — sits with the bottom-of-bar group */}
+          {isButtonVisible(rightSideBarConfig, "tokens") && (
           <Tooltip content={t("Open token audit")} side="left">
             <button
               onClick={() => handleToggleRightPanelTab(TOKENS_TAB_ID, handleOpenTokensTab)}
@@ -1377,11 +1428,14 @@ export function AppShell() {
               </svg>
             </button>
           </Tooltip>
+          )}
           {/* Open tool calls — always visible; shows running/total badge */}
+          {isButtonVisible(rightSideBarConfig, "toolCalls") && (
           <ToolCallsVerticalButton
             active={activeRightPanelKind === "toolCalls"}
             onClick={() => handleToggleRightPanelTab(TOOL_CALLS_TAB_ID, handleOpenToolCallsTab)}
           />
+          )}
           {/* Focus mode toggle */}
           <Tooltip content={focused ? t("Exit focus") : t("Focus")} side="left">
             <button

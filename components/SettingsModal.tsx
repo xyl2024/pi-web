@@ -6,7 +6,23 @@ import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
 import { useToast } from "./Toast";
 import { WeChatSettingsSection } from "./WeChatSettingsSection";
 import { InboxTestSection } from "./InboxTestSection";
-import type { PiWebConfig } from "@/lib/config";
+import type { PiWebConfig, RightBarButtonId, RightSideBarConfig } from "@/lib/config";
+import { setSettings } from "@/hooks/settingsStore";
+
+// Display order for the "Right-side buttons" section checkboxes. Each row
+// reuses an existing i18n key (originally written for the right-bar button
+// tooltip) — one key per concept keeps the dictionary small.
+const RIGHT_BAR_BUTTONS_UI: Array<{ id: RightBarButtonId; labelKey: string }> = [
+  { id: "todos",     labelKey: "Open todos" },
+  { id: "canvas",    labelKey: "Open canvas" },
+  { id: "translate", labelKey: "Open translate" },
+  { id: "json",      labelKey: "JSON" },
+  { id: "diff",      labelKey: "Open Diff" },
+  { id: "rss",       labelKey: "RSS" },
+  { id: "favorites", labelKey: "Open favorites" },
+  { id: "tokens",    labelKey: "Open token audit" },
+  { id: "toolCalls", labelKey: "Tool Calls" },
+];
 
 export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void; onProfileSaved?: () => void }) {
   const { t, locale, setLocale } = useI18n();
@@ -39,6 +55,7 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
       .then((d: PiWebConfig) => {
         setConfig(d);
         setOriginalConfig(d);
+        setSettings(d); // publish to the store so AppShell reflects this snapshot
       })
       .catch(() => { /* error shown in body via fallback rendering */ })
       .finally(() => setLoading(false));
@@ -178,6 +195,38 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
       },
     } : prev));
   }, []);
+
+  // Right-side button bar visibility — applies immediately on toggle (no
+  // per-section Save button, unlike the Profile / Clawd / Append System
+  // Prompt sections which have multi-step flows). Sets local config + the
+  // global store + persists to /api/settings. Keeps `isDirty` false so the
+  // modal's close-confirm prompt is not triggered by these toggles.
+  const handleRightBarToggle = useCallback(async (id: RightBarButtonId) => {
+    if (!config) return;
+    const currentlyVisible = config.right_side_bar[id] !== false;
+    const nextRightSideBar: RightSideBarConfig = {
+      ...config.right_side_bar,
+      [id]: !currentlyVisible,
+    };
+    const nextConfig: PiWebConfig = { ...config, right_side_bar: nextRightSideBar };
+    setConfig(nextConfig);
+    setOriginalConfig(nextConfig); // keep isDirty=false → no "discard changes?" prompt
+    setSettings(nextConfig);       // publish → AppShell re-renders / auto-closes active panel
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextConfig),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.show({ kind: "success", message: t("Settings saved") });
+    } catch (e) {
+      toast.show({
+        kind: "error",
+        message: e instanceof Error && e.message ? e.message : t("Failed to save settings"),
+      });
+    }
+  }, [config, t, toast]);
 
   // Dirty check — compare current config against the snapshot from initial load
   const isDirty = !!config && !!originalConfig && JSON.stringify(config) !== JSON.stringify(originalConfig);
@@ -599,6 +648,40 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
               </button>
             </div>
           </div>
+
+          {/* ── Section 5: Right-side buttons ── */}
+          {/* Immediate-apply section (no per-section Save button). Each
+              checkbox toggle calls handleRightBarToggle, which updates local
+              state + the global settings store + PUTs to /api/settings. */}
+          {config && (
+            <div style={{ marginBottom: 24, marginTop: 24 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", margin: "0 0 4px 0" }}>
+                {t("Right-side buttons")}
+              </h3>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 12px 0", lineHeight: 1.5 }}>
+                {t("Choose which buttons appear in the right-side bar. Hidden buttons can still be opened from the command palette. Changes apply immediately.")}
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {RIGHT_BAR_BUTTONS_UI.map(({ id, labelKey }) => {
+                  const checked = config.right_side_bar[id] !== false;
+                  return (
+                    <label
+                      key={id}
+                      style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: "var(--text)" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => handleRightBarToggle(id)}
+                        style={{ width: 14, height: 14, accentColor: "var(--accent)", cursor: "pointer" }}
+                      />
+                      <span>{t(labelKey)}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <InboxTestSection />
         </div>
