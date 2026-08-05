@@ -867,7 +867,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                     prevAssistantEntryId={agentRunning ? undefined : prevAssistantEntryId}
                     onEditContent={(content) => chatInputRef?.current?.insertIfEmpty(content)}
                     showTimestamp={showTimestamp}
-                    prevTimestamp={idx > 0 ? (renderMessages[idx - 1] as AgentMessage & { timestamp?: number }).timestamp : undefined}
                     keywords={searchKeywords}
                     highlightEntryId={highlightEntryId}
                     isSearchMatch={matchedEntryIds.has(renderEntryIds[idx])}

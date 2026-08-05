@@ -37,7 +37,6 @@ interface Props {
   prevAssistantEntryId?: string;
   onEditContent?: (content: string) => void;
   showTimestamp?: boolean;
-  prevTimestamp?: number;
   /** Session id — used to fetch the captured provider request for this message. */
   sessionId?: string;
   /** Keywords to highlight with <mark> (from in-session search) */
@@ -86,7 +85,7 @@ function highlightKeywords(text: string, keywords?: string[], isSearchMatch?: bo
   return parts.length > 0 ? parts : text;
 }
 
-export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, prevTimestamp, keywords, highlightEntryId, isSearchMatch, cwd, sessionId }: Props) {
+export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, keywords, highlightEntryId, isSearchMatch, cwd, sessionId }: Props) {
   const isFocused = !!(highlightEntryId && entryId === highlightEntryId);
 
   if (message.role === "user") {
@@ -99,7 +98,7 @@ export function MessageView({ message, isStreaming, toolResults, modelNames, ent
   if (message.role === "assistant") {
     return (
       <div className={isFocused ? "search-flash" : undefined}>
-        <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} sessionId={sessionId} entryId={entryId} />
+        <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} showTimestamp={showTimestamp} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} sessionId={sessionId} entryId={entryId} />
       </div>
     );
   }
@@ -381,7 +380,6 @@ function AssistantMessageView({
   toolResults,
   modelNames,
   showTimestamp,
-  prevTimestamp,
   keywords,
   isSearchMatch,
   cwd,
@@ -393,7 +391,6 @@ function AssistantMessageView({
   toolResults?: Map<string, ToolResultMessage>;
   modelNames?: Record<string, string>;
   showTimestamp?: boolean;
-  prevTimestamp?: number;
   keywords?: string[];
   isSearchMatch?: boolean;
   cwd?: string;
@@ -409,33 +406,6 @@ function AssistantMessageView({
   const [tps, setTps] = useState<number | null>(null);
   const blocksRef = useRef(blocks);
   blocksRef.current = blocks;
-
-  // Streaming-based timing for thinking blocks
-  const blockStartTimesRef = useRef<Map<number, number>>(new Map());
-  const [streamingDurations, setStreamingDurations] = useState<Map<number, number>>(new Map());
-
-  // Thinking duration derived from file timestamps: time from prev message end to this message end
-  // This is the total generation time (thinking + any text before first tool call)
-  const thinkingDurationFromFile = useMemo<number | undefined>(() => {
-    if (!message.timestamp || !prevTimestamp) return undefined;
-    const secs = Math.round((message.timestamp - prevTimestamp) / 1000);
-    return secs > 0 ? secs : undefined;
-  }, [message.timestamp, prevTimestamp]);
-
-  // Tool call durations derived from session file timestamps (accurate for completed messages)
-  // assistant message timestamp = when generation ended = when tools started running
-  // toolResult timestamp = when tool execution finished
-  const toolCallDurations = useMemo<Map<string, number>>(() => {
-    const map = new Map<string, number>();
-    if (!toolResults || !message.timestamp) return map;
-    for (const [callId, result] of toolResults) {
-      if (result.timestamp && message.timestamp) {
-        const secs = Math.round((result.timestamp - message.timestamp) / 1000);
-        if (secs > 0) map.set(callId, secs);
-      }
-    }
-    return map;
-  }, [toolResults, message.timestamp]);
 
   const textContent = blocks
     .filter((b): b is TextContent => b.type === "text")
@@ -456,15 +426,6 @@ function AssistantMessageView({
 
   useEffect(() => {
     if (!isStreaming) {
-      // Finalise any un-finished thinking block durations on stream end
-      const now = Date.now();
-      setStreamingDurations((prev: Map<number, number>) => {
-        const next = new Map(prev);
-        for (const [idx, start] of blockStartTimesRef.current) {
-          if (!next.has(idx)) next.set(idx, Math.round((now - start) / 1000));
-        }
-        return next;
-      });
       streamStartRef.current = null;
       setTps(null);
       return;
@@ -472,26 +433,6 @@ function AssistantMessageView({
     const tick = () => {
       const bs = blocksRef.current;
       const now = Date.now();
-
-      // Record start time for each block the first time we see it
-      bs.forEach((_, i) => {
-        if (!blockStartTimesRef.current.has(i)) blockStartTimesRef.current.set(i, now);
-      });
-
-      // When a non-last block has a successor already started, finalise its duration
-      setStreamingDurations((prev: Map<number, number>) => {
-        let changed = false;
-        const next = new Map(prev);
-        for (let i = 0; i < bs.length - 1; i++) {
-          if (!next.has(i) && blockStartTimesRef.current.has(i)) {
-            const start = blockStartTimesRef.current.get(i)!;
-            const nextStart = blockStartTimesRef.current.get(i + 1) ?? now;
-            next.set(i, Math.round((nextStart - start) / 1000));
-            changed = true;
-          }
-        }
-        return changed ? next : prev;
-      });
 
       let chars = 0;
       for (const b of bs) {
@@ -591,7 +532,7 @@ function AssistantMessageView({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {blocks.map((block, i) => (
-          <BlockView key={i} block={block} toolResults={toolResults} isStreaming={isStreaming} isLast={i === blocks.length - 1} streamingDuration={streamingDurations.get(i) ?? (block.type === "thinking" ? thinkingDurationFromFile : undefined)} toolCallDurations={toolCallDurations} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} />
+          <BlockView key={i} block={block} toolResults={toolResults} isStreaming={isStreaming} isLast={i === blocks.length - 1} keywords={keywords} isSearchMatch={isSearchMatch} cwd={cwd} />
         ))}
       </div>
 
@@ -645,18 +586,17 @@ function AssistantMessageView({
   );
 }
 
-function BlockView({ block, toolResults, isStreaming, isLast, streamingDuration, toolCallDurations, keywords, isSearchMatch, cwd }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; isLast?: boolean; streamingDuration?: number; toolCallDurations?: Map<string, number>; keywords?: string[]; isSearchMatch?: boolean; cwd?: string }) {
+function BlockView({ block, toolResults, isStreaming, isLast, keywords, isSearchMatch, cwd }: { block: AssistantContentBlock; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; isLast?: boolean; keywords?: string[]; isSearchMatch?: boolean; cwd?: string }) {
   if (block.type === "text") {
     return <TextBlock block={block as TextContent} keywords={keywords} isSearchMatch={isSearchMatch} isStreaming={isStreaming} />;
   }
   if (block.type === "thinking") {
-    return <ThinkingBlock block={block as ThinkingContent} duration={streamingDuration} keywords={keywords} isSearchMatch={isSearchMatch} isStreaming={isLast && isStreaming} />;
+    return <ThinkingBlock block={block as ThinkingContent} keywords={keywords} isSearchMatch={isSearchMatch} isStreaming={isLast && isStreaming} />;
   }
   if (block.type === "toolCall") {
     const tc = block as ToolCallContent;
     const result = toolResults?.get(tc.toolCallId);
-    const duration = toolCallDurations?.get(tc.toolCallId);
-    return <ToolCallBlock block={tc} result={result} isRunning={isStreaming && !result} duration={duration} cwd={cwd} />;
+    return <ToolCallBlock block={tc} result={result} isRunning={isStreaming && !result} cwd={cwd} />;
   }
   return null;
 }
@@ -726,7 +666,7 @@ function TextBlock({ block, keywords, isSearchMatch, isStreaming }: { block: Tex
   );
 }
 
-function ThinkingBlock({ block, duration, keywords, isSearchMatch, isStreaming }: { block: ThinkingContent; duration?: number; keywords?: string[]; isSearchMatch?: boolean; isStreaming?: boolean }) {
+function ThinkingBlock({ block, keywords, isSearchMatch, isStreaming }: { block: ThinkingContent; keywords?: string[]; isSearchMatch?: boolean; isStreaming?: boolean }) {
   const { t } = useI18n();
   // A thinking block is "still being appended" only when it is the last block
   // of the assistant message AND the message is currently streaming. Every
@@ -782,30 +722,20 @@ function ThinkingBlock({ block, duration, keywords, isSearchMatch, isStreaming }
           </svg>
         </span>
         {expanded ? (
-          <>
-            <span>{t("Thinking")}</span>
-            {duration !== undefined && (
-              <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-dim)", fontVariantNumeric: "tabular-nums" }}>{duration}s</span>
-            )}
-          </>
+          <span>{t("Thinking")}</span>
         ) : (
-          <>
-            <span
-              style={{
-                flex: 1,
-                minWidth: 0,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                color: "var(--text-muted)",
-              }}
-            >
-              {thinkingPreview}
-            </span>
-            {duration !== undefined && (
-              <span style={{ marginLeft: 6, fontSize: 11, color: "var(--text-dim)", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{duration}s</span>
-            )}
-          </>
+          <span
+            style={{
+              flex: 1,
+              minWidth: 0,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              color: "var(--text-muted)",
+            }}
+          >
+            {thinkingPreview}
+          </span>
         )}
       </button>
       {expanded && (
@@ -828,7 +758,7 @@ function ThinkingBlock({ block, duration, keywords, isSearchMatch, isStreaming }
 }
 
 
-function ToolCallBlock({ block, result, isRunning, duration, cwd }: { block: ToolCallContent; result?: ToolResultMessage; isRunning?: boolean; duration?: number; cwd?: string }) {
+function ToolCallBlock({ block, result, isRunning, cwd }: { block: ToolCallContent; result?: ToolResultMessage; isRunning?: boolean; cwd?: string }) {
   const [expanded, setExpanded] = useState(false);
   const inputStr = JSON.stringify(block.input, null, 2);
 
@@ -885,9 +815,6 @@ function ToolCallBlock({ block, result, isRunning, duration, cwd }: { block: Too
         <span style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
           {getToolPreview(block)}
         </span>
-        {duration !== undefined && (
-          <span style={{ fontSize: 11, color: "var(--text-dim)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{duration}s</span>
-        )}
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--text-dim)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
           <polyline points="2 3.5 5 6.5 8 3.5" />
         </svg>
