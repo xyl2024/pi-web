@@ -770,6 +770,8 @@ function ThinkingBlock({ block, keywords, isSearchMatch, isStreaming }: { block:
 
 function ToolCallBlock({ block, result, isRunning, cwd }: { block: ToolCallContent; result?: ToolResultMessage; isRunning?: boolean; cwd?: string }) {
   const [expanded, setExpanded] = useState(false);
+  // Height animation for expand/collapse — same pattern as the thinking block.
+  const { contentRef, contentHeight, allowAnim } = useCollapseHeight<HTMLDivElement>();
   const inputStr = JSON.stringify(block.input, null, 2);
 
   // Result display
@@ -830,34 +832,44 @@ function ToolCallBlock({ block, result, isRunning, cwd }: { block: ToolCallConte
         </svg>
       </button>
 
-      {/* ── Expanded: input args ── */}
-      {expanded && (
-        <pre
-          style={{
-            margin: 0,
-            padding: "8px 10px",
-            color: "var(--text-muted)",
-            fontSize: 12,
-            lineHeight: 1.5,
-            overflow: "auto",
-            background: "var(--bg-subtle)",
-            borderTop: isError ? "1px solid rgba(248,113,113,0.25)" : "1px solid rgba(34,197,94,0.2)",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-all",
-          }}
-        >
-          {inputStr}
-        </pre>
-      )}
-
-      {/* ── Paired result — only shown when expanded ── */}
-      {expanded && result && (
-        <PairedResult
-          text={resultText ?? ""}
-          isEmpty={resultIsEmpty}
-          isError={isError}
-        />
-      )}
+      {/* ── Expanded content (animated height) ── */}
+      <div
+        style={{
+          height: contentHeight ?? "auto",
+          overflow: "hidden",
+          transition: allowAnim ? "height 0.3s cubic-bezier(0.4, 0, 0.2, 1)" : "none",
+        }}
+      >
+        <div ref={contentRef} style={{ overflow: "hidden" }}>
+          {expanded && (
+            <>
+              <pre
+                style={{
+                  margin: 0,
+                  padding: "8px 10px",
+                  color: "var(--text-muted)",
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  overflow: "auto",
+                  background: "var(--bg-subtle)",
+                  borderTop: isError ? "1px solid rgba(248,113,113,0.25)" : "1px solid rgba(34,197,94,0.2)",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                }}
+              >
+                {inputStr}
+              </pre>
+              {result && (
+                <PairedResult
+                  text={resultText ?? ""}
+                  isEmpty={resultIsEmpty}
+                  isError={isError}
+                />
+              )}
+            </>
+          )}
+        </div>
+      </div>
 
       {/* ── show_file inline renderer (below generic UI) ── */}
       {isShowFile && showFilePaths && (
