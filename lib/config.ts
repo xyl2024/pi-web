@@ -33,7 +33,6 @@ export type RightBarButtonId =
   | "canvas"
   | "translate"
   | "json"
-  | "diff"
   | "rss"
   | "favorites"
   | "tokens"
@@ -44,7 +43,6 @@ export const RIGHT_BAR_BUTTON_IDS: readonly RightBarButtonId[] = [
   "canvas",
   "translate",
   "json",
-  "diff",
   "rss",
   "favorites",
   "tokens",
@@ -100,7 +98,6 @@ const DEFAULT_RIGHT_SIDE_BAR: RightSideBarConfig = {
   canvas: true,
   translate: true,
   json: true,
-  diff: true,
   rss: true,
   favorites: true,
   tokens: true,

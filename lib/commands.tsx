@@ -70,7 +70,6 @@ const BookIcon = () => I(<><path d="M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.
 
 const ClockIcon = () => I(<><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></>);
 const LangIcon = () => I(<><path d="M5 8h14" /><path d="M8 5h7" /><path d="M11 12c0 4-3 7-6 7" /><path d="M11 12c0 4 3 7 6 7" /><path d="M9 19l3-7 3 7" /></>);
-const DiffIcon = () => I(<><rect x="3" y="4" width="8" height="16" rx="1.5" /><rect x="13" y="4" width="8" height="16" rx="1.5" /><line x1="7" y1="9" x2="7" y2="9" /><line x1="17" y1="13" x2="17" y2="13" /></>);
 const TokensIcon = () => I(<><circle cx="12" cy="12" r="9" /><line x1="8.5" y1="16" x2="9.5" y2="13" /><line x1="12" y1="16" x2="13" y2="11" /><line x1="15.5" y1="16" x2="16.5" y2="9" /><line x1="7" y1="17" x2="17" y2="17" /></>);
 
 // Theme icons picked from PRESET_IS_DARK to give the swatch a hint.
@@ -142,7 +141,6 @@ export interface CommandContext {
   openTranslateTab: () => void;
   openToolCallsTab: () => void;
   openJsonTab: () => void;
-  openDiffTab: () => void;
   openTokensTab: () => void;
 
   // View toggles
@@ -383,14 +381,6 @@ export function buildCommands(ctx: CommandContext, opts: BuildOptions): Command[
     keywords: ["json", "format", "格式化"],
     icon: <BracesIcon />,
     run: () => ctx.openJsonTab(),
-  });
-  cmds.push({
-    id: "panel.diff",
-    title: t("Open Diff"),
-    group: "Panel",
-    keywords: ["diff", "compare", "text", "差异", "对比", "文本"],
-    icon: <DiffIcon />,
-    run: () => ctx.openDiffTab(),
   });
   cmds.push({
     id: "panel.tokens",

@@ -17,7 +17,6 @@ const RIGHT_BAR_BUTTONS_UI: Array<{ id: RightBarButtonId; labelKey: string }> = 
   { id: "canvas",    labelKey: "Open canvas" },
   { id: "translate", labelKey: "Open translate" },
   { id: "json",      labelKey: "JSON" },
-  { id: "diff",      labelKey: "Open Diff" },
   { id: "rss",       labelKey: "RSS" },
   { id: "favorites", labelKey: "Open favorites" },
   { id: "tokens",    labelKey: "Open token audit" },

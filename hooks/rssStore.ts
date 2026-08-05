@@ -103,7 +103,7 @@ export function useRssViewState(): RssPersistedState {
   // Hydrate on first client read. Runs after the first render so the SSR
   // markup stays in sync with the client first paint (both show INITIAL);
   // hydrate() then mutates state + emits, and the panel re-renders with the
-  // saved view. This is the same trade-off JsonPanel / DiffPanel accept.
+  // saved view. This is the same trade-off JsonPanel accepts.
   useEffect(() => {
     hydrate();
     if (!hydrated) return;

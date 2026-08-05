@@ -239,7 +239,6 @@ export const TRANSLATE_TAB_ID = "translate:global";
 export const TOOL_CALLS_TAB_ID = "toolCalls:global";
 export const JSON_TAB_ID = "json:global";
 export const CANVAS_TAB_ID = "canvas:global";
-export const DIFF_TAB_ID = "diff:global";
 export const RSS_TAB_ID = "rss:global";
 export const TOKENS_TAB_ID = "tokens:global";
 
@@ -248,12 +247,11 @@ export const TOKENS_TAB_ID = "tokens:global";
 // hidden is currently active, close the panel. "file" is intentionally
 // absent — the file-panel toggle is always-visible (Q1).
 import type { RightBarButtonId } from "./config";
-export const RIGHT_BAR_ID_FOR_TAB_KIND: Partial<Record<"file" | "todo" | "canvas" | "translate" | "toolCalls" | "json" | "diff" | "rss" | "favorites" | "tokens", RightBarButtonId>> = {
+export const RIGHT_BAR_ID_FOR_TAB_KIND: Partial<Record<"file" | "todo" | "canvas" | "translate" | "toolCalls" | "json" | "rss" | "favorites" | "tokens", RightBarButtonId>> = {
   todo: "todos",
   canvas: "canvas",
   translate: "translate",
   json: "json",
-  diff: "diff",
   rss: "rss",
   favorites: "favorites",
   tokens: "tokens",
