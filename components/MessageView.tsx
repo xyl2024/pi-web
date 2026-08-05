@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Tooltip } from "./Tooltip";
 import { useI18n } from "@/hooks/useI18n";
+import { useCollapseHeight } from "@/hooks/useCollapseHeight";
 import { ShowFileRenderer } from "./ShowFileRenderer";
 import { MermaidBlock } from "./MermaidBlock";
 import { EchartsBlock } from "./EchartsBlock";
@@ -707,26 +708,10 @@ function ThinkingBlock({ block, keywords, isSearchMatch, isStreaming }: { block:
     if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return;
     toggle();
   };
-  // The container height follows the rendered content via ResizeObserver so
-  // expand/collapse (and streaming growth) animate a real pixel height — CSS
-  // can't transition `auto`. Transitions stay off until the first measure is
-  // done to avoid a mount-time pop.
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [contentHeight, setContentHeight] = useState<number | null>(null);
-  const [allowAnim, setAllowAnim] = useState(false);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setAllowAnim(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
-  useEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
-    const update = () => setContentHeight((prev) => (prev === el.scrollHeight ? prev : el.scrollHeight));
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  // Height animation for expand/collapse (and streaming growth): the container
+  // follows the rendered content via ResizeObserver — CSS can't transition
+  // `auto`, so the height is measured and animated as a pixel value.
+  const { contentRef, contentHeight, allowAnim } = useCollapseHeight<HTMLDivElement>();
 
   const text = highlightTextAsHtml(block.thinking, keywords, isSearchMatch);
   return (

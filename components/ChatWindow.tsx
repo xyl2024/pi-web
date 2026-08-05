@@ -27,6 +27,7 @@ import { useToast } from "@/components/Toast";
 import type { SlashResource } from "./ChatInput";
 import { ToolCallStatsProvider, useToolCallStatsEmit } from "@/hooks/ToolCallStatsContext";
 import { useToolCallStats } from "@/hooks/useToolCallStats";
+import { useCollapseHeight } from "@/hooks/useCollapseHeight";
 import { setToolCallStatsScrollCallback, setToolCallStatsState } from "@/hooks/toolCallStatsStore";
 import { setAgentControls } from "@/hooks/sessionUiStore";
 import { SessionSearch } from "./SessionSearch";
@@ -152,6 +153,9 @@ function ProcessDetailsGroup({
 }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  // Height animation for expand/collapse — same pattern as the thinking block:
+  // container height follows the rendered content via ResizeObserver.
+  const { contentRef, contentHeight, allowAnim } = useCollapseHeight<HTMLDivElement>();
 
   const summary = t("{n} messages").replace("{n}", String(messageCount));
   const withCalls =
@@ -209,7 +213,17 @@ function ProcessDetailsGroup({
           {withCalls}
         </span>
       </button>
-      {expanded && <div style={{ marginTop: 8 }}>{children}</div>}
+      <div
+        style={{
+          height: contentHeight ?? "auto",
+          overflow: "hidden",
+          transition: allowAnim ? "height 0.3s cubic-bezier(0.4, 0, 0.2, 1)" : "none",
+        }}
+      >
+        <div ref={contentRef} style={{ overflow: "hidden" }}>
+          {expanded && <div style={{ marginTop: 8 }}>{children}</div>}
+        </div>
+      </div>
     </div>
   );
 }
