@@ -275,6 +275,36 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
     }
   }, [config, t, toast]);
 
+  // APPEND_SYSTEM.md loader toggle. Same immediate-apply pattern as
+  // handleRightBarToggle — PUTs the whole PiWebConfig and keeps isDirty
+  // false so the modal's close-confirm prompt is not triggered. Changes
+  // only take effect on sessions started AFTER the PUT (rpc-manager reads
+  // the flag once per session start, same as clawd_on_desk / custom_tools).
+  const handleAppendSystemEnabledToggle = useCallback(async () => {
+    if (!config) return;
+    const nextConfig: PiWebConfig = {
+      ...config,
+      append_system: { enabled: !config.append_system.enabled },
+    };
+    setConfig(nextConfig);
+    setOriginalConfig(nextConfig);
+    setSettings(nextConfig);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextConfig),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.show({ kind: "success", message: t("Settings saved") });
+    } catch (e) {
+      toast.show({
+        kind: "error",
+        message: e instanceof Error && e.message ? e.message : t("Failed to save settings"),
+      });
+    }
+  }, [config, t, toast]);
+
   // Dirty check — compare current config against the snapshot from initial load
   const isDirty = !!config && !!originalConfig && JSON.stringify(config) !== JSON.stringify(originalConfig);
 
@@ -616,9 +646,36 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
                 <span>{appendSystemSavedOk ? t("Saved") : appendSystemSaving ? t("Saving...") : t("Save")}</span>
               </button>
             </div>
-            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 8px 0", lineHeight: 1.5 }}>
-              {t("Appended to every new pi session's system prompt. Takes effect on new sessions.")}
+            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 10px 0", lineHeight: 1.5 }}>
+              {config?.append_system.enabled
+                ? t("Appended to every new pi session's system prompt. Takes effect on new sessions.")
+                : t("Disabled — new sessions will NOT load this file. Edit and save above to keep the content for when you re-enable it.")}
             </p>
+            {/* APPEND_SYSTEM.md loader toggle — immediate-apply. Independent
+                from the Save button above (which only writes file content).
+                Mirrors the styling of the Clawd on Desk switch in Section 4. */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <span style={{ fontSize: 13, color: "var(--text)" }}>
+                {config?.append_system.enabled ? t("Loading on") : t("Loading off")}
+              </span>
+              <button
+                onClick={handleAppendSystemEnabledToggle}
+                style={{
+                  width: 40, height: 22, borderRadius: 11,
+                  background: config?.append_system.enabled ? "var(--accent)" : "var(--bg-hover)",
+                  border: "none", cursor: "pointer", position: "relative",
+                  transition: "background 0.2s",
+                }}
+              >
+                <span style={{
+                  position: "absolute", top: 2,
+                  left: config?.append_system.enabled ? 20 : 2,
+                  width: 18, height: 18, borderRadius: 9,
+                  background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                  transition: "left 0.2s",
+                }} />
+              </button>
+            </div>
             <div style={{
               fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)",
               padding: "4px 8px", marginBottom: 10,

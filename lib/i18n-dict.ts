@@ -315,6 +315,9 @@ export const ZH_TRANSLATIONS = {
   // Settings / append system prompt (~/.pi/agent/APPEND_SYSTEM.md)
   "Append System Prompt": "追加系统提示词",
   "Appended to every new pi session's system prompt. Takes effect on new sessions.": "追加到每个新 pi 会话系统提示词的末尾。对新建会话生效。",
+  "Disabled — new sessions will NOT load this file. Edit and save above to keep the content for when you re-enable it.": "已禁用 — 新会话不会加载此文件。仍可在上方编辑保存，以便重新启用时立即生效。",
+  "Loading on": "已启用加载",
+  "Loading off": "已停用加载",
   "file does not exist yet — saving will create it": "文件尚不存在，保存后将自动创建",
   "Markdown content appended after the built-in system prompt.": "在系统内置提示词之后追加的 Markdown 内容。",
   "Append system prompt saved": "追加系统提示词已保存",

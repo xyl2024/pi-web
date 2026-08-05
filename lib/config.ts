@@ -73,11 +73,21 @@ export interface CustomToolsConfig {
   enabled: AgentCustomToolName[];
 }
 
+// ── APPEND_SYSTEM.md loader toggle ───────────────────────────────────────
+// pi's DefaultResourceLoader auto-loads ~/.pi/agent/APPEND_SYSTEM.md on
+// every session. Disabling here passes `appendSystemPrompt: []` to the
+// loader, which short-circuits `discoverAppendSystemPromptFile()` — the
+// file is left untouched on disk so re-enabling just flips the flag.
+export interface AppendSystemConfig {
+  enabled: boolean;
+}
+
 export interface PiWebConfig {
   dangerous_patterns: DangerousPatternsConfig;
   extensions: ExtensionsConfig;
   right_side_bar: RightSideBarConfig;
   custom_tools: CustomToolsConfig;
+  append_system: AppendSystemConfig;
 }
 
 const DEFAULT_DANGEROUS_PATTERNS: DangerousPatternsConfig = {
@@ -106,6 +116,8 @@ const DEFAULT_CONFIG: PiWebConfig = {
   custom_tools: {
     enabled: [...AGENT_CUSTOM_TOOL_NAMES],
   },
+  // Preserve pre-existing behavior: append file loads by default.
+  append_system: { enabled: true },
 };
 
 function parseDangerousPatterns(raw: unknown): DangerousPatternsConfig {
@@ -160,6 +172,15 @@ function parseCustomTools(raw: unknown): CustomToolsConfig {
   return { enabled: [...seen] };
 }
 
+// Fail-open for the missing/garbled case (keep the on-by-default behavior
+// so an old config.yaml doesn't silently turn the append off). An explicit
+// `enabled: false` is honored — the user pushed the button, we trust them.
+function parseAppendSystem(raw: unknown): AppendSystemConfig {
+  if (!raw || typeof raw !== "object") return { enabled: true };
+  const obj = raw as Record<string, unknown>;
+  return { enabled: obj.enabled !== false };
+}
+
 const CONFIG_DIR = join(homedir(), ".pi-web");
 const CONFIG_PATH = join(CONFIG_DIR, "config.yaml");
 
@@ -210,6 +231,7 @@ export function readConfig(): PiWebConfig {
       },
       right_side_bar: parseRightSideBar(cfg.right_side_bar),
       custom_tools: parseCustomTools(cfg.custom_tools),
+      append_system: parseAppendSystem(cfg.append_system),
     };
   } catch (err) {
     log.warn("failed to read config, resetting to defaults", { error: String(err) });

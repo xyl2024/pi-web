@@ -548,6 +548,12 @@ export async function startRpcSession(
     const enabledCustom = readEnabledCustomTools();
     // Build path list for vendored built-in extensions. Read once per session start.
     const additionalExtensionPaths: string[] = [];
+    // APPEND_SYSTEM.md loader toggle (see PiWebConfig.append_system): when the
+    // user has disabled it, we hand DefaultResourceLoader an explicit empty
+    // array so the `??` on `appendSystemPromptSource` short-circuits and
+    // `discoverAppendSystemPromptFile()` never runs. Read once per session
+    // start — toggling at runtime only affects sessions started afterward.
+    let appendSystemPromptLoaderOption: string[] | undefined;
     try {
       const cfg = readConfig();
       if (cfg.extensions.clawd_on_desk.enabled) {
@@ -561,6 +567,9 @@ export async function startRpcSession(
           log.warn("clawd-on-desk enabled but vendored entry missing", { path: clawdEntry });
         }
       }
+      if (!cfg.append_system.enabled) {
+        appendSystemPromptLoaderOption = [];
+      }
     } catch {
       // readConfig already logs and falls back to defaults; this catch is defensive only.
     }
@@ -568,6 +577,13 @@ export async function startRpcSession(
       cwd,
       agentDir,
       additionalExtensionPaths,
+      // Pass `[]` (not `undefined`) when the toggle is off — the loader's
+      // `??` on appendSystemPromptSource treats an explicit empty array as
+      // "user-supplied, nothing to append" and skips file discovery.
+      // Leaving `undefined` here would fall through to discovery.
+      ...(appendSystemPromptLoaderOption !== undefined
+        ? { appendSystemPrompt: appendSystemPromptLoaderOption }
+        : {}),
       extensionFactories: [
         (pi) => {
           pi.on("before_provider_request", (event) => {
