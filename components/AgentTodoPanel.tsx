@@ -213,7 +213,7 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
   /** Scroll handler invoked when a completed task is clicked. */
   onJumpToTask?: (toolCallId: string) => void;
 }) {
-  const { tasks, empty, counts } = useAgentTodo(sessionId);
+  const { tasks, empty, counts, enabled } = useAgentTodo(sessionId);
   const { t } = useI18n();
   const toast = useToast();
   const [collapsed, setCollapsed] = useState(false);
@@ -247,7 +247,7 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
     return { inProgress, pending, completed };
   }, [tasks]);
 
-  if (empty) return null;
+  if (!enabled || empty) return null;
 
   return (
     <>
