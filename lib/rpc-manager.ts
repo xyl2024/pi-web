@@ -11,6 +11,7 @@ import { buildTodoTools } from "./todo-tools";
 import { readEnabledTodoTools } from "./todo-tools-config";
 import { buildShowFileTool } from "./show-file-tool";
 import { buildAgentTodoTool } from "./agent-todo-tool";
+import { readEnabledCustomTools } from "./custom-tools-config";
 import { copyAgentTodoFile } from "./agent-todo-store";
 import { matchDangerousPattern, getDangerousPatternTimeoutMs } from "./dangerous-patterns";
 
@@ -539,6 +540,12 @@ export async function startRpcSession(
     // wrapper is constructed below. Using a box object so TypeScript does
     // not narrow the type to `never` inside the closure.
     const wrapperRef: { current: AgentSessionWrapper | null } = { current: null };
+    // Snapshot which agent-side custom tools are enabled for this session.
+    // Read once here so the value is stable across the IIFE (an in-flight
+    // config write shouldn't change the tool set mid-session). Custom
+    // tools are passed to createAgentSession below — already-running
+    // sessions keep their original set even if the user toggles a switch.
+    const enabledCustom = readEnabledCustomTools();
     // Build path list for vendored built-in extensions. Read once per session start.
     const additionalExtensionPaths: string[] = [];
     try {
@@ -674,7 +681,16 @@ export async function startRpcSession(
       agentDir,
       sessionManager,
       resourceLoader,
-      customTools: [...buildTodoTools(readEnabledTodoTools()), ...buildShowFileTool(), ...buildAgentTodoTool()],
+      // Per-session customTools: user_todos_list / user_todo_description are
+      // gated by ~/.pi-web/todo-tools.json (see todo-tools-config); the two
+      // agent-side tools (show_file, agent_todo) are gated by
+      // ~/.pi-web/config.yaml → custom_tools.enabled. Read at startRpcSession
+      // time only — already-running sessions keep their original tool set.
+      customTools: [
+        ...buildTodoTools(readEnabledTodoTools()),
+        ...(enabledCustom.has("show_file") ? buildShowFileTool() : []),
+        ...(enabledCustom.has("agent_todo") ? buildAgentTodoTool() : []),
+      ],
     });
     capturedSessionId = inner.sessionId as string;
 

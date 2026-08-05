@@ -322,6 +322,11 @@ export const ZH_TRANSLATIONS = {
   // Settings / right-side button bar visibility
   "Right-side buttons": "右侧按钮",
   "Choose which buttons appear in the right-side bar. Hidden buttons can still be opened from the command palette. Changes apply immediately.": "选择在右侧按钮栏显示的按钮。隐藏的按钮仍可通过命令面板打开，修改会立即生效。",
+  // Settings / custom tools enable/disable (config.yaml → custom_tools.enabled)
+  "Custom Tools": "自定义工具",
+  "Enable or disable custom pi tools. Changes apply to sessions started after this point; running sessions keep their original tool set.": "启用或禁用自定义 pi 工具。修改只对之后启动的会话生效；已运行的会话保持原有工具集。",
+  "Agent Todo": "Agent Todo（智能体任务列表）",
+  "Show File": "Show File（内联展示文件）",
   // File explorer (rename/delete/copy/context menu)
   "Delete file?": "删除文件？",
   "Delete folder?": "删除文件夹？",

@@ -53,10 +53,31 @@ export const RIGHT_BAR_BUTTON_IDS: readonly RightBarButtonId[] = [
 
 export type RightSideBarConfig = Record<RightBarButtonId, boolean>;
 
+// ── Custom tools enabled by `customTools` on createAgentSession ───────────
+// Names match the tool names registered in lib/rpc-manager.ts. The two
+// built-in user-side todo tools (`user_todos_list`, `user_todo_description`)
+// live in lib/todo-tools-config.ts and are NOT listed here — they are gated
+// by ~/.pi-web/todo-tools.json for historical reasons. Adding a new tool
+// to `customTools` in rpc-manager.ts requires adding it here too, or the
+// validator will silently drop it (fail-open default still applies, but
+// the user setting is lost).
+
+export type AgentCustomToolName = "agent_todo" | "show_file";
+
+export const AGENT_CUSTOM_TOOL_NAMES: readonly AgentCustomToolName[] = [
+  "agent_todo",
+  "show_file",
+] as const;
+
+export interface CustomToolsConfig {
+  enabled: AgentCustomToolName[];
+}
+
 export interface PiWebConfig {
   dangerous_patterns: DangerousPatternsConfig;
   extensions: ExtensionsConfig;
   right_side_bar: RightSideBarConfig;
+  custom_tools: CustomToolsConfig;
 }
 
 const DEFAULT_DANGEROUS_PATTERNS: DangerousPatternsConfig = {
@@ -82,6 +103,9 @@ const DEFAULT_CONFIG: PiWebConfig = {
     clawd_on_desk: { enabled: false },
   },
   right_side_bar: { ...DEFAULT_RIGHT_SIDE_BAR },
+  custom_tools: {
+    enabled: [...AGENT_CUSTOM_TOOL_NAMES],
+  },
 };
 
 function parseDangerousPatterns(raw: unknown): DangerousPatternsConfig {
@@ -112,6 +136,28 @@ function parseRightSideBar(raw: unknown): RightSideBarConfig {
     // missing or non-boolean → keep default (true)
   }
   return out;
+}
+
+// Fail-open only when the field is genuinely missing / unreadable —
+// an explicit `enabled: []` MUST be honored as "disable everything"
+// (the user pushed the button, we trust them). When the array is
+// non-empty but every entry is unknown, fall back to defaults: that's
+// almost certainly a typo / schema mismatch and silently disabling
+// every tool would be a worse surprise than the typo itself.
+function parseCustomTools(raw: unknown): CustomToolsConfig {
+  if (!raw || typeof raw !== "object") return { enabled: [...AGENT_CUSTOM_TOOL_NAMES] };
+  const obj = raw as Record<string, unknown>;
+  const enabledRaw = obj.enabled;
+  if (!Array.isArray(enabledRaw)) return { enabled: [...AGENT_CUSTOM_TOOL_NAMES] };
+  if (enabledRaw.length === 0) return { enabled: [] };
+  const seen = new Set<AgentCustomToolName>();
+  for (const item of enabledRaw) {
+    if (typeof item === "string" && (AGENT_CUSTOM_TOOL_NAMES as readonly string[]).includes(item)) {
+      seen.add(item as AgentCustomToolName);
+    }
+  }
+  if (seen.size === 0) return { enabled: [...AGENT_CUSTOM_TOOL_NAMES] };
+  return { enabled: [...seen] };
 }
 
 const CONFIG_DIR = join(homedir(), ".pi-web");
@@ -163,6 +209,7 @@ export function readConfig(): PiWebConfig {
         clawd_on_desk: { enabled: clawdOnDeskEnabled },
       },
       right_side_bar: parseRightSideBar(cfg.right_side_bar),
+      custom_tools: parseCustomTools(cfg.custom_tools),
     };
   } catch (err) {
     log.warn("failed to read config, resetting to defaults", { error: String(err) });

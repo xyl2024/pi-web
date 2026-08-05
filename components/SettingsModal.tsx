@@ -6,7 +6,7 @@ import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
 import { useToast } from "./Toast";
 import { WeChatSettingsSection } from "./WeChatSettingsSection";
 import { InboxTestSection } from "./InboxTestSection";
-import type { PiWebConfig, RightBarButtonId, RightSideBarConfig } from "@/lib/config";
+import type { PiWebConfig, RightBarButtonId, RightSideBarConfig, AgentCustomToolName } from "@/lib/config";
 import { setSettings } from "@/hooks/settingsStore";
 
 // Display order for the "Right-side buttons" section checkboxes. Each row
@@ -22,6 +22,16 @@ const RIGHT_BAR_BUTTONS_UI: Array<{ id: RightBarButtonId; labelKey: string }> = 
   { id: "favorites", labelKey: "Open favorites" },
   { id: "tokens",    labelKey: "Open token audit" },
   { id: "toolCalls", labelKey: "Tool Calls" },
+];
+
+// Display order for the "Custom Tools" section checkboxes. Tools are
+// registered on `createAgentSession` (see lib/rpc-manager.ts) and the
+// enabled subset is sourced from `custom_tools.enabled` in
+// ~/.pi-web/config.yaml. Toggling here writes the full PiWebConfig back
+// via /api/settings — same immediate-apply pattern as Right-side buttons.
+const CUSTOM_TOOLS_UI: Array<{ id: AgentCustomToolName; labelKey: string }> = [
+  { id: "agent_todo", labelKey: "Agent Todo" },
+  { id: "show_file",  labelKey: "Show File" },
 ];
 
 export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void; onProfileSaved?: () => void }) {
@@ -212,6 +222,43 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
     setConfig(nextConfig);
     setOriginalConfig(nextConfig); // keep isDirty=false → no "discard changes?" prompt
     setSettings(nextConfig);       // publish → AppShell re-renders / auto-closes active panel
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextConfig),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.show({ kind: "success", message: t("Settings saved") });
+    } catch (e) {
+      toast.show({
+        kind: "error",
+        message: e instanceof Error && e.message ? e.message : t("Failed to save settings"),
+      });
+    }
+  }, [config, t, toast]);
+
+  // Custom tool enable/disable — same immediate-apply pattern as
+  // handleRightBarToggle. Modifies the enabled array in-place and PUTs the
+  // whole PiWebConfig back; the server's parseCustomTools validates and
+  // silently drops unknown names on read. An empty `enabled` array is
+  // honored as "disable everything" (the user pushed the buttons, we
+  // trust them). Toggling here only affects sessions started AFTER the
+  // PUT — running sessions keep the tool set they were created with
+  // (createAgentSession freezes customTools).
+  const handleCustomToolToggle = useCallback(async (id: AgentCustomToolName) => {
+    if (!config) return;
+    const isEnabled = config.custom_tools.enabled.includes(id);
+    const nextEnabled: AgentCustomToolName[] = isEnabled
+      ? config.custom_tools.enabled.filter((name) => name !== id)
+      : [...config.custom_tools.enabled, id];
+    const nextConfig: PiWebConfig = {
+      ...config,
+      custom_tools: { enabled: nextEnabled },
+    };
+    setConfig(nextConfig);
+    setOriginalConfig(nextConfig);
+    setSettings(nextConfig);
     try {
       const res = await fetch("/api/settings", {
         method: "PUT",
@@ -649,7 +696,39 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
             </div>
           </div>
 
-          {/* ── Section 5: Right-side buttons ── */}
+          {/* ── Section 5: Custom Tools (agent_todo, show_file) ── */}
+          {/* Immediate-apply checkboxes, same shape as Section 6. */}
+          {config && (
+            <div style={{ marginBottom: 24, marginTop: 24 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", margin: "0 0 4px 0" }}>
+                {t("Custom Tools")}
+              </h3>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 12px 0", lineHeight: 1.5 }}>
+                {t("Enable or disable custom pi tools. Changes apply to sessions started after this point; running sessions keep their original tool set.")}
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {CUSTOM_TOOLS_UI.map(({ id, labelKey }) => {
+                  const checked = config.custom_tools.enabled.includes(id);
+                  return (
+                    <label
+                      key={id}
+                      style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: "var(--text)" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => handleCustomToolToggle(id)}
+                        style={{ width: 14, height: 14, accentColor: "var(--accent)", cursor: "pointer" }}
+                      />
+                      <span>{t(labelKey)}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Section 6: Right-side buttons ── */}
           {/* Immediate-apply section (no per-section Save button). Each
               checkbox toggle calls handleRightBarToggle, which updates local
               state + the global settings store + PUTs to /api/settings. */}
