@@ -610,14 +610,16 @@ function highlightTextAsHtml(text: string, keywords?: string[], isSearchMatch?: 
   return text.replace(regex, (match) => `<mark class="search-highlight">${match}</mark>`);
 }
 
-function TextBlock({ block, keywords, isSearchMatch, isStreaming }: { block: TextContent; keywords?: string[]; isSearchMatch?: boolean; isStreaming?: boolean }) {
-  const text = highlightTextAsHtml(block.text, keywords, isSearchMatch);
-  // Memoize the components map so ReactMarkdown doesn't see a new identity
-  // on every parent re-render. Without this, the new `code` closure produces
-  // a new <MermaidBlock> element on every render, which can cause the
-  // mermaid subtree to remount and re-parse — visible as flicker.
-  // The stable `key={raw}` on MermaidBlock is a second line of defense.
-  const components = useMemo(
+/**
+ * Shared ReactMarkdown component map for assistant text and thinking blocks.
+ * Memoized so ReactMarkdown doesn't see a new identity on every parent
+ * re-render — otherwise the new `code` closure produces a new <MermaidBlock>
+ * element on every render, which can cause the mermaid subtree to remount and
+ * re-parse (visible as flicker). The stable `key={raw}` on MermaidBlock is a
+ * second line of defense.
+ */
+function useMarkdownComponents(isStreaming?: boolean) {
+  return useMemo(
     () => ({
       code({ className, children, ...props }: { className?: string; children?: React.ReactNode } & React.HTMLAttributes<HTMLElement>) {
         const lang = className?.replace("language-", "") ?? "";
@@ -658,6 +660,11 @@ function TextBlock({ block, keywords, isSearchMatch, isStreaming }: { block: Tex
     }),
     [isStreaming],
   );
+}
+
+function TextBlock({ block, keywords, isSearchMatch, isStreaming }: { block: TextContent; keywords?: string[]; isSearchMatch?: boolean; isStreaming?: boolean }) {
+  const text = highlightTextAsHtml(block.text, keywords, isSearchMatch);
+  const components = useMarkdownComponents(isStreaming);
   return (
     <div className="markdown-body">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
@@ -668,12 +675,11 @@ function TextBlock({ block, keywords, isSearchMatch, isStreaming }: { block: Tex
 }
 
 function ThinkingBlock({ block, keywords, isSearchMatch, isStreaming }: { block: ThinkingContent; keywords?: string[]; isSearchMatch?: boolean; isStreaming?: boolean }) {
-  const { t } = useI18n();
   // A thinking block is "still being appended" only when it is the last block
   // of the assistant message AND the message is currently streaming. Every
   // other thinking block is considered finished and is auto-collapsed. A user
-  // click on the header is remembered (userExpandedRef) so the auto-collapse
-  // never overrides a manual expand.
+  // click is remembered (userExpandedRef) so the auto-collapse never overrides
+  // a manual expand.
   const [expanded, setExpanded] = useState(!!isStreaming || !!isSearchMatch);
   const userExpandedRef = useRef(false);
   useEffect(() => {
@@ -686,74 +692,92 @@ function ThinkingBlock({ block, keywords, isSearchMatch, isStreaming }: { block:
       return next;
     });
   };
-  // Header preview when collapsed: collapse internal whitespace runs into
-  // single spaces so multi-line reasoning reads as one continuous snippet in
-  // the single-line header. The ellipsis in the JSX cuts off anything that
-  // overflows the available width.
+  // Preview when collapsed: collapse internal whitespace runs into single
+  // spaces so multi-line reasoning reads as one continuous snippet. The
+  // ellipsis in the JSX cuts off anything that overflows the available width.
   const thinkingPreview = useMemo(() => block.thinking.replace(/\s+/g, " ").trim(), [block.thinking]);
+  const components = useMarkdownComponents(isStreaming);
+  // Clicks on interactive elements inside the expanded thinking (copy buttons,
+  // links, inputs) must not collapse the block; neither should a text drag
+  // selection.
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.closest("button, a, input, textarea, select, [contenteditable='true']")) return;
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return;
+    toggle();
+  };
+  // The container height follows the rendered content via ResizeObserver so
+  // expand/collapse (and streaming growth) animate a real pixel height — CSS
+  // can't transition `auto`. Transitions stay off until the first measure is
+  // done to avoid a mount-time pop.
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
+  const [allowAnim, setAllowAnim] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setAllowAnim(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const update = () => setContentHeight((prev) => (prev === el.scrollHeight ? prev : el.scrollHeight));
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const text = highlightTextAsHtml(block.thinking, keywords, isSearchMatch);
   return (
     <div
+      onClick={handleClick}
+      aria-expanded={expanded}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          toggle();
+        }
+      }}
       style={{
-        border: "1px solid var(--border)",
-        borderRadius: 6,
+        height: contentHeight ?? "auto",
         overflow: "hidden",
-        fontSize: 13,
+        cursor: "pointer",
+        transition: allowAnim ? "height 0.3s cubic-bezier(0.4, 0, 0.2, 1)" : "none",
       }}
     >
-      <button
-        onClick={toggle}
-        aria-expanded={expanded}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          width: "100%",
-          padding: "6px 10px",
-          background: "var(--bg-panel)",
-          border: "none",
-          color: "var(--text-muted)",
-          cursor: "pointer",
-          fontSize: 12,
-          textAlign: "left",
-        }}
-      >
-        <span aria-hidden style={{ display: "inline-block", width: 10, color: "var(--text-dim)", transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.12s", flexShrink: 0 }}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <polyline points="9 6 15 12 9 18" />
-          </svg>
-        </span>
+      <div ref={contentRef} style={{ overflow: "hidden" }}>
         {expanded ? (
-          <span>{t("Thinking")}</span>
+          <div className="markdown-body" style={{ fontSize: 13, color: "var(--text-muted)" }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+              {text}
+            </ReactMarkdown>
+          </div>
         ) : (
-          <span
+          <div
+            className="thinking-collapsed"
             style={{
-              flex: 1,
-              minWidth: 0,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              color: "var(--text-muted)",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "2px 4px",
+              fontSize: 12.5,
+              textAlign: "left",
             }}
           >
-            {thinkingPreview}
-          </span>
+            <span aria-hidden style={{ display: "inline-block", width: 10, color: "var(--text-dim)", flexShrink: 0 }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="9 6 15 12 9 18" />
+              </svg>
+            </span>
+            <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {thinkingPreview}
+            </span>
+          </div>
         )}
-      </button>
-      {expanded && (
-        <div
-          style={{
-            padding: "8px 10px",
-            color: "var(--text-muted)",
-            fontSize: 12,
-            lineHeight: 1.6,
-            whiteSpace: "pre-wrap",
-            background: "var(--bg-panel)",
-            borderTop: "1px solid var(--border)",
-          }}
-        >
-          {highlightKeywords(block.thinking, keywords, isSearchMatch)}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

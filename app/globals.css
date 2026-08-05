@@ -227,6 +227,12 @@ pre, code {
   accent-color: var(--accent);
 }
 
+/* Thinking blocks — rendered inline like the message body, but smaller & dimmer */
+.thinking-collapsed {
+  font-family: inherit;
+  color: var(--text-muted);
+}
+
 /* File viewer markdown preview — larger headings */
 .markdown-file-preview h1 { font-size: 1.8em; }
 .markdown-file-preview h2 { font-size: 1.4em; }
