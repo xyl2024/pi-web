@@ -1020,93 +1020,41 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
 
       {isEmptyNew ? (
         <>
-          <div className="relative flex-1 overflow-y-auto @container">
-            <div className="relative flex min-h-full w-full max-w-[920px] flex-col items-center justify-center gap-10 px-6 py-10 @3xl:flex-row @3xl:items-center @3xl:gap-12">
-              {/* 左：品牌区。聊天区足够宽时分栏左对齐，否则居中堆叠 */}
-              <div className="flex w-full max-w-[300px] shrink-0 flex-col items-center text-center @3xl:items-start @3xl:text-left">
-                {/* 品牌区背后的柔和光晕（纯装饰） */}
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-                  style={{
-                    width: 500, height: 500, borderRadius: "50%",
-                    background: "radial-gradient(circle, color-mix(in srgb, var(--accent) 9%, transparent) 0%, transparent 62%)",
-                  }}
-                />
-                <div style={{ position: "relative" }}>
-                  <div
-                    style={{
-                      width: 54, height: 54, borderRadius: 16, marginBottom: 18,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontFamily: "var(--font-mono)", fontSize: 30, fontWeight: 700, lineHeight: 1,
-                      color: "var(--accent)",
-                      background: "linear-gradient(135deg, color-mix(in srgb, var(--accent) 26%, var(--bg-panel)), color-mix(in srgb, var(--accent) 7%, var(--bg-panel)))",
-                      border: "1px solid color-mix(in srgb, var(--accent) 32%, transparent)",
-                      boxShadow: "0 10px 28px color-mix(in srgb, var(--accent) 18%, transparent)",
-                    }}
-                  >π</div>
-                  <span style={{ fontSize: 30, color: "var(--text)", fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.2, fontFamily: "var(--font-mono)" }}>P<span style={{ color: "var(--accent)" }}>i</span> W<span style={{ color: "var(--accent)" }}>o</span>rk</span>
-                  <span style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 14, fontFamily: "var(--font-mono)", display: "block" }}>
-                    web <span style={{ color: "var(--text-muted)" }}>v{process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}</span>
-                    <span style={{ margin: "0 6px", opacity: 0.5 }}>·</span>
-                    pi <span style={{ color: "var(--text-muted)" }}>v{process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}</span>
-                  </span>
-                </div>
-              </div>
+          <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4">
+            <div className="mb-8 flex flex-col items-center" style={{ fontFamily: "var(--font-mono)" }}>
+              <span style={{ fontSize: 26, color: "var(--text)", fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.2 }}>P<span style={{ color: "var(--accent)" }}>i</span> W<span style={{ color: "var(--accent)" }}>o</span>rk</span>
+              <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
+                web <span style={{ color: "var(--text)" }}>v{process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}</span>
+                <span style={{ margin: "0 6px", opacity: 0.5 }}>·</span>
+                pi <span style={{ color: "var(--text)" }}>v{process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}</span>
+              </span>
+            </div>
 
-              {/* 右：预置提示词，2 列网格（宽屏下卡片更舒展） */}
-              <div className="w-full flex-1" style={{ maxWidth: 560 }}>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {NEW_SESSION_PRESETS.map((preset) => (
-                    <button
-                      key={preset.key}
-                      type="button"
-                      onClick={() => chatInputRef?.current?.insertText(t(preset.promptKey))}
-                      style={{
-                        display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 9,
-                        padding: "15px 16px",
-                        background: "var(--bg-subtle)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 14,
-                        cursor: "pointer", textAlign: "left",
-                        transition: "transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease",
-                      }}
-                      onMouseEnter={(e) => {
-                        const el = e.currentTarget;
-                        el.style.borderColor = "color-mix(in srgb, var(--accent) 45%, var(--border))";
-                        el.style.background = "var(--bg-hover)";
-                        el.style.transform = "translateY(-2px)";
-                        el.style.boxShadow = "0 8px 22px color-mix(in srgb, var(--accent) 14%, transparent)";
-                        const badge = el.querySelector<HTMLElement>("[data-icon-badge]");
-                        if (badge) badge.style.background = "color-mix(in srgb, var(--accent) 18%, transparent)";
-                      }}
-                      onMouseLeave={(e) => {
-                        const el = e.currentTarget;
-                        el.style.borderColor = "var(--border)";
-                        el.style.background = "var(--bg-subtle)";
-                        el.style.transform = "translateY(0)";
-                        el.style.boxShadow = "none";
-                        const badge = el.querySelector<HTMLElement>("[data-icon-badge]");
-                        if (badge) badge.style.background = "color-mix(in srgb, var(--accent) 12%, transparent)";
-                      }}
-                    >
-                      <span
-                        data-icon-badge
-                        style={{
-                          width: 34, height: 34, borderRadius: 10, flexShrink: 0,
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          color: "var(--accent)",
-                          background: "color-mix(in srgb, var(--accent) 12%, transparent)",
-                          border: "1px solid color-mix(in srgb, var(--accent) 22%, transparent)",
-                          transition: "background 0.16s ease",
-                        }}
-                      >{preset.icon}</span>
-                      <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", lineHeight: 1.3 }}>{t(preset.titleKey)}</span>
-                      <span style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>{t(preset.descKey)}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+            <div className="grid w-full max-w-[820px] grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {NEW_SESSION_PRESETS.map((preset) => (
+                <button
+                  key={preset.key}
+                  type="button"
+                  onClick={() => chatInputRef?.current?.insertText(t(preset.promptKey))}
+                  style={{
+                    display: "flex", alignItems: "flex-start", gap: 10,
+                    padding: "12px 14px",
+                    background: "var(--bg-subtle)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 12,
+                    cursor: "pointer", textAlign: "left",
+                    transition: "border-color 0.15s, background 0.15s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--bg-subtle)"; }}
+                >
+                  <span style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2, display: "flex" }}>{preset.icon}</span>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.3 }}>{t(preset.titleKey)}</span>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.45 }}>{t(preset.descKey)}</span>
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
           <div className="relative">{chatInputElement}</div>
