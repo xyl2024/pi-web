@@ -1187,7 +1187,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                     highlightEntryId={highlightEntryId}
                     isSearchMatch={matchedEntryIds.has(renderEntryIds[idx])}
                     afterContent={opts.afterContent}
-                    sessionId={session?.id}
                   />
                 );
                 if (currentRefIdx === -1) return view;
@@ -1324,7 +1323,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
             })()}
 
             {streamState.isStreaming && streamState.streamingMessage && (
-              <MessageView message={streamState.streamingMessage as AgentMessage} isStreaming modelNames={modelNames} sessionId={session?.id} />
+              <MessageView message={streamState.streamingMessage as AgentMessage} isStreaming modelNames={modelNames} />
             )}
 
             {agentRunning && !streamState.streamingMessage && (

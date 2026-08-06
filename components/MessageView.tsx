@@ -11,7 +11,6 @@ import { EchartsBlock } from "./EchartsBlock";
 import { SvgBlock } from "./SvgBlock";
 import { CodeBlock, copyText } from "./CodeBlock";
 import { SHOW_FILE_TOOL_NAME } from "@/lib/show-file-tool-types";
-import { PayloadChip } from "./PayloadChip";
 import { ProviderIcon, hasProviderIcon } from "./ProviderIcon";
 import type {
   AgentMessage,
@@ -37,8 +36,6 @@ interface Props {
   prevAssistantEntryId?: string;
   onEditContent?: (content: string) => void;
   showTimestamp?: boolean;
-  /** Session id — used to fetch the captured provider request for this message. */
-  sessionId?: string;
   /** Keywords to highlight with <mark> (from in-session search) */
   keywords?: string[];
   /** If this entryId matches, apply a flash animation */
@@ -86,7 +83,7 @@ function highlightKeywords(text: string, keywords?: string[], isSearchMatch?: bo
   return parts.length > 0 ? parts : text;
 }
 
-export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, keywords, highlightEntryId, isSearchMatch, afterContent, sessionId }: Props) {
+export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, keywords, highlightEntryId, isSearchMatch, afterContent }: Props) {
   const isFocused = !!(highlightEntryId && entryId === highlightEntryId);
 
   if (message.role === "user") {
@@ -99,7 +96,7 @@ export function MessageView({ message, isStreaming, toolResults, modelNames, ent
   if (message.role === "assistant") {
     return (
       <div className={isFocused ? "search-flash" : undefined}>
-        <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} showTimestamp={showTimestamp} keywords={keywords} isSearchMatch={isSearchMatch} afterContent={afterContent} sessionId={sessionId} entryId={entryId} />
+        <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} showTimestamp={showTimestamp} keywords={keywords} isSearchMatch={isSearchMatch} afterContent={afterContent} />
       </div>
     );
   }
@@ -384,8 +381,6 @@ function AssistantMessageView({
   keywords,
   isSearchMatch,
   afterContent,
-  sessionId,
-  entryId,
 }: {
   message: AssistantMessage;
   isStreaming?: boolean;
@@ -474,9 +469,6 @@ function AssistantMessageView({
             )}
             <span>{modelNames?.[`${message.provider}:${message.model}`] ?? modelNames?.[message.model] ?? message.model}</span>
           </>
-        )}
-        {sessionId && entryId && (
-          <PayloadChip sessionId={sessionId} entryId={entryId} pending={!!isStreaming} />
         )}
         {isStreaming && (() => {
           let chars = 0;
@@ -599,7 +591,7 @@ function BlockView({ block, toolResults, isStreaming, isLast, keywords, isSearch
   if (block.type === "toolCall") {
     const tc = block as ToolCallContent;
     const result = toolResults?.get(tc.toolCallId);
-    return <ToolCallBlock block={tc} result={result} isRunning={isStreaming && !result} />;
+    return <ToolCallBlock block={tc} result={result} />;
   }
   return null;
 }
@@ -770,7 +762,7 @@ function ThinkingBlock({ block, keywords, isSearchMatch, isStreaming }: { block:
 }
 
 
-function ToolCallBlock({ block, result, isRunning }: { block: ToolCallContent; result?: ToolResultMessage; isRunning?: boolean }) {
+function ToolCallBlock({ block, result }: { block: ToolCallContent; result?: ToolResultMessage }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   // Height animation for expand/collapse — same pattern as the thinking block.
