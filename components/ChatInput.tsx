@@ -88,6 +88,19 @@ const TOOL_PRESETS = ["off", "full"] as const;
 const TOOL_PRESET_MAP: Record<"off" | "full", "none" | "full"> = { off: "none", full: "full" };
 
 const THINKING_LEVELS = ["auto", "off", "minimal", "low", "medium", "high", "xhigh"] as const;
+// Border color reflects the active reasoning intensity: gray = off, then a
+// cool-to-warm gradient up to red for xhigh. "auto" falls back to the
+// neutral border because the UI can't know which level the upstream pi
+// actually resolved to.
+const THINKING_BORDER_COLOR: Record<typeof THINKING_LEVELS[number], string> = {
+  auto: "color-mix(in srgb, var(--border) 70%, transparent)",
+  off: "rgba(148,163,184,0.55)",   // slate-400
+  minimal: "rgba(56,189,248,0.55)", // sky-400
+  low: "rgba(59,130,246,0.55)",    // blue-500
+  medium: "rgba(139,92,246,0.55)",  // violet-500
+  high: "rgba(249,115,22,0.55)",    // orange-500
+  xhigh: "rgba(239,68,68,0.55)",    // red-500
+};
 const SLASH_PAGE_SIZE = 5;
 
 const BUILTIN_NEW_SESSION: SlashResource = {
@@ -998,7 +1011,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             gap: 8,
             alignItems: "center",
             background: "var(--bg)",
-            border: "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
+            border: `1px solid ${isStreaming ? "color-mix(in srgb, var(--border) 70%, transparent)" : (THINKING_BORDER_COLOR[thinkingLevel ?? "auto"])}`,
             borderRadius: 14,
             padding: "10px 10px 10px 14px",
             boxShadow: "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -12px rgba(15,23,42,0.10)",
@@ -1077,34 +1090,32 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               maxHeight: 200,
               overflow: "auto",
             }}
+            data-hide-v-scrollbar
           />
 
           {!isStreaming && (
             <button
               onClick={handleSend}
               disabled={!value.trim() && !attachedImages.length && !selectedSlashResource}
+              aria-label={t("Send")}
               style={{
                 flexShrink: 0,
                 alignSelf: "flex-end",
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "7px 14px",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 34, height: 34, padding: 0,
                 background: (value.trim() || attachedImages.length || selectedSlashResource) ? "var(--accent)" : "var(--bg-panel)",
                 border: "none",
-                borderRadius: 8,
+                borderRadius: "50%",
                 color: (value.trim() || attachedImages.length || selectedSlashResource) ? "#fff" : "var(--text-dim)",
                 cursor: (value.trim() || attachedImages.length || selectedSlashResource) ? "pointer" : "not-allowed",
-                fontSize: 13,
-                fontWeight: 600,
-                letterSpacing: "-0.01em",
                 boxShadow: (value.trim() || attachedImages.length || selectedSlashResource) ? "0 1px 3px rgba(37,99,235,0.25)" : "none",
                 transition: "background 0.15s, box-shadow 0.15s",
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="2" y1="7" x2="11" y2="7" />
-                <polyline points="7.5 3 12 7 7.5 11" />
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="13" x2="8" y2="4" />
+                <polyline points="4 7.5 8 3.5 12 7.5" />
               </svg>
-              {t("Send")}
             </button>
           )}
         </div>
