@@ -16,10 +16,10 @@ function validationResponse(err: InboxValidationError) {
  *
  * Test-only endpoint that pushes a single message into the Inbox. Lives on a
  * separate route from `/api/inbox/messages` because that one intentionally
- * does not implement POST (push is server-side only, driven by the rss loop
- * and scheduler runner). This route is itself server-side, but is the only
+ * does not implement POST (push is server-side only, driven by the scheduler
+ * runner). This route is itself server-side, but is the only
  * way to let a developer send a synthetic message from the UI (Settings →
- * Inbox Test) without waiting for a real RSS / scheduler event.
+ * Inbox Test) without waiting for a real scheduler event.
  *
  * Body shape:
  *   { source: string, level?: "info"|"warn"|"error", title: string,

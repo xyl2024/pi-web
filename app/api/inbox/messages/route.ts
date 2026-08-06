@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  * DELETE /api/inbox/messages?olderThan=<ms>
  *
  * POST is intentionally not implemented — push is server-side only, driven by
- * lib/inbox-store.pushMessage() from the rss loop / scheduler runner / etc.
+ * lib/inbox-store.pushMessage() from the scheduler runner / etc.
  * Clients that want to push a message must add a server-side source.
  */
 export async function GET(req: Request) {

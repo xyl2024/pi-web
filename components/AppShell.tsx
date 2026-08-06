@@ -31,6 +31,7 @@ import { InboxModal } from "./InboxModal";
 import { useI18n } from "@/hooks/useI18n";
 import { useTheme } from "@/hooks/useTheme";
 import { useInboxUnreadCount } from "@/hooks/useInboxUnreadCount";
+import { useRssUnreadCount } from "@/hooks/useRssUnreadCount";
 import { useToast } from "./Toast";
 import { useContextMenu, type ContextMenuItem } from "./ContextMenu";
 import type { SessionInfo, SessionSearchResult } from "@/lib/types";
@@ -79,6 +80,7 @@ export function AppShell() {
   const toast = useToast();
   const cm = useContextMenu();
   const { unread: inboxUnread } = useInboxUnreadCount();
+  const { unread: rssUnread } = useRssUnreadCount();
   const settings = useEnsureSettings();
   const rightSideBarConfig = settings?.right_side_bar ?? null;
 
@@ -1313,6 +1315,7 @@ export function AppShell() {
           <button
             onClick={() => handleToggleRightPanelTab(RSS_TAB_ID, handleOpenRssTab)}
             style={{
+              position: "relative",
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
@@ -1326,7 +1329,30 @@ export function AppShell() {
               <circle cx="3.5" cy="12.5" r="1.2" fill="currentColor" stroke="none" />
               <path d="M2 8a6 6 0 0 1 6 6" />
               <path d="M2 4a10 10 0 0 1 10 10" />
-</svg>
+            </svg>
+            {rssUnread > 0 && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: 2,
+                  right: 2,
+                  minWidth: 16,
+                  height: 16,
+                  padding: rssUnread > 99 ? "0 4px" : 0,
+                  borderRadius: rssUnread > 99 ? 8 : "50%",
+                  background: "#ef4444",
+                  color: "#fff",
+                  fontSize: 9,
+                  fontWeight: 700,
+                  lineHeight: "16px",
+                  textAlign: "center",
+                  boxSizing: "border-box",
+                  pointerEvents: "none",
+                }}
+              >
+                {rssUnread > 99 ? "99+" : rssUnread}
+              </span>
+            )}
         </button>
         </Tooltip>
         )}
