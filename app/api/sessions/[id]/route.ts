@@ -10,7 +10,6 @@ import {
   listAllSessions,
 } from "@/lib/session-reader";
 import { getRpcSession } from "@/lib/rpc-manager";
-import { deleteFor as deletePayloadCapture } from "@/lib/payload-capture";
 import { deleteAgentTodoFile } from "@/lib/agent-todo-store";
 import { createLogger, elapsedMs } from "@/lib/logger";
 
@@ -180,7 +179,6 @@ export async function DELETE(
     unlinkSync(filePath);
     invalidateSessionPathCache(id);
     invalidateSessionListCache();
-    deletePayloadCapture(id);
     deleteAgentTodoFile(id);
     log.info("delete session completed", {
       id,

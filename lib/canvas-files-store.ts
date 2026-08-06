@@ -66,7 +66,7 @@ export type BinaryFiles = Record<string, BinaryFileData>;
  *
  * Returns `{}` if IndexedDB is unavailable, the store is empty, or the
  * read failed. Errors are logged and surface as an empty result — the
- * same "degrade gracefully" policy as `lib/payload-capture.ts`.
+ * standard "degrade gracefully" policy shared by every IndexedDB helper.
  */
 export async function loadAndTouchFiles(
   referencedIds: ReadonlySet<string>,
