@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
 import { Tooltip } from "./Tooltip";
@@ -126,8 +126,25 @@ export function GitDiffPanel({ cwd }: Props) {
     setSelectedPath(f.path);
   }, [staged]);
 
+  // Files visible under the current staged/unstaged filter.
+  // Untracked files (`??`) show only in the Unstaged view.
+  const visibleFiles = useMemo(() => {
+    if (!status) return [];
+    return status.files.filter((f) =>
+      staged ? f.hasStaged : (f.hasUnstaged || f.status === "??")
+    );
+  }, [status, staged]);
+
+  // When the staged toggle changes, clear the selection if the current file
+  // is no longer in the visible list.
+  useEffect(() => {
+    if (selectedPath && !visibleFiles.some((f) => f.path === selectedPath)) {
+      setSelectedPath(null);
+    }
+  }, [visibleFiles, selectedPath]);
+
   const repoName = status?.repoRoot ? status.repoRoot.split("/").pop() || status.repoRoot : null;
-  const selectedFile = status?.files.find((f) => f.path === selectedPath) ?? null;
+  const selectedFile = visibleFiles.find((f) => f.path === selectedPath) ?? null;
 
   const diffLines = useCallback((diff: string) => diff.split("\n"), []);
 
@@ -249,7 +266,7 @@ export function GitDiffPanel({ cwd }: Props) {
             <div style={{ flex: 1 }} />
             {status.files.length > 0 && (
               <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
-                {t("{n} files changed").replace("{n}", String(status.files.length))}
+                {t("{n} files changed").replace("{n}", String(visibleFiles.length))}
               </span>
             )}
           </div>
@@ -259,7 +276,12 @@ export function GitDiffPanel({ cwd }: Props) {
             flex: "0 0 40%", minHeight: 80, overflowY: "auto",
             borderBottom: "1px solid var(--border)",
           }}>
-            {status.files.map((f) => {
+            {visibleFiles.length === 0 ? (
+              <div style={{ padding: "20px 12px", fontSize: 12, color: "var(--text-dim)", textAlign: "center" }}>
+                {staged ? t("No staged changes") : t("No unstaged changes")}
+              </div>
+            ) : (
+            visibleFiles.map((f) => {
               const active = f.path === selectedPath;
               return (
                 <button
@@ -298,7 +320,8 @@ export function GitDiffPanel({ cwd }: Props) {
                   </span>
                 </button>
               );
-            })}
+            })
+          )}
           </div>
 
           {/* Diff view */}

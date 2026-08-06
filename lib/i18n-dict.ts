@@ -714,6 +714,8 @@ export const ZH_TRANSLATIONS = {
   "Not a git repository": "当前目录不是 Git 仓库",
   "Select a file to view its diff": "选择一个文件查看变更",
   "No changes for this file": "该文件在此侧没有变更",
+  "No staged changes": "没有已暂存的变更",
+  "No unstaged changes": "没有未暂存的变更",
   "Diff truncated": "变更内容过大，已截断",
   "Open a session first": "请先打开一个会话",
   "{n} files changed": "共 {n} 个文件变更",
