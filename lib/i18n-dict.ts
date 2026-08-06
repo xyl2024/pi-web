@@ -530,6 +530,8 @@ export const ZH_TRANSLATIONS = {
   "Document this project": "生成项目文档",
   "Generate a structured wiki from the source": "从源码生成结构化的 Wiki 文档",
   "Generate structured project documentation (a wiki) from the source code.": "根据源码生成结构化的项目文档（Wiki）。",
+  // New-session welcome line (greeting shown below the brand + version number on the empty new-session screen)
+  "Hi, {name}, what shall we create together today?": "Hi，{name} 今天想一起创造什么？",
   "No activity in this workspace yet": "此工作区暂无活动",
   "Couldn't load activity": "无法加载活动数据",
   "session": "个会话",

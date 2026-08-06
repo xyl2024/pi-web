@@ -923,6 +923,23 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     return () => controller.abort();
   }, [sessionId, newSessionCwd]);
 
+  // Fetch the profile username once for the new-session welcome line. Best-
+  // effort: a missing / failed fetch falls back to "Guest", same as ProfileBlock.
+  const [username, setUsername] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: { username?: unknown }) => {
+        if (cancelled) return;
+        setUsername(typeof d.username === "string" ? d.username : null);
+      })
+      .catch(() => {
+        if (!cancelled) setUsername(null);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   const chatInputElement = (
     <ChatInput
       ref={chatInputRef}
@@ -1027,6 +1044,22 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                 web <span style={{ color: "var(--text)" }}>v{process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}</span>
                 <span style={{ margin: "0 6px", opacity: 0.5 }}>·</span>
                 pi <span style={{ color: "var(--text)" }}>v{process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}</span>
+              </span>
+              <span
+                aria-hidden
+                style={{
+                  marginTop: 16,
+                  fontFamily: "var(--font-sans)",
+                  fontSize: 15,
+                  fontWeight: 500,
+                  color: "var(--text)",
+                  lineHeight: 1.5,
+                  textAlign: "center",
+                  maxWidth: 540,
+                  padding: "0 16px",
+                }}
+              >
+                {t("Hi, {name}, what shall we create together today?").replace("{name}", username ?? t("Guest"))}
               </span>
             </div>
 
