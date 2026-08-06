@@ -6,6 +6,7 @@ import { Tooltip } from "./Tooltip";
 import { IconHoverButton } from "./IconHoverButton";
 import { ProviderIcon } from "./ProviderIcon";
 import { useConfirm } from "./ConfirmDialog";
+import { CollapsiblePanel } from "./CollapsiblePanel";
 import { useToast } from "./Toast";
 
 export interface AttachedImage {
@@ -844,6 +845,17 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     xhigh: t("Highest reasoning"),
   };
 
+  // Current thinking level's display label — mirrors the per-option
+  // computation inside the dropdown, so the streaming badge shows the
+  // same value the user picked (mapped level names via thinkingLevelMap).
+  const currentThinkingLevel = thinkingLevel ?? "auto";
+  const currentThinkingMapped = (currentThinkingLevel !== "auto" && thinkingLevelMap)
+    ? thinkingLevelMap[currentThinkingLevel]
+    : undefined;
+  const currentThinkingDisplay = (currentThinkingMapped != null && currentThinkingMapped !== currentThinkingLevel)
+    ? currentThinkingMapped
+    : currentThinkingLevel;
+
   // Context usage cells — 10 discrete bars, each covering a 10% bucket. Color
   // thresholds mirror the top-right status bar (>70% yellow, >90% red).
   const contextBar = useMemo(() => {
@@ -1004,7 +1016,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           </div>
         )}
 
-        {/* Main input */}
+        {/* Main input — collapses away while the agent is streaming */}
+        <CollapsiblePanel open={!isStreaming}>
         <div
           style={{
             display: "flex",
@@ -1119,6 +1132,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             </button>
           )}
         </div>
+        </CollapsiblePanel>
         {(selectedSlashResource || (slashMenuOpen && slashQuery)) && (
           <div style={{ position: "relative" }}>
             {selectedSlashResource && (
@@ -1231,9 +1245,9 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
           {/* LEFT: attach + model selector */}
           <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 2 }}>
+            {!isStreaming && (
             <IconHoverButton
               onClick={() => fileInputRef.current?.click()}
-              disabled={isStreaming}
               icon={
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -1246,6 +1260,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               ariaLabel={t("Attach image")}
               variant={attachedImages.length ? "accent" : "default"}
             />
+            )}
             {/* Model selector — visible always, disabled during streaming */}
             {modelOptions.length > 0 && currentName && onModelChange && (
                 <div ref={dropdownRef} style={{ position: "relative" }}>
@@ -1423,6 +1438,23 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               />
             )}
 
+            {/* Streaming: show the chosen thinking level as a read-only
+                badge instead of the icon button (the level can't be changed
+                while the agent is running). */}
+            {isStreaming && (
+              <span
+                style={{
+                  display: "inline-flex", alignItems: "center",
+                  height: 32, padding: "0 10px",
+                  fontSize: 12, color: "var(--text-dim)",
+                  background: "none", border: "none", borderRadius: 9,
+                  whiteSpace: "nowrap",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                {currentThinkingDisplay}
+              </span>
+            )}
             {!isStreaming && onThinkingLevelChange && (
               <div ref={thinkingDropdownRef} style={{ position: "relative" }}>
                 <IconHoverButton
@@ -1572,7 +1604,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               </div>
             )}
 
-            {onExport && sessionId && (
+            {onExport && sessionId && !isStreaming && (
               <div style={{ position: "relative" }}>
                 <IconHoverButton
                   onClick={onExport!}
@@ -1602,7 +1634,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               </div>
             )}
 
-            {sessionId && (
+            {sessionId && !isStreaming && (
               <IconHoverButton
                 onClick={handleAutoName}
                 disabled={!canAutoName}
