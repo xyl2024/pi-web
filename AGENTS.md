@@ -177,7 +177,7 @@ need to load any page first.
 The right side of `AppShell` hosts a stack of tool panels, each backed by a
 module-scoped store using `useSyncExternalStore`:
 
-- `sessionUiStore` — branch leaf (`branchTree`/`ActiveLeafId`), `systemPrompt`, `agentsFiles`, `sessionStats`, `contextUsage`. Owned by `useAgentSession`, read by `AppShell`. Imperative session controls (model/thinking/tools/compact/steer) are bridged to `CommandPalette` ⌘K via the separate `useAgentControls()` hook, **not** part of this store's snapshot.
+- `sessionUiStore` — branch leaf (`branchTree`/`ActiveLeafId`), `systemPrompt`, `agentsFiles`, `sessionStats`, `contextUsage`. Owned by `useAgentSession`, read by `AppShell`. Imperative session controls (model/thinking/tools/compact) are bridged to `CommandPalette` ⌘K via the separate `useAgentControls()` hook, **not** part of this store's snapshot.
 - `toolCallStatsStore` — per-turn tool call statistics, owned by `useAgentSession`, read by the vertical button + `ToolCallStatsPanel`.
 
 The store pattern eliminates the previous "5 separate `onXxxChange` props +
@@ -379,7 +379,7 @@ components/
 
 hooks/
   useAgentSession.ts        everything chat-window-related: load, stream, fork,
-                            navigate, set model/tools/thinking, compact, steer
+                            navigate, set model/tools/thinking, compact
   useAgentTodo.ts           polls /api/agent/[id]/agent-todo every 1.5s for the active session
   useI18n.tsx               en/zh dictionary + locale toggle (t() / useI18n())
   useTheme.ts               CSS theme preset toggle

@@ -496,7 +496,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     messagesEndRef, scrollContainerRef,
     lastUserMsgRef,
     handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
-    handleCompact, handleSteer, handleFollowUp, handleAbortCompaction,
+    handleCompact, handleAbortCompaction,
     handleToolPresetChange, handleThinkingLevelChange,
     userMessageHistory,
     activeLeafId, currentSessionId,
@@ -928,8 +928,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       ref={chatInputRef}
       onSend={handleSend}
       onAbort={handleAbort}
-      onSteer={agentRunning ? handleSteer : undefined}
-      onFollowUp={agentRunning ? handleFollowUp : undefined}
       isStreaming={agentRunning}
       model={displayModelValue}
       modelNames={modelNames}

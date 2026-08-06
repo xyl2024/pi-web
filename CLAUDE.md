@@ -364,7 +364,7 @@ components/
 
 hooks/
   useAgentSession.ts        everything chat-window-related: load, stream, fork,
-                            navigate, set model/tools/thinking, compact, steer
+                            navigate, set model/tools/thinking, compact
   useAgentTodo.ts           polls /api/agent/[id]/agent-todo every 1.5s for the active session
   useI18n.tsx               en/zh dictionary + locale toggle (t() / useI18n())
   useTheme.ts               CSS theme preset toggle

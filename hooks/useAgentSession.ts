@@ -164,11 +164,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   // Input history for the chat input box. Backed by `messages` (which is
   // already populated from the backend .jsonl via loadSession, then kept
-  // up to date by setMessages in handleSend/handleSteer/handleFollowUp +
-  // SSE events), so it always reflects the actual conversation — no
-  // localStorage, no race conditions around the isNew path's async
-  // sessionId. Steer/follow-up entries get their display prefix stripped
-  // so the recalled text is plain and Enter sends it as a normal message.
+  // up to date by setMessages in handleSend + SSE events), so it always
+  // reflects the actual conversation — no localStorage, no race conditions
+  // around the isNew path's async sessionId. Older sessions may still hold
+  // steer/follow-up entries written before those features were removed; their
+  // display prefix is stripped so the recalled text is plain.
   const userMessageHistory = useMemo(() => {
     const out: string[] = [];
     for (const m of messages) {
@@ -352,7 +352,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       case "message_start":
       case "message_update": {
         const msg = event.message as Partial<AgentMessage> | undefined;
-        // User messages are added optimistically by handleSend/handleSteer/handleFollowUp.
+        // User messages are added optimistically by handleSend.
         // Skip SSE events for user messages to avoid double-display during streaming.
         if (msg && msg.role !== "user") {
           dispatch({ type: "update", message: normalizeToolCalls(msg as AgentMessage) });
@@ -362,7 +362,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
       case "message_end": {
         const completed = event.message as AgentMessage | undefined;
-        // User messages are added optimistically by handleSend/handleSteer/handleFollowUp.
+        // User messages are added optimistically by handleSend.
         // Skip appending from SSE to avoid duplication.
         if (completed && completed.role !== "user") {
           setMessages((prev) => [...prev, normalizeToolCalls(completed)]);
@@ -620,40 +620,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
   }, [isCompacting, loadSession]);
 
-  const handleSteer = useCallback(async (message: string, images?: AttachedImage[]) => {
-    const sid = sessionIdRef.current;
-    if (!sid) return;
-    setMessages((prev) => [...prev, { role: "user", content: `[steer] ${message}`, timestamp: Date.now() } as AgentMessage]);
-    const piImages = images?.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType }));
-    try {
-      await sendAgentCommand(sid, {
-        type: "steer",
-        message,
-        ...(piImages?.length ? { images: piImages } : {}),
-      });
-    } catch (e) {
-      console.error("Failed to steer:", e);
-      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to send message") });
-    }
-  }, [t, toast]);
-
-  const handleFollowUp = useCallback(async (message: string, images?: AttachedImage[]) => {
-    const sid = sessionIdRef.current;
-    if (!sid) return;
-    setMessages((prev) => [...prev, { role: "user", content: message, timestamp: Date.now() } as AgentMessage]);
-    const piImages = images?.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType }));
-    try {
-      await sendAgentCommand(sid, {
-        type: "follow_up",
-        message,
-        ...(piImages?.length ? { images: piImages } : {}),
-      });
-    } catch (e) {
-      console.error("Failed to follow up:", e);
-      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to send message") });
-    }
-  }, [t, toast]);
-
   const handleAbortCompaction = useCallback(async () => {
     const sid = sessionIdRef.current;
     if (!sid) return;
@@ -834,7 +800,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     lastUserMsgRef, pendingScrollToUserRef, initialScrollDoneRef,
     // Actions
     handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
-    handleCompact, handleSteer, handleFollowUp, handleAbortCompaction,
+    handleCompact, handleAbortCompaction,
     handleToolPresetChange, handleThinkingLevelChange, loadTools, loadAgentsFiles, setActiveLeafId, setData, setMessages,
     dispatch, setAgentRunning, setForkingEntryId,
     // Subscriptions
