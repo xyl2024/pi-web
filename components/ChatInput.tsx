@@ -70,6 +70,13 @@ interface Props {
   onRenameCompleted?: (name: string) => void | Promise<void>;
   /** Fired as soon as the rename is committed — keeps parent state in sync. */
   onSessionNameChange?: (name: string) => void;
+  /**
+   * Plain-text user messages from the active session, oldest first. Sourced
+   * from `useAgentSession.messages` (which reflects the backend .jsonl) so
+   * ArrowUp recall matches the real conversation history across refreshes
+   * and devices. Used by the input history navigation in handleKeyDown.
+   */
+  userMessageHistory?: string[];
 }
 
 export interface ChatInputHandle {
@@ -291,6 +298,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   currentSessionName,
   onRenameCompleted,
   onSessionNameChange,
+  userMessageHistory,
 }: Props, ref) {
   const { t, locale } = useI18n();
   const [value, setValue] = useState("");
@@ -305,6 +313,15 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const [toolDropdownOpen, setToolDropdownOpen] = useState(false);
   const [thinkingDropdownOpen, setThinkingDropdownOpen] = useState(false);
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
+
+  // Input history index: `historyIndex` is null when the user is NOT
+  // browsing history (regular draft editing). `draftBeforeHistory` is the
+  // value the textarea had at the moment the user first pressed ArrowUp;
+  // ArrowDown past the newest entry restores it. The actual list of
+  // historical messages comes from the `userMessageHistory` prop (sourced
+  // from the backend .jsonl via useAgentSession).
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const [draftBeforeHistory, setDraftBeforeHistory] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -358,6 +375,16 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     setSlashActiveIndex(0);
     setSlashPage(0);
   }, [slashResourceKey]);
+
+  // Reset the history index when the session changes so the user starts in
+  // "regular draft" mode every time they switch sessions — otherwise
+  // pressing ArrowUp in a new session could still be inside the previous
+  // session's index. The `userMessageHistory` prop is already derived from
+  // the current session, so no manual reload is needed.
+  useEffect(() => {
+    setHistoryIndex(null);
+    setDraftBeforeHistory("");
+  }, [sessionId]);
 
   useEffect(() => {
     setSlashActiveIndex(0);
@@ -463,6 +490,26 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     });
   }, []);
 
+  // Fill the input box with a recalled history entry: replace `value`, drop
+  // any attached images (Q8: prevent accidental re-send of last turn's
+  // images), and place the caret at the end (Q7).
+  const fillFromHistory = useCallback((text: string) => {
+    setValue(text);
+    setCursorPosition(text.length);
+    setAttachedImages((prev) => {
+      prev.forEach((img) => URL.revokeObjectURL(img.previewUrl));
+      return [];
+    });
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(text.length, text.length);
+      ta.style.height = "auto";
+      ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+    });
+  }, []);
+
   const buildMessage = useCallback((rawMessage: string) => {
     const msg = rawMessage.trim();
     if (selectedSlashResource) {
@@ -482,6 +529,12 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
     if (!msg && !attachedImages.length) return;
     if (isStreaming) return;
     onSend(msg, attachedImages.length ? attachedImages : undefined);
+    // No need to record locally — `useAgentSession.handleSend` already
+    // pushes the message into its `messages` state, which feeds
+    // `userMessageHistory` on the next render. Reset the local index so
+    // the next ArrowUp starts a fresh recall.
+    setHistoryIndex(null);
+    setDraftBeforeHistory("");
     setValue("");
     setCursorPosition(0);
     setSelectedSlashResource(null);
@@ -678,6 +731,52 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         setSlashMenuOpen(false);
         return;
       }
+      // Input history navigation (fish-style: prefix-match on buffer, with
+      // a friendly fallback to "show the newest entry" when the buffer does
+      // not match any history prefix). Skipped entirely when IME composition
+      // is active so the user can still use the arrow keys to pick a CJK
+      // candidate. If userMessageHistory is empty, we fall through to the
+      // default textarea behaviour (caret moves up/down).
+      const history = userMessageHistory ?? [];
+      if (!e.nativeEvent.isComposing && history.length > 0) {
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          if (historyIndex === null) {
+            const buffer = value;
+            const needle = buffer.toLowerCase();
+            const subset = buffer
+              ? history.filter((h) => h.toLowerCase().startsWith(needle))
+              : history;
+            const pool = subset.length > 0 ? subset : history;
+            setDraftBeforeHistory(value);
+            setHistoryIndex(0);
+            fillFromHistory(pool[pool.length - 1]);
+          } else {
+            const next = Math.min(historyIndex + 1, history.length - 1);
+            if (next !== historyIndex) {
+              setHistoryIndex(next);
+              fillFromHistory(history[history.length - 1 - next]);
+            }
+          }
+          return;
+        }
+        if (e.key === "ArrowDown") {
+          if (historyIndex === null) return; // not browsing history → caret moves
+          e.preventDefault();
+          const next = historyIndex - 1;
+          if (next < 0) {
+            // Past the newest entry → restore the pre-history draft (E1).
+            const draft = draftBeforeHistory;
+            setHistoryIndex(null);
+            setDraftBeforeHistory("");
+            fillFromHistory(draft);
+          } else {
+            setHistoryIndex(next);
+            fillFromHistory(history[history.length - 1 - next]);
+          }
+          return;
+        }
+      }
       if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
         // /new as a bare message triggers the action directly
@@ -698,7 +797,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         }
       }
     },
-    [isStreaming, onSteer, onFollowUp, sendQueued, handleSend, slashMenuOpen, slashQuery, visibleSlashResources, slashActiveIndex, slashPageCount, selectSlashResource, selectedSlashResource, value, onSlashAction]
+    [isStreaming, onSteer, onFollowUp, sendQueued, handleSend, slashMenuOpen, slashQuery, visibleSlashResources, slashActiveIndex, slashPageCount, selectSlashResource, selectedSlashResource, value, onSlashAction, userMessageHistory, historyIndex, draftBeforeHistory, fillFromHistory]
   );
 
   const handleInput = useCallback(() => {
@@ -955,6 +1054,12 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               setValue(e.target.value);
               setCursorPosition(e.target.selectionStart ?? e.target.value.length);
               setSlashMenuOpen(Boolean(getSlashQuery(e.target.value, e.target.selectionStart ?? e.target.value.length)));
+              // E2: any user edit exits the history index so the next
+              // ArrowUp is treated as a fresh recall, not a continuation.
+              if (historyIndex !== null) {
+                setHistoryIndex(null);
+                setDraftBeforeHistory("");
+              }
             }}
             onKeyDown={handleKeyDown}
             onInput={handleInput}

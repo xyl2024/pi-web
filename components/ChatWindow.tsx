@@ -498,6 +498,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
     handleCompact, handleSteer, handleFollowUp, handleAbortCompaction,
     handleToolPresetChange, handleThinkingLevelChange,
+    userMessageHistory,
     activeLeafId, currentSessionId,
   } = useAgentSession({
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
@@ -959,6 +960,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       currentSessionName={session?.name ?? null}
       onRenameCompleted={onRenameCompleted ?? (() => {})}
       onSessionNameChange={onSessionNameChange}
+      userMessageHistory={userMessageHistory}
     />
   );
 

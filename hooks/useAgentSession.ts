@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, useReducer } from "react";
-import type { AgentMessage, SessionInfo, SessionTreeNode, AgentsFile } from "@/lib/types";
+import { useState, useCallback, useRef, useEffect, useReducer, useMemo } from "react";
+import type { AgentMessage, SessionInfo, SessionTreeNode, AgentsFile, TextContent, UserMessage } from "@/lib/types";
 import { normalizeToolCalls } from "@/lib/normalize";
 import { sendAgentCommand } from "@/lib/agent-client";
 import type { ToolCallStatsDispatch } from "./ToolCallStatsContext";
@@ -161,6 +161,33 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const currentModel = currentModelOverride ?? data?.context.model ?? pendingModel ?? null;
   const displayModel = isNew ? newSessionModel : currentModel;
+
+  // Input history for the chat input box. Backed by `messages` (which is
+  // already populated from the backend .jsonl via loadSession, then kept
+  // up to date by setMessages in handleSend/handleSteer/handleFollowUp +
+  // SSE events), so it always reflects the actual conversation — no
+  // localStorage, no race conditions around the isNew path's async
+  // sessionId. Steer/follow-up entries get their display prefix stripped
+  // so the recalled text is plain and Enter sends it as a normal message.
+  const userMessageHistory = useMemo(() => {
+    const out: string[] = [];
+    for (const m of messages) {
+      if (m.role !== "user") continue;
+      const userMsg = m as UserMessage;
+      let text: string;
+      if (typeof userMsg.content === "string") {
+        text = userMsg.content;
+      } else {
+        text = userMsg.content
+          .filter((b): b is TextContent => b.type === "text")
+          .map((b) => b.text)
+          .join("");
+      }
+      text = text.replace(/^\[(?:steer|followup)\]\s+/, "");
+      if (text.trim()) out.push(text);
+    }
+    return out.length > 100 ? out.slice(-100) : out;
+  }, [messages]);
   const currentSessionId: string | null = data?.sessionId ?? sessionIdRef.current ?? null;
 
   const sessionStats = (() => {
@@ -801,6 +828,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     isNew,
     agentsFiles,
     currentSessionId,
+    userMessageHistory,
     // Refs
     sessionIdRef, eventSourceRef, messagesEndRef, scrollContainerRef,
     lastUserMsgRef, pendingScrollToUserRef, initialScrollDoneRef,
