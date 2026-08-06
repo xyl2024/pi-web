@@ -36,7 +36,8 @@ export type RightBarButtonId =
   | "rss"
   | "favorites"
   | "tokens"
-  | "toolCalls";
+  | "toolCalls"
+  | "gitDiff";
 
 export const RIGHT_BAR_BUTTON_IDS: readonly RightBarButtonId[] = [
   "todos",
@@ -47,6 +48,7 @@ export const RIGHT_BAR_BUTTON_IDS: readonly RightBarButtonId[] = [
   "favorites",
   "tokens",
   "toolCalls",
+  "gitDiff",
 ] as const;
 
 export type RightSideBarConfig = Record<RightBarButtonId, boolean>;
@@ -102,6 +104,7 @@ const DEFAULT_RIGHT_SIDE_BAR: RightSideBarConfig = {
   favorites: true,
   tokens: true,
   toolCalls: true,
+  gitDiff: true,
 };
 
 const DEFAULT_CONFIG: PiWebConfig = {

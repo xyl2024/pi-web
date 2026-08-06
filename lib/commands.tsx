@@ -71,6 +71,7 @@ const BookIcon = () => I(<><path d="M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.
 const ClockIcon = () => I(<><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></>);
 const LangIcon = () => I(<><path d="M5 8h14" /><path d="M8 5h7" /><path d="M11 12c0 4-3 7-6 7" /><path d="M11 12c0 4 3 7 6 7" /><path d="M9 19l3-7 3 7" /></>);
 const TokensIcon = () => I(<><circle cx="12" cy="12" r="9" /><line x1="8.5" y1="16" x2="9.5" y2="13" /><line x1="12" y1="16" x2="13" y2="11" /><line x1="15.5" y1="16" x2="16.5" y2="9" /><line x1="7" y1="17" x2="17" y2="17" /></>);
+const GitDiffIcon = () => I(<><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="6" r="3" /><path d="M6 9v6" /><path d="M18 9a9 9 0 0 1-9 9" /></>);
 
 // Theme icons picked from PRESET_IS_DARK to give the swatch a hint.
 const ThemeIcon = ({ preset }: { preset: ThemePreset }) => {
@@ -142,6 +143,7 @@ export interface CommandContext {
   openToolCallsTab: () => void;
   openJsonTab: () => void;
   openTokensTab: () => void;
+  openGitDiffTab: () => void;
 
   // View toggles
   toggleSidebar: () => void;
@@ -389,6 +391,14 @@ export function buildCommands(ctx: CommandContext, opts: BuildOptions): Command[
     keywords: ["tokens", "token", "usage", "audit", "cost", "用量", "审计", "Token"],
     icon: <TokensIcon />,
     run: () => ctx.openTokensTab(),
+  });
+  cmds.push({
+    id: "panel.gitdiff",
+    title: t("Open git diff"),
+    group: "Panel",
+    keywords: ["git", "diff", "changes", "status", "变更", "改动", "差异"],
+    icon: <GitDiffIcon />,
+    run: () => ctx.openGitDiffTab(),
   });
 
   // ── Modal (5) ──

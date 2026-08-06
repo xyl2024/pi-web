@@ -705,6 +705,18 @@ export const ZH_TRANSLATIONS = {
   "Target language": "目标语言",
   "Prompt preview": "提示词预览",
   "Reset to default": "恢复默认",
+  // Git diff panel (right-panel tab)
+  "Git Diff": "Git 变更",
+  "Open git diff": "打开 Git 变更",
+  "Staged": "已暂存",
+  "Unstaged": "未暂存",
+  "View": "查看",
+  "Not a git repository": "当前目录不是 Git 仓库",
+  "Select a file to view its diff": "选择一个文件查看变更",
+  "No changes for this file": "该文件在此侧没有变更",
+  "Diff truncated": "变更内容过大，已截断",
+  "Open a session first": "请先打开一个会话",
+  "{n} files changed": "共 {n} 个文件变更",
   // File viewer inline search
   "Search file": "在文件中搜索",
   "Search file...": "搜索文件内容…",

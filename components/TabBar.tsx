@@ -14,7 +14,8 @@ export type Tab =
   | { kind: "json"; id: string; label: string }
   | { kind: "canvas"; id: string; label: string }
   | { kind: "rss"; id: string; label: string }
-  | { kind: "tokens"; id: string; label: string };
+  | { kind: "tokens"; id: string; label: string }
+  | { kind: "gitDiff"; id: string; label: string };
 
 interface Props {
   tabs: Tab[];

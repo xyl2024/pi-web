@@ -15,6 +15,7 @@ import { JsonPanel } from "./JsonPanel";
 import { CanvasPanel } from "./CanvasPanel";
 import { RssPanel } from "./RssPanel";
 import { TokensPanel } from "./TokensPanel";
+import { GitDiffPanel } from "./GitDiffPanel";
 import { useToolCallStatsView, useToolCallStatsScroll } from "@/hooks/toolCallStatsStore";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
@@ -42,6 +43,7 @@ import {
   CANVAS_TAB_ID,
   RSS_TAB_ID,
   TOKENS_TAB_ID,
+  GIT_DIFF_TAB_ID,
   RIGHT_BAR_ID_FOR_TAB_KIND,
 } from "@/lib/types";
 import type { RightSideBarConfig, RightBarButtonId } from "@/lib/config";
@@ -583,6 +585,16 @@ export function AppShell() {
     setRightPanelState("normal");
   }, [t]);
 
+  // Open the git diff panel — same pattern as translate / rss / tokens.
+  const handleOpenGitDiffTab = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((tab) => tab.kind === "gitDiff")) return prev;
+      return [{ kind: "gitDiff", id: GIT_DIFF_TAB_ID, label: t("Git Diff") }, ...prev];
+    });
+    setActiveFileTabId(GIT_DIFF_TAB_ID);
+    setRightPanelState("normal");
+  }, [t]);
+
   // Right-bar tab buttons toggle the panel only when their own tab is both
   // active and visible. Opening through other entry points keeps its existing
   // "open this tab" semantics.
@@ -726,6 +738,7 @@ export function AppShell() {
     openToolCallsTab: handleOpenToolCallsTab,
     openJsonTab: handleOpenJsonTab,
     openTokensTab: handleOpenTokensTab,
+    openGitDiffTab: handleOpenGitDiffTab,
     toggleSidebar: () => setSidebarOpen((v) => !v),
     toggleRightPanel: () => setRightPanelState((v) => v === "closed" ? "normal" : "closed"),
     toggleFocus,
@@ -736,7 +749,7 @@ export function AppShell() {
     theme.setPreset, setLocale, handleSlashNew,
     handleOpenTodoTab, handleOpenFavoritesTab, handleOpenCanvasTab,
     handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenJsonTab,
-    handleOpenTokensTab,
+    handleOpenTokensTab, handleOpenGitDiffTab,
     toggleFocus, agentControls,
     selectedSession, newSessionCwd, activeCwd,
   ]);
@@ -1164,6 +1177,8 @@ export function AppShell() {
             <RssPanel />
           ) : activeFileTab?.kind === "tokens" ? (
             <TokensPanel onSelectSession={handleSelectSession} />
+          ) : activeFileTab?.kind === "gitDiff" ? (
+            <GitDiffPanel cwd={activeCwd ?? selectedSession?.cwd ?? newSessionCwd ?? null} />
           ) : (
             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
               {t("No file open")}
@@ -1313,6 +1328,34 @@ export function AppShell() {
               <path d="M2 4a10 10 0 0 1 10 10" />
 </svg>
         </button>
+        </Tooltip>
+        )}
+        {/* Open git diff panel */}
+        {isButtonVisible(rightSideBarConfig, "gitDiff") && (
+        <Tooltip content={(activeCwd ?? selectedSession?.cwd ?? newSessionCwd) ? t("Open git diff") : t("Open a session first")} side="left">
+          <button
+            onClick={() => handleToggleRightPanelTab(GIT_DIFF_TAB_ID, handleOpenGitDiffTab)}
+            disabled={!(activeCwd ?? selectedSession?.cwd ?? newSessionCwd)}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, padding: 0,
+              background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
+              color: activeRightPanelKind === "gitDiff" ? "var(--accent)" : "var(--text-muted)",
+              cursor: (activeCwd ?? selectedSession?.cwd ?? newSessionCwd) ? "pointer" : "not-allowed",
+              opacity: (activeCwd ?? selectedSession?.cwd ?? newSessionCwd) ? 1 : 0.4,
+              transition: "color 0.12s",
+            }}
+            onMouseEnter={(e) => { if (activeCwd ?? selectedSession?.cwd ?? newSessionCwd) e.currentTarget.style.color = "var(--accent)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = activeRightPanelKind === "gitDiff" ? "var(--accent)" : "var(--text-muted)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="6" cy="6" r="3" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="18" cy="6" r="3" />
+              <path d="M6 9v6" />
+              <path d="M18 9a9 9 0 0 1-9 9" />
+            </svg>
+          </button>
         </Tooltip>
         )}
         {/* Expand/collapse — only when panel is open and has tabs */}

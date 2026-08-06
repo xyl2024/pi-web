@@ -241,13 +241,14 @@ export const JSON_TAB_ID = "json:global";
 export const CANVAS_TAB_ID = "canvas:global";
 export const RSS_TAB_ID = "rss:global";
 export const TOKENS_TAB_ID = "tokens:global";
+export const GIT_DIFF_TAB_ID = "gitDiff:global";
 
 // Map a Tab.kind back to the corresponding configurable right-bar button id.
 // Used by AppShell's auto-close effect: when a panel whose button was just
 // hidden is currently active, close the panel. "file" is intentionally
 // absent — the file-panel toggle is always-visible (Q1).
 import type { RightBarButtonId } from "./config";
-export const RIGHT_BAR_ID_FOR_TAB_KIND: Partial<Record<"file" | "todo" | "canvas" | "translate" | "toolCalls" | "json" | "rss" | "favorites" | "tokens", RightBarButtonId>> = {
+export const RIGHT_BAR_ID_FOR_TAB_KIND: Partial<Record<"file" | "todo" | "canvas" | "translate" | "toolCalls" | "json" | "rss" | "favorites" | "tokens" | "gitDiff", RightBarButtonId>> = {
   todo: "todos",
   canvas: "canvas",
   translate: "translate",
@@ -256,4 +257,5 @@ export const RIGHT_BAR_ID_FOR_TAB_KIND: Partial<Record<"file" | "todo" | "canvas
   favorites: "favorites",
   tokens: "tokens",
   toolCalls: "toolCalls",
+  gitDiff: "gitDiff",
 };
