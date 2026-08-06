@@ -82,7 +82,7 @@ A single careless command can wipe data that has no backup, is not in git, and c
 
 - The user todo list is stored in `~/.pi-web/todos.db` (SQLite via `better-sqlite3`). The legacy `todos.json` was renamed to `todos.json.migrated.<ts>` on first DB read — it is **not** deleted and can be inspected with `cat`. To roll back: run `npx tsx scripts/todos-restore.ts` (writes a fresh `todos.json` from the DB; never overwrites an existing one).
 - The `cat > ~/.pi-web/todos.db` (or `todos.json`) idiom is the kind of thing that looks safe in a one-liner test script but truncates the file immediately. If the heredoc body is wrong, the file is `0 bytes` and unrecoverable.
-- Other irreplaceable user data in this project: `~/.pi-web/todo_images/`, `~/.pi-web/workspace/`, `~/.pi-web/payloads/`, `~/.pi-web/config.yaml`, `~/.pi-web/scheduler.db`, `~/.pi-web/favorites.json`, `~/.pi-web/agent-todo/`, `~/.pi/agent/sessions/`, `~/.pi/agent/models.json`, `~/.pi-web/pinned.json`, `~/.pi-web/todo-tools.json`.
+- Other irreplaceable user data in this project: `~/.pi-web/todo_images/`, `~/.pi-web/workspace/`, `~/.pi-web/config.yaml`, `~/.pi-web/scheduler.db`, `~/.pi-web/favorites.json`, `~/.pi-web/agent-todo/`, `~/.pi/agent/sessions/`, `~/.pi/agent/models.json`, `~/.pi-web/pinned.json`, `~/.pi-web/todo-tools.json`.
 - The agent todo state lives in `~/.pi-web/agent-todo/<sessionId>.jsonl` (append-only snapshots). The current state is the last parsed line; truncating the file wipes it instantly with no DB backup.
 
 ### If a write goes wrong
@@ -228,7 +228,6 @@ app/api/
   agent/new/route.ts                POST { cwd, type, message, toolNames?, provider?, modelId?, thinkingLevel? }
   agent/[id]/route.ts               GET { running, state } | POST any command
   agent/[id]/events/route.ts        GET SSE stream
-  agent/[id]/payloads/route.ts      GET captured provider request/response payloads
   agent/[id]/agent-todo/route.ts    GET current task state + historyCount for one session
   files/[...path]/route.ts          GET/PUT/POST/DELETE/PATCH — list/read/watch + write/create/rename/delete
   models/route.ts                   GET { models, modelList, defaultModel, thinkingLevels, thinkingLevelMaps }
@@ -279,7 +278,6 @@ lib/
   todo-image-upload.ts      server-side image upload helper
   todo-color-presets.ts     shared palette for tag chips + Tiptap text color
   description-sanitize.ts   single DOMPurify config shared by every code path that touches todo descriptions
-  payload-capture.ts        inline pi-extension hooks → ~/.pi-web/payloads/<sessionId>.jsonl
   json-array-store.ts       read/write a JSON file containing a string array
   file-paths.ts             path normalization + /api/files URL encoding
   file-name.ts              validateFileName() for create/rename routes
@@ -320,7 +318,6 @@ components/
   SkillsConfig.tsx          modal for installing / browsing / toggling skills
   PromptsConfig.tsx         modal for managing slash-command prompts
   SettingsModal.tsx         modal for ~/.pi-web/config.yaml (replacements, dangerous patterns)
-  PayloadChip.tsx + PayloadPopover.tsx  inline payload badges inside MessageView
   ProviderIcon.tsx          @lobehub/icons wrapper (one Mono or Color per provider, used in chat header + models modal)
   FileExplorer.tsx          file tree inside sidebar
   FileSearchBar.tsx         VS Code-style inline search bar (FileViewer)
