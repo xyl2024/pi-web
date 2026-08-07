@@ -670,16 +670,15 @@ function TextBlock({ block, keywords, isSearchMatch, isStreaming }: { block: Tex
 }
 
 function ThinkingBlock({ block, keywords, isSearchMatch, isStreaming }: { block: ThinkingContent; keywords?: string[]; isSearchMatch?: boolean; isStreaming?: boolean }) {
-  // A thinking block is "still being appended" only when it is the last block
-  // of the assistant message AND the message is currently streaming. Every
-  // other thinking block is considered finished and is auto-collapsed. A user
-  // click is remembered (userExpandedRef) so the auto-collapse never overrides
-  // a manual expand.
-  const [expanded, setExpanded] = useState(!!isStreaming || !!isSearchMatch);
+  // Thinking blocks start collapsed. The only exception is when this block
+  // contains a search match — in that case we auto-expand so the highlighted
+  // keyword is visible. A user click is remembered (userExpandedRef) so the
+  // search-clear path never overrides a manual expand.
+  const [expanded, setExpanded] = useState(!!isSearchMatch);
   const userExpandedRef = useRef(false);
   useEffect(() => {
-    if (!isStreaming && !userExpandedRef.current && !isSearchMatch) setExpanded(false);
-  }, [isStreaming, isSearchMatch]);
+    if (!userExpandedRef.current && !isSearchMatch) setExpanded(false);
+  }, [isSearchMatch]);
   const toggle = () => {
     setExpanded((v) => {
       const next = !v;
