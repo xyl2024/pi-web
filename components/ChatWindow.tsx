@@ -15,7 +15,6 @@ import {
   splitFinalAssistantBlocks,
   collectShowFilePaths,
 } from "@/lib/message-display";
-import { AGENT_TODO_TOOL_NAME } from "@/lib/agent-todo-tool-types";
 import { MessageView } from "./MessageView";
 import { ShowFileRenderer } from "./ShowFileRenderer";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
@@ -818,30 +817,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     setReplayOpen(true);
   }, [messages.length]);
 
-  // Map agent_todo task id → toolCallId of the most recent "mark completed"
-  // call. Used by AgentTodoPanel to scroll-to on click. Rebuilt from messages
-  // (which the agent-todo audit log is a strict subset of), so no extra
-  // server-side bookkeeping is needed — see approach discussion in chat.
-  const taskIdToCompletedToolCallId = useMemo(() => {
-    const map: Record<number, string> = {};
-    for (const msg of messages) {
-      if (msg.role !== "assistant") continue;
-      const blocks = (msg as AssistantMessage).content ?? [];
-      for (const block of blocks) {
-        if (block.type !== "toolCall") continue;
-        const tc = block as ToolCallContent;
-        if (tc.toolName !== AGENT_TODO_TOOL_NAME) continue;
-        const input = tc.input as Record<string, unknown> | undefined;
-        if (!input || input.action !== "update" || input.status !== "completed") continue;
-        const id = input.id;
-        if (typeof id !== "number") continue;
-        // Last wins — handles a re-completed task without losing the latest.
-        map[id] = tc.toolCallId;
-      }
-    }
-    return map;
-  }, [messages]);
-
   // Map every visible tool call's toolCallId to its visible message index.
   // Used by handleScrollToToolCall; rebuilt when messages change so newly
   // streamed tool calls become jumpable without delay.
@@ -1113,8 +1088,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
             a flex item) so it does not squeeze the centered message column. */}
         <AgentTodoPanel
           sessionId={session?.id ?? null}
-          taskToolCallIds={taskIdToCompletedToolCallId}
-          onJumpToTask={handleScrollToToolCall}
         />
         <div ref={scrollContainerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto px-4 py-4">
           <div className="mx-auto max-w-[820px]">

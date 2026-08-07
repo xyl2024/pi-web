@@ -14,124 +14,77 @@
  *   below the topbar) rather than floating in the vertical center.
  * - Hidden when there's nothing to render (no empty placeholder) and below
  *   the 1100px responsive threshold (no room for the panel next to messages).
+ *
+ * Layout (post-UI-revamp):
+ * - Flat single column of tasks sorted by id ascending (creation order).
+ *   No "In progress / Pending / Completed" sections — visual state is the
+ *   only status cue: in-progress gets `var(--accent)` text color, completed
+ *   gets line-through + `var(--text-dim)`, pending is the default.
+ * - The whole header is a `<button>` so the entire row is clickable to
+ *   collapse/expand. The header label switches between "Agent Plan" +
+ *   `n/m` counter and the in-progress task subject (when collapsed while
+ *   an in-progress task exists).
+ * - Panel height is capped at 30% of the chat container (`maxHeight: 30%`)
+ *   so it never visually competes with the message column.
+ * - Read-only: no click-to-jump and no tooltip. Tasks are a static
+ *   at-a-glance status display; the per-task "<button>" affordance was
+ *   removed alongside the tooltip to keep the panel unambiguously passive.
  */
 
 import { memo, useCallback, useMemo, useState } from "react";
 import type { AgentTask } from "@/lib/agent-todo-tool-types";
 import { useAgentTodo } from "@/hooks/useAgentTodo";
 import { useI18n } from "@/hooks/useI18n";
-import { useToast } from "@/components/Toast";
-import { Tooltip } from "@/components/Tooltip";
 
 const PANEL_BREAKPOINT = 1100;
 
 interface TaskRowProps {
   task: AgentTask;
-  /**
-   * Map of taskId → toolCallId for tasks whose "mark completed" call is
-   * visible in the current chat. Clicking a completed row jumps to the
-   * matching tool call when present; otherwise shows a toast.
-   */
-  taskToolCallIds: Record<number, string>;
-  /** Scroll-to handler — invoked with a toolCallId. */
-  onJumpToTask: (toolCallId: string) => void;
-  /** Toast for the "no scroll target" fallback messages. */
-  onNotify: (message: string) => void;
-  /** i18n key prefix — "Jump to completion" appended for completed rows. */
-  tTitleSuffix: string;
-  /** i18n message shown when the row has no scroll target. */
-  tNotInBranch: string;
-  /** i18n message shown when the task is not yet completed. */
-  tNotCompleted: string;
+  /** Whether this is the last task in the list — suppresses trailing divider. */
+  isLast: boolean;
 }
 
-const TaskRow = memo(function TaskRow({
-  task,
-  taskToolCallIds,
-  onJumpToTask,
-  onNotify,
-  tTitleSuffix,
-  tNotInBranch,
-  tNotCompleted,
-}: TaskRowProps) {
+const TaskRow = memo(function TaskRow({ task, isLast }: TaskRowProps) {
   const isInProgress = task.status === "in_progress";
   const isCompleted = task.status === "completed";
-  const toolCallId = isCompleted ? taskToolCallIds[task.id] : undefined;
-  const jumpable = !!toolCallId;
-
-  const handleClick = useCallback(() => {
-    if (jumpable && toolCallId) {
-      onJumpToTask(toolCallId);
-      return;
-    }
-    if (isCompleted) {
-      // Completed, but the matching tool call isn't visible in the current
-      // chat (e.g. user navigated to a different branch). Surface the reason
-      // instead of silently doing nothing.
-      onNotify(tNotInBranch);
-      return;
-    }
-    onNotify(tNotCompleted);
-  }, [jumpable, toolCallId, isCompleted, onJumpToTask, onNotify, tNotInBranch, tNotCompleted]);
-
-  const tooltipContent = jumpable ? `${tTitleSuffix} · #${task.id}` : `#${task.id}`;
+  const subjectColor = isCompleted
+    ? "var(--text-dim)"
+    : isInProgress
+      ? "var(--accent)"
+      : "var(--text)";
 
   return (
-    <Tooltip content={tooltipContent}>
-      <button
-        type="button"
-        onClick={handleClick}
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        width: "100%",
+        padding: "6px 8px",
+        border: "none",
+        borderBottom: isLast ? "none" : "1px solid var(--border)",
+        background: "transparent",
+        color: "var(--text)",
+      }}
+    >
+      <span
         style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 2,
-          width: "100%",
-          padding: "6px 8px",
-          borderRadius: 4,
-          border: "none",
-          background: "transparent",
-          textAlign: "left",
-          cursor: "pointer",
-          color: "var(--text)",
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-hover)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+          fontSize: 13,
+          lineHeight: 1.4,
+          textDecoration: isCompleted ? "line-through" : "none",
+          color: subjectColor,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
         }}
       >
-      <span style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-        <span
-          style={{
-            color: "var(--text-muted)",
-            fontFamily: "var(--font-mono)",
-            fontSize: 11,
-            flexShrink: 0,
-          }}
-        >
-          #{task.id}
-        </span>
-        <span
-          style={{
-            fontSize: 13,
-            lineHeight: 1.4,
-            textDecoration: isCompleted ? "line-through" : "none",
-            color: isCompleted ? "var(--text-dim)" : "var(--text)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-          }}
-        >
-          {task.subject}
-        </span>
+        {task.subject}
       </span>
       {isInProgress && task.activeForm ? (
         <span
           style={{
-            marginLeft: 22,
             fontSize: 11,
             color: "var(--text-muted)",
             fontStyle: "italic",
@@ -143,109 +96,36 @@ const TaskRow = memo(function TaskRow({
           {task.activeForm}
         </span>
       ) : null}
-      </button>
-    </Tooltip>
-  );
-});
-
-interface GroupProps {
-  label: string;
-  tasks: AgentTask[];
-  taskToolCallIds: Record<number, string>;
-  onJumpToTask: (toolCallId: string) => void;
-  onNotify: (message: string) => void;
-  tTitleSuffix: string;
-  tNotInBranch: string;
-  tNotCompleted: string;
-}
-
-const Group = memo(function Group({
-  label,
-  tasks,
-  taskToolCallIds,
-  onJumpToTask,
-  onNotify,
-  tTitleSuffix,
-  tNotInBranch,
-  tNotCompleted,
-}: GroupProps) {
-  if (tasks.length === 0) return null;
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          color: "var(--text-dim)",
-          padding: "4px 8px",
-        }}
-      >
-        {label} · {tasks.length}
-      </div>
-      <div>
-        {tasks.map((t) => (
-          <TaskRow
-            key={t.id}
-            task={t}
-            taskToolCallIds={taskToolCallIds}
-            onJumpToTask={onJumpToTask}
-            onNotify={onNotify}
-            tTitleSuffix={tTitleSuffix}
-            tNotInBranch={tNotInBranch}
-            tNotCompleted={tNotCompleted}
-          />
-        ))}
-      </div>
     </div>
   );
 });
 
 export const AgentTodoPanel = memo(function AgentTodoPanel({
   sessionId,
-  taskToolCallIds,
-  onJumpToTask,
 }: {
   sessionId: string | null;
-  /** taskId → toolCallId for completed tasks; missing entries are not jumpable. */
-  taskToolCallIds?: Record<number, string>;
-  /** Scroll handler invoked when a completed task is clicked. */
-  onJumpToTask?: (toolCallId: string) => void;
 }) {
   const { tasks, empty, counts, enabled } = useAgentTodo(sessionId);
   const { t } = useI18n();
-  const toast = useToast();
   const [collapsed, setCollapsed] = useState(false);
-
-  // Bound versions of the new props — keeps Group / TaskRow simple and lets
-  // us pass undefined-safe defaults without sprinkling ?-chains at every call.
-  const emptyTaskToolCallIds: Record<number, string> = {};
-  const boundTaskToolCallIds = taskToolCallIds ?? emptyTaskToolCallIds;
-  const boundOnJumpToTask = useCallback(
-    (toolCallId: string) => onJumpToTask?.(toolCallId),
-    [onJumpToTask],
-  );
-  const handleNotify = useCallback(
-    (message: string) => {
-      toast.show({ kind: "info", message });
-    },
-    [toast],
-  );
-  const tTitleSuffix = t("Jump to completion");
-  const tNotInBranch = t("Completion not in current branch");
-  const tNotCompleted = t("Not completed yet");
 
   const handleToggle = useCallback(() => {
     setCollapsed((v) => !v);
   }, []);
 
-  const groups = useMemo(() => {
-    const inProgress = tasks.filter((t) => t.status === "in_progress");
-    const pending = tasks.filter((t) => t.status === "pending");
-    const completed = tasks.filter((t) => t.status === "completed");
-    return { inProgress, pending, completed };
-  }, [tasks]);
+  // Flat id-ascending list — visual state is the only status cue.
+  const sortedTasks = useMemo(
+    () => [...tasks].sort((a, b) => a.id - b.id),
+    [tasks],
+  );
+  const firstInProgress = sortedTasks.find((t) => t.status === "in_progress");
+
+  // Header label logic:
+  // - Collapsed + ≥1 in-progress task → show the in-progress subject as the
+  //   header (replaces both title and counter for the most informative summary).
+  // - Otherwise → title + counter.
+  const showCollapsedSubject = collapsed && !!firstInProgress;
+  const headerLabel = showCollapsedSubject ? firstInProgress!.subject : t("Agent Plan");
 
   if (!enabled || empty) return null;
 
@@ -266,16 +146,21 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
           // centered message column. Top-aligned with a small gap from the
           // chat area's upper edge (not flush with the topbar).
           //
-          // Background is ~12% transparent + backdrop blur: when the panel
+          // Background is ~50% transparent + backdrop blur: when the panel
           // overlaps the message column on narrower viewports, the text
           // behind shows through softly instead of being fully occluded.
           // The panel's own text/colors stay fully opaque — only the
           // backdrop fades.
+          //
+          // maxHeight: 30% — caps the panel at 30% of the chat container's
+          // height so it never visually competes with the message column.
+          // The chat container is `flex flex-1 overflow-hidden`, so its
+          // height is well-defined and percentage resolution works.
           position: "absolute",
           left: 16,
           top: 16,
           width: 256,
-          maxHeight: "60vh",
+          maxHeight: "30%",
           padding: "10px 6px",
           background: "color-mix(in srgb, var(--bg-panel) 50%, transparent)",
           backdropFilter: "blur(8px)",
@@ -289,98 +174,82 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
           animation: "agent-todo-fade-in 200ms ease",
         }}
       >
-        <div
+        <button
+          type="button"
+          onClick={handleToggle}
+          aria-label={collapsed ? t("Expand") : t("Collapse")}
+          aria-expanded={!collapsed}
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            gap: 8,
+            width: "100%",
             padding: collapsed ? "0 8px" : "0 8px 8px",
+            background: "transparent",
+            border: "none",
             borderBottom: collapsed ? "none" : "1px solid var(--border)",
+            borderRadius: 3,
             marginBottom: collapsed ? 0 : 8,
+            cursor: "pointer",
+            color: "var(--text)",
+            textAlign: "left",
+            fontFamily: "inherit",
           }}
         >
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>
-            {t("Agent Plan")}
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--text)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              minWidth: 0,
+              flex: 1,
+            }}
+          >
+            {headerLabel}
           </span>
-          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-              {counts.completed}/{counts.total}
-              {counts.inProgress > 0 ? ` ◐${counts.inProgress}` : ""}
-              {counts.pending > 0 ? ` ○${counts.pending}` : ""}
-            </span>
-            <button
-              type="button"
-              onClick={handleToggle}
-              aria-label={collapsed ? t("Expand") : t("Collapse")}
-              aria-expanded={!collapsed}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 18,
-                height: 18,
-                padding: 0,
-                background: "transparent",
-                border: "none",
-                borderRadius: 3,
-                cursor: "pointer",
-                color: "var(--text-muted)",
-                transition: "color 120ms, background 120ms",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = "var(--text)";
-                e.currentTarget.style.background = "var(--bg-hover)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = "var(--text-muted)";
-                e.currentTarget.style.background = "transparent";
-              }}
+          <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            {!showCollapsedSubject && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--text-muted)",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                {counts.completed}/{counts.total}
+              </span>
+            )}
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 12 12"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden
+              style={{ color: "var(--text-muted)" }}
             >
               {collapsed ? (
-                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                  <path d="M3 7.5L6 4.5L9 7.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <path d="M3 7.5L6 4.5L9 7.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               ) : (
-                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                  <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               )}
-            </button>
+            </svg>
           </span>
-        </div>
+        </button>
         {!collapsed && (
-          <>
-            <Group
-              label={t("In progress")}
-              tasks={groups.inProgress}
-              taskToolCallIds={boundTaskToolCallIds}
-              onJumpToTask={boundOnJumpToTask}
-              onNotify={handleNotify}
-              tTitleSuffix={tTitleSuffix}
-              tNotInBranch={tNotInBranch}
-              tNotCompleted={tNotCompleted}
-            />
-            <Group
-              label={t("Pending")}
-              tasks={groups.pending}
-              taskToolCallIds={boundTaskToolCallIds}
-              onJumpToTask={boundOnJumpToTask}
-              onNotify={handleNotify}
-              tTitleSuffix={tTitleSuffix}
-              tNotInBranch={tNotInBranch}
-              tNotCompleted={tNotCompleted}
-            />
-            <Group
-              label={t("Completed")}
-              tasks={groups.completed}
-              taskToolCallIds={boundTaskToolCallIds}
-              onJumpToTask={boundOnJumpToTask}
-              onNotify={handleNotify}
-              tTitleSuffix={tTitleSuffix}
-              tNotInBranch={tNotInBranch}
-              tNotCompleted={tNotCompleted}
-            />
-          </>
+          <div>
+            {sortedTasks.map((task, idx) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                isLast={idx === sortedTasks.length - 1}
+              />
+            ))}
+          </div>
         )}
       </aside>
       <style>{`
