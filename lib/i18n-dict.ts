@@ -187,9 +187,6 @@ export const ZH_TRANSLATIONS = {
   "Language": "语言",
   "English": "English",
   "Chinese": "中文",
-  "Japanese": "日语",
-  "French": "法语",
-  "German": "德语",
   "Appearance": "外观",
   "Theme": "主题",
   "Estimated tokens while streaming": "预估 token 数（流式接收中）",
@@ -699,7 +696,6 @@ export const ZH_TRANSLATIONS = {
   "Translated text will appear here": "翻译结果将显示在此处",
   "Translating…": "正在翻译…",
   "Translation failed": "翻译失败",
-  "Target language": "目标语言",
   "Prompt preview": "提示词预览",
   "Reset to default": "恢复默认",
   // Git diff panel (right-panel tab)

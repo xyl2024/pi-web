@@ -7,7 +7,6 @@ import { Tooltip } from "./Tooltip";
 import { ProviderIcon } from "./ProviderIcon";
 import {
   DEFAULT_TARGET_LANGUAGE,
-  SUPPORTED_LANGUAGES,
   TRANSLATE_PROMPTS,
   isLanguageCode,
   type LanguageCode,
@@ -51,14 +50,9 @@ export function TranslatePanel() {
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  const [targetDropdownOpen, setTargetDropdownOpen] = useState(false);
-  const [targetDropdownRect, setTargetDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
-  const targetDropdownRef = useRef<HTMLDivElement | null>(null);
-  const targetPanelRef = useRef<HTMLDivElement | null>(null);
-
   const [target, setTarget] = useState<LanguageCode>(DEFAULT_TARGET_LANGUAGE);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [hoveredAction, setHoveredAction] = useState<"prompts" | "copy" | "clear" | null>(null);
+  const [hoveredAction, setHoveredAction] = useState<"prompts" | "copy" | null>(null);
 
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
@@ -141,25 +135,18 @@ export function TranslatePanel() {
     return () => { cancelled = true; };
   }, [toast, t]);
 
-  // Close model / target dropdowns on outside click.
+  // Close the model dropdown on outside click.
   useEffect(() => {
-    if (!modelDropdownOpen && !targetDropdownOpen) return;
+    if (!modelDropdownOpen) return;
     const handler = (e: MouseEvent) => {
       const tgt = e.target as Node;
-      if (modelDropdownOpen) {
-        if (dropdownRef.current?.contains(tgt)) return;
-        if (panelRef.current?.contains(tgt)) return;
-        setModelDropdownOpen(false);
-      }
-      if (targetDropdownOpen) {
-        if (targetDropdownRef.current?.contains(tgt)) return;
-        if (targetPanelRef.current?.contains(tgt)) return;
-        setTargetDropdownOpen(false);
-      }
+      if (dropdownRef.current?.contains(tgt)) return;
+      if (panelRef.current?.contains(tgt)) return;
+      setModelDropdownOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [modelDropdownOpen, targetDropdownOpen]);
+  }, [modelDropdownOpen]);
 
   // No auto-resize needed: the input wrapper is `flex: 1`, so the textarea
   // fills half the panel vertically (matching the output area 1:1) and
@@ -263,13 +250,6 @@ export function TranslatePanel() {
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
-  }, []);
-
-  const handleClear = useCallback(() => {
-    abortRef.current?.abort();
-    setInput("");
-    setOutput("");
-    setError(null);
   }, []);
 
   const handleCopy = useCallback(async () => {
@@ -400,89 +380,52 @@ export function TranslatePanel() {
             </div>
           )}
         </div>
-        <Tooltip content={t("Target language")}>
-          <div ref={targetDropdownRef} style={{ position: "relative" }}>
-            <button
-              onClick={(e) => {
-                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                setTargetDropdownRect({ top: rect.top, left: rect.left, width: rect.width });
-                setTargetDropdownOpen((v) => !v);
-              }}
-              disabled={isStreaming}
-              style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "0 10px", height: 28,
-                maxWidth: 140,
-                background: targetDropdownOpen ? "var(--bg-hover)" : "var(--bg)",
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                color: "var(--text)",
-                cursor: isStreaming ? "not-allowed" : "pointer",
-                fontSize: 12,
-                opacity: isStreaming ? 0.5 : 1,
-              }}
-            >
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "left" }}>
-                {t(SUPPORTED_LANGUAGES.find((l) => l.code === target)?.i18nKey ?? "")}
-              </span>
-              <svg
-                width="10" height="10" viewBox="0 0 10 10" fill="none"
-                stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
-                style={{ flexShrink: 0, color: "var(--text-dim)" }}
+        <div
+          role="group"
+          aria-label={t("Target language")}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            height: 28,
+            padding: 2,
+            background: "var(--bg)",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            opacity: isStreaming ? 0.5 : 1,
+          }}
+        >
+          {([
+            { code: "en" as const, labelKey: "English" },
+            { code: "zh" as const, labelKey: "Chinese" },
+          ]).map((opt) => {
+            const active = target === opt.code;
+            return (
+              <button
+                key={opt.code}
+                role="radio"
+                aria-checked={active}
+                disabled={isStreaming}
+                onClick={() => { if (!isStreaming) setTarget(opt.code); }}
+                style={{
+                  flex: 1,
+                  minWidth: 56,
+                  height: "100%",
+                  padding: "0 12px",
+                  background: active ? "var(--accent)" : "transparent",
+                  color: active ? "var(--accent-fg, #fff)" : "var(--text-muted)",
+                  border: "none",
+                  borderRadius: 4,
+                  cursor: isStreaming ? "not-allowed" : "pointer",
+                  fontSize: 12,
+                  fontWeight: active ? 600 : 400,
+                  transition: "background-color 0.15s, color 0.15s",
+                }}
               >
-                <polyline points="2 4 5 7 8 4" />
-              </svg>
-            </button>
-            {targetDropdownOpen && targetDropdownRect && (
-              <div ref={targetPanelRef} style={{
-                position: "fixed",
-                top: targetDropdownRect.top + 32,
-                left: targetDropdownRect.left,
-                zIndex: 500,
-                background: "var(--bg)",
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
-                width: "max-content",
-                minWidth: targetDropdownRect.width,
-                maxHeight: Math.max(120, Math.min(window.innerHeight - targetDropdownRect.top - 40, 360)),
-                overflowY: "auto",
-              }}>
-                {SUPPORTED_LANGUAGES.map((opt) => {
-                  const isActive = opt.code === target;
-                  return (
-                    <button
-                      key={opt.code}
-                      onClick={() => {
-                        setTargetDropdownOpen(false);
-                        if (!isActive) {
-                          setTarget(opt.code);
-                          setPreviewOpen(false);
-                        }
-                      }}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        width: "100%", padding: "7px 12px",
-                        background: isActive ? "var(--bg-selected)" : "none",
-                        border: "none",
-                        color: isActive ? "var(--text)" : "var(--text-muted)",
-                        cursor: "pointer", fontSize: 12, textAlign: "left",
-                        fontWeight: isActive ? 600 : 400, whiteSpace: "nowrap",
-                      }}
-                      onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = isActive ? "var(--bg-selected)" : "none"; }}
-                    >
-                      {isActive
-                        ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="1.5 5 4 7.5 8.5 2.5" /></svg>
-                        : <span style={{ width: 10, flexShrink: 0 }} />}
-                      {t(opt.i18nKey)}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </Tooltip>
+                {t(opt.labelKey)}
+              </button>
+            );
+          })}
+        </div>
         <Tooltip content={isStreaming ? t("Stop") : (input.trim() ? t("Translate (⌘+Enter)") : t("Type text to translate…"))}>
           <button
             onClick={handleTranslate}
@@ -549,7 +492,7 @@ export function TranslatePanel() {
             </span>
           </button>
         </Tooltip>
-        <Tooltip content={output ? "" : t("Clear")}>
+        <Tooltip content={t("Copy")}>
           <button
             onClick={handleCopy}
             onMouseEnter={() => setHoveredAction("copy")}
@@ -581,37 +524,6 @@ export function TranslatePanel() {
             </span>
           </button>
         </Tooltip>
-        <button
-          onClick={handleClear}
-          onMouseEnter={() => setHoveredAction("clear")}
-          onMouseLeave={() => setHoveredAction(null)}
-          disabled={!input && !output}
-          aria-label={t("Clear")}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            gap: hoveredAction === "clear" ? 4 : 0,
-            padding: "0 10px", height: 28,
-            background: "var(--bg)", color: "var(--text)",
-            border: "1px solid var(--border)", borderRadius: 6,
-            cursor: (!input && !output) ? "not-allowed" : "pointer", fontSize: 12,
-            opacity: (!input && !output) ? 0.5 : 1,
-            transition: "gap 0.15s",
-          }}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
-            <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-          </svg>
-          <span style={{
-            opacity: hoveredAction === "clear" ? 1 : 0,
-            maxWidth: hoveredAction === "clear" ? 80 : 0,
-            overflow: "hidden", whiteSpace: "nowrap",
-            transition: "opacity 0.15s, max-width 0.15s",
-          }}>
-            {t("Clear")}
-          </span>
-        </button>
       </div>
 
       {/* Prompt preview pane — read-only view of the active target's prompt.
@@ -632,7 +544,7 @@ export function TranslatePanel() {
             <span>
               {t("Prompt preview")}
               {" · "}
-              {t(SUPPORTED_LANGUAGES.find((l) => l.code === target)?.i18nKey ?? "")}
+              {t(target === "zh" ? "Chinese" : "English")}
             </span>
             <Tooltip content={t("Close")}>
               <button
