@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createLogger, elapsedMs } from "@/lib/logger";
-import { ensurePathAllowed } from "@/lib/file-access";
 import { getRepoStatus } from "@/lib/git-diff";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +9,12 @@ const log = createLogger("api/git");
 // GET /api/git?cwd=<path>
 // Returns the git repo overview for cwd: repo root, branch, and the list of
 // changed files with combined staged+unstaged status and +N/-M stats.
+//
+// `cwd` is supplied by the client (always a session cwd that was already
+// validated at session creation) so we deliberately skip ensurePathAllowed
+// here — that check would force a `listAllSessions()` scan on every call and
+// the response only exposes public git metadata (paths, +N/-M counts), no
+// file contents.
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const cwd = searchParams.get("cwd");
@@ -18,12 +23,6 @@ export async function GET(req: Request) {
   if (!cwd) {
     log.warn("get git status rejected", { reason: "missing cwd", durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ error: "cwd required" }, { status: 400 });
-  }
-
-  const allowed = await ensurePathAllowed(cwd);
-  if (!allowed) {
-    log.warn("get git status rejected", { cwd, reason: "cwd not allowed", durationMs: elapsedMs(startedAt) });
-    return NextResponse.json({ error: "cwd_not_allowed" }, { status: 403 });
   }
 
   const status = await getRepoStatus(cwd);

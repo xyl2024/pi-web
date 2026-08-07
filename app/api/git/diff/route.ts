@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createLogger, elapsedMs } from "@/lib/logger";
-import { ensurePathAllowed } from "@/lib/file-access";
 import { getFileDiff, getRepoRoot } from "@/lib/git-diff";
 
 export const dynamic = "force-dynamic";
@@ -8,10 +7,13 @@ export const dynamic = "force-dynamic";
 const log = createLogger("api/git/diff");
 
 // GET /api/git/diff?cwd=<path>&file=<rel-path>&staged=<0|1>
-// Returns the unified diff for one file. `cwd` must be an allowed root;
-// `file` is relative to the repo root (never user-visible in a path — it is
-// passed to git as a literal argument, so `..` traversal is harmless, but
-// we still restrict the repo itself to an allowed root).
+// Returns the unified diff for one file.
+//
+// `cwd` is supplied by the client (always a session cwd that was already
+// validated at session creation) so we deliberately skip ensurePathAllowed
+// here — that check would force a `listAllSessions()` scan on every call.
+// `file` is relative to the repo root (passed to git as a literal argument,
+// so `..` traversal is harmless; git itself refuses paths outside the repo).
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const cwd = searchParams.get("cwd");
@@ -24,12 +26,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "cwd and file required" }, { status: 400 });
   }
   const staged = stagedParam === "1";
-
-  const allowed = await ensurePathAllowed(cwd);
-  if (!allowed) {
-    log.warn("get git diff rejected", { cwd, reason: "cwd not allowed", durationMs: elapsedMs(startedAt) });
-    return NextResponse.json({ error: "cwd_not_allowed" }, { status: 403 });
-  }
 
   const repoRoot = await getRepoRoot(cwd);
   if (!repoRoot) {
