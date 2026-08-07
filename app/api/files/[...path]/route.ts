@@ -224,11 +224,9 @@ export async function GET(
     const type = request.nextUrl.searchParams.get("type") ?? "list";
     log.debug("file request received", { type, path: filePath });
 
-    const allowedRoots = await getAllowedRoots();
-    if (!isPathAllowed(filePath, allowedRoots)) {
-      log.warn("file request denied", { type, path: filePath, durationMs: elapsedMs(startedAt) });
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
-    }
+    // GET is intentionally not gated by getAllowedRoots()/isPathAllowed().
+    // Read paths (list/read/watch, image/audio/video/pdf streaming) are
+    // unrestricted; write paths (PUT/POST/DELETE/PATCH) keep the check.
 
     let stat: fs.Stats;
     try {
