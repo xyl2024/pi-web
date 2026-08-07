@@ -16,6 +16,7 @@ interface Props {
   onInitialRestoreDone?: () => void;
   refreshKey?: number;
   onSessionDeleted?: (sessionId: string) => void;
+  onNewSession?: () => void;
   selectedCwd?: string | null;
   onCwdChange?: (cwd: string | null) => void;
   onOpenFile?: (filePath: string, fileName: string) => void;
@@ -199,7 +200,7 @@ function PiAgentTitle() {
 
 const PAGE_SIZE = 50;
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, favoriteIds = [], onToggleFavorite, onOpenModels, onOpenSkills, onOpenPrompts, onOpenScheduler, onOpenSettings, onOpenInbox, inboxUnread, profileRefreshKey }: Props) {
+export function SessionSidebar({ selectedSessionId, onSelectSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, onNewSession, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, favoriteIds = [], onToggleFavorite, onOpenModels, onOpenSkills, onOpenPrompts, onOpenScheduler, onOpenSettings, onOpenInbox, inboxUnread, profileRefreshKey }: Props) {
   const { t } = useI18n();
   const toast = useToast();
 
@@ -619,6 +620,46 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
             <PiAgentTitle />
           </div>
           <div style={{ display: "flex", gap: 6 }}>
+            {onNewSession && (() => {
+              const cwdForNew = selectedCwdProp ?? selectedCwd;
+              const canNew = !!cwdForNew;
+              return (
+                <Tooltip content={t("New session")}>
+                  <button
+                    onClick={onNewSession}
+                    disabled={!canNew}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: "rgba(37,99,235,0.08)",
+                      border: "1px solid rgba(37,99,235,0.35)",
+                      color: "var(--accent)",
+                      cursor: canNew ? "pointer" : "not-allowed",
+                      width: 32, height: 32,
+                      borderRadius: 7,
+                      padding: 0,
+                      flexShrink: 0,
+                      opacity: canNew ? 1 : 0.4,
+                      transition: "opacity 0.12s, background 0.12s, border-color 0.12s",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!canNew) return;
+                      e.currentTarget.style.background = "rgba(37,99,235,0.18)";
+                      e.currentTarget.style.borderColor = "rgba(37,99,235,0.55)";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!canNew) return;
+                      e.currentTarget.style.background = "rgba(37,99,235,0.08)";
+                      e.currentTarget.style.borderColor = "rgba(37,99,235,0.35)";
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                      <line x1="7" y1="2" x2="7" y2="12" />
+                      <line x1="2" y1="7" x2="12" y2="7" />
+                    </svg>
+                  </button>
+                </Tooltip>
+              );
+            })()}
             <Tooltip content={t("Refresh")}>
             <button
               onClick={() => loadSessions()}
