@@ -7,7 +7,7 @@ import { createLogger, elapsedMs } from "@/lib/logger";
 import { TODO_IMAGE_MIME_TO_EXT } from "@/lib/todo-images-utils";
 
 const log = createLogger("api/todo-images");
-const TODO_IMAGES_DIR = join(homedir(), ".pi-web", "todo_images");
+const TODO_IMAGES_DIR = join(homedir(), ".pi-work", "todo_images");
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
 function pickExt(mime: string): string {

@@ -1,7 +1,7 @@
 /**
  * Per-session, on-disk JSONL persistence for the `agent_todo` tool.
  *
- * Layout: ~/.pi-web/agent-todo/<sessionId>.jsonl
+ * Layout: ~/.pi-work/agent-todo/<sessionId>.jsonl
  *   Each line is an `AgentTodoLogEntry` — one full snapshot per tool call.
  *
  * Conventions:
@@ -26,7 +26,7 @@ import { createLogger } from "./logger";
 
 const log = createLogger("agent-todo-store");
 
-const AGENT_TODO_DIR = path.join(os.homedir(), ".pi-web", "agent-todo");
+const AGENT_TODO_DIR = path.join(os.homedir(), ".pi-work", "agent-todo");
 
 /**
  * Read this many bytes from the end of the file when tail-reading. Bounded

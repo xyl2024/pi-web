@@ -241,7 +241,7 @@ async function handleInboundImpl(msg: InboundMessage): Promise<void> {
   }
   if (!account.currentWorkspaceId) {
     log.warn("inbound dropped — no current workspace", { fromUserId: msg.fromUserId });
-    await safeReply(account, msg.fromUserId, "❌ 当前未设置 workspace，请到 pi-web 微信面板里选一个。", msg.contextToken);
+    await safeReply(account, msg.fromUserId, "❌ 当前未设置 workspace，请到 pi-work 微信面板里选一个。", msg.contextToken);
     return;
   }
 

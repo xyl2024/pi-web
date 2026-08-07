@@ -1,7 +1,7 @@
 # beautiful-mermaid — Supported Mermaid Examples
 
 A working reference of every Mermaid syntax `beautiful-mermaid` (the renderer
-pi-web uses for ` ```mermaid ` code blocks) can parse and render. Each example
+pi-work uses for ` ```mermaid ` code blocks) can parse and render. Each example
 is directly pasteable into the chat input, file viewer, or todo panel as a
 fenced code block.
 
@@ -1257,15 +1257,15 @@ import {
 
 ---
 
-## 9. Notes & caveats for pi-web
+## 9. Notes & caveats for pi-work
 
 - **Unicode / CJK** in node and state names is fine — the renderer uses
   XML-decoded text. Chinese, Japanese, emoji, etc. all render correctly.
 - **Markdown code fences** are detected via ` ```mermaid ` blocks; the
   block content (everything after the language tag) is the diagram source.
-- **Theming in pi-web** is wired in `components/MermaidBlock.tsx`:
+- **Theming in pi-work** is wired in `components/MermaidBlock.tsx`:
   colors are read off `:root` via `getComputedStyle` at render time
-  (so the five pi-web theme presets — `default`, `midnight`,
+  (so the five pi-work theme presets — `default`, `midnight`,
   `synthwave`, `forest`, `sepia` — apply to diagrams too).
 - **Unsupported diagram types** (gitGraph, mindmap, timeline, sankey,
   etc.) raise a parse error. If the LLM emits one, the block falls back
@@ -1273,4 +1273,4 @@ import {
 - **Streaming** (`isStreaming` prop) skips parsing and shows the raw
   source until the stream ends — prevents per-token parse-error flicker.
 - **No async** — `renderMermaidSVG` is sync, so diagrams can be wrapped
-  in `useMemo` for zero-flash rendering (this is what pi-web does).
+  in `useMemo` for zero-flash rendering (this is what pi-work does).

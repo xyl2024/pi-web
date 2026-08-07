@@ -57,7 +57,7 @@ export type RightSideBarConfig = Record<RightBarButtonId, boolean>;
 // Names match the tool names registered in lib/rpc-manager.ts. The two
 // built-in user-side todo tools (`user_todos_list`, `user_todo_description`)
 // live in lib/todo-tools-config.ts and are NOT listed here — they are gated
-// by ~/.pi-web/todo-tools.json for historical reasons. Adding a new tool
+// by ~/.pi-work/todo-tools.json for historical reasons. Adding a new tool
 // to `customTools` in rpc-manager.ts requires adding it here too, or the
 // validator will silently drop it (fail-open default still applies, but
 // the user setting is lost).
@@ -82,7 +82,7 @@ export interface AppendSystemConfig {
   enabled: boolean;
 }
 
-export interface PiWebConfig {
+export interface PiWorkConfig {
   dangerous_patterns: DangerousPatternsConfig;
   extensions: ExtensionsConfig;
   right_side_bar: RightSideBarConfig;
@@ -107,7 +107,7 @@ const DEFAULT_RIGHT_SIDE_BAR: RightSideBarConfig = {
   gitDiff: true,
 };
 
-const DEFAULT_CONFIG: PiWebConfig = {
+const DEFAULT_CONFIG: PiWorkConfig = {
   dangerous_patterns: DEFAULT_DANGEROUS_PATTERNS,
   extensions: {
     clawd_on_desk: { enabled: false },
@@ -181,14 +181,14 @@ function parseAppendSystem(raw: unknown): AppendSystemConfig {
   return { enabled: obj.enabled !== false };
 }
 
-const CONFIG_DIR = join(homedir(), ".pi-web");
+const CONFIG_DIR = join(homedir(), ".pi-work");
 const CONFIG_PATH = join(CONFIG_DIR, "config.yaml");
 
 function ensureConfigDir(): void {
   mkdirSync(CONFIG_DIR, { recursive: true });
 }
 
-function writeDefaultConfig(): PiWebConfig {
+function writeDefaultConfig(): PiWorkConfig {
   try {
     ensureConfigDir();
     writeFileSync(CONFIG_PATH, dump(DEFAULT_CONFIG), "utf8");
@@ -200,11 +200,11 @@ function writeDefaultConfig(): PiWebConfig {
 }
 
 /**
- * Read config from ~/.pi-web/config.yaml.
+ * Read config from ~/.pi-work/config.yaml.
  * On any error (file missing, corrupt yaml, wrong shape),
  * overwrites with defaults and returns them.
  */
-export function readConfig(): PiWebConfig {
+export function readConfig(): PiWorkConfig {
   try {
     const raw = readFileSync(CONFIG_PATH, "utf8");
     const parsed = load(raw);
@@ -240,10 +240,10 @@ export function readConfig(): PiWebConfig {
 }
 
 /**
- * Write config to ~/.pi-web/config.yaml.
+ * Write config to ~/.pi-work/config.yaml.
  * Returns the written config on success, throws on failure.
  */
-export function writeConfig(config: PiWebConfig): PiWebConfig {
+export function writeConfig(config: PiWorkConfig): PiWorkConfig {
   ensureConfigDir();
   writeFileSync(CONFIG_PATH, dump(config), "utf8");
   log.info("config written", { path: CONFIG_PATH });

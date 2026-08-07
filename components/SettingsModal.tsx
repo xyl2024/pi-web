@@ -6,7 +6,7 @@ import { useTheme, PRESETS, PRESET_LABELS } from "@/hooks/useTheme";
 import { useToast } from "./Toast";
 import { WeChatSettingsSection } from "./WeChatSettingsSection";
 import { InboxTestSection } from "./InboxTestSection";
-import type { PiWebConfig, RightBarButtonId, RightSideBarConfig, AgentCustomToolName } from "@/lib/config";
+import type { PiWorkConfig, RightBarButtonId, RightSideBarConfig, AgentCustomToolName } from "@/lib/config";
 import { setSettings } from "@/hooks/settingsStore";
 
 // Display order for the "Right-side buttons" section checkboxes. Each row
@@ -27,7 +27,7 @@ const RIGHT_BAR_BUTTONS_UI: Array<{ id: RightBarButtonId; labelKey: string }> = 
 // Display order for the "Custom Tools" section checkboxes. Tools are
 // registered on `createAgentSession` (see lib/rpc-manager.ts) and the
 // enabled subset is sourced from `custom_tools.enabled` in
-// ~/.pi-web/config.yaml. Toggling here writes the full PiWebConfig back
+// ~/.pi-work/config.yaml. Toggling here writes the full PiWorkConfig back
 // via /api/settings — same immediate-apply pattern as Right-side buttons.
 const CUSTOM_TOOLS_UI: Array<{ id: AgentCustomToolName; labelKey: string }> = [
   { id: "agent_todo", labelKey: "Agent Todo" },
@@ -38,7 +38,7 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
   const { t, locale, setLocale } = useI18n();
   const { preset, setPreset } = useTheme();
   const toast = useToast();
-  const [config, setConfig] = useState<PiWebConfig | null>(null);
+  const [config, setConfig] = useState<PiWorkConfig | null>(null);
   const [profileUsername, setProfileUsername] = useState<string>("");
   const [originalUsername, setOriginalUsername] = useState<string>("");
   const [profileLoading, setProfileLoading] = useState(true);
@@ -48,7 +48,7 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
   const [hasAvatar, setHasAvatar] = useState(false);
   const [profileSavedOk, setProfileSavedOk] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [originalConfig, setOriginalConfig] = useState<PiWebConfig | null>(null);
+  const [originalConfig, setOriginalConfig] = useState<PiWorkConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
@@ -62,7 +62,7 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
   useEffect(() => {
     fetch("/api/settings")
       .then((r) => r.json())
-      .then((d: PiWebConfig) => {
+      .then((d: PiWorkConfig) => {
         setConfig(d);
         setOriginalConfig(d);
         setSettings(d); // publish to the store so AppShell reflects this snapshot
@@ -218,7 +218,7 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
       ...config.right_side_bar,
       [id]: !currentlyVisible,
     };
-    const nextConfig: PiWebConfig = { ...config, right_side_bar: nextRightSideBar };
+    const nextConfig: PiWorkConfig = { ...config, right_side_bar: nextRightSideBar };
     setConfig(nextConfig);
     setOriginalConfig(nextConfig); // keep isDirty=false → no "discard changes?" prompt
     setSettings(nextConfig);       // publish → AppShell re-renders / auto-closes active panel
@@ -240,7 +240,7 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
 
   // Custom tool enable/disable — same immediate-apply pattern as
   // handleRightBarToggle. Modifies the enabled array in-place and PUTs the
-  // whole PiWebConfig back; the server's parseCustomTools validates and
+  // whole PiWorkConfig back; the server's parseCustomTools validates and
   // silently drops unknown names on read. An empty `enabled` array is
   // honored as "disable everything" (the user pushed the buttons, we
   // trust them). Toggling here only affects sessions started AFTER the
@@ -252,7 +252,7 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
     const nextEnabled: AgentCustomToolName[] = isEnabled
       ? config.custom_tools.enabled.filter((name) => name !== id)
       : [...config.custom_tools.enabled, id];
-    const nextConfig: PiWebConfig = {
+    const nextConfig: PiWorkConfig = {
       ...config,
       custom_tools: { enabled: nextEnabled },
     };
@@ -276,13 +276,13 @@ export function SettingsModal({ onClose, onProfileSaved }: { onClose: () => void
   }, [config, t, toast]);
 
   // APPEND_SYSTEM.md loader toggle. Same immediate-apply pattern as
-  // handleRightBarToggle — PUTs the whole PiWebConfig and keeps isDirty
+  // handleRightBarToggle — PUTs the whole PiWorkConfig and keeps isDirty
   // false so the modal's close-confirm prompt is not triggered. Changes
   // only take effect on sessions started AFTER the PUT (rpc-manager reads
   // the flag once per session start, same as clawd_on_desk / custom_tools).
   const handleAppendSystemEnabledToggle = useCallback(async () => {
     if (!config) return;
-    const nextConfig: PiWebConfig = {
+    const nextConfig: PiWorkConfig = {
       ...config,
       append_system: { enabled: !config.append_system.enabled },
     };

@@ -246,7 +246,7 @@
     <div class="badge">微信渠道深度探索 · WeChat Channel Deep-Dive</div>
     <h1>把微信变成<br/><span class="grad">pi 编码 agent</span> 的聊天前端</h1>
     <p class="subtitle">
-      pi-web 项目内置的微信演示模块，让一个 <strong>个人微信</strong> 账号通过腾讯 iLink Bot CGI
+      pi-work 项目内置的微信演示模块，让一个 <strong>个人微信</strong> 账号通过腾讯 iLink Bot CGI
       协议，直接收发消息、跑 coding agent、读写本地代码、调用工具 —— 全部在 1,722 行代码之内完成。
     </p>
     <div class="stats">
@@ -293,7 +293,7 @@
       <h2><span class="num">01</span>TL;DR · 一分钟看懂</h2>
       <p class="lead">
         <strong>把微信变成 pi 的命令行前端</strong>。用户在微信里发一条消息 → 微信消息落到腾讯 iLink 服务器
-        → pi-web 后台 3 秒一次的轮询把消息拉回来 → 喂给本地的 pi coding agent → 把 agent 的回复发回微信。
+        → pi-work 后台 3 秒一次的轮询把消息拉回来 → 喂给本地的 pi coding agent → 把 agent 的回复发回微信。
         整个过程不经过任何第三方服务器中转（除了腾讯自己）。
       </p>
 
@@ -319,7 +319,7 @@
       </div>
 
       <div class="callout">
-        <strong>关键事实</strong>：pi-web <em>不依赖</em> 任何微信第三方库。
+        <strong>关键事实</strong>：pi-work <em>不依赖</em> 任何微信第三方库。
         <code class="inline">third/openclaw-weixin/</code> 是一份完整的腾讯 <code class="inline">@tencent-weixin/openclaw-weixin</code> v2.4.3
         源码拷贝（用于参考协议），但 <strong>运行时根本没引用</strong>。
         <code class="inline">lib/wechat/</code> 是按需重新实现的精简版。
@@ -333,11 +333,11 @@
       <span class="anchor"></span>
       <h2><span class="num">02</span>为什么要做这个</h2>
       <p>
-        pi-web 本来是个 <strong>浏览器里的 pi 聊天 UI</strong>。要做到"在微信里跑 agent"，需要解决三件事：
+        pi-work 本来是个 <strong>浏览器里的 pi 聊天 UI</strong>。要做到"在微信里跑 agent"，需要解决三件事：
       </p>
       <ol>
         <li><strong>消息通道</strong> —— 个人微信没有官方 Bot API，但腾讯为 OpenClaw 平台开放了 iLink Bot CGI 协议。
-            pi-web 直接对接这套 CGI，把"扫码登录 → 收发消息"做成自家后端。</li>
+            pi-work 直接对接这套 CGI，把"扫码登录 → 收发消息"做成自家后端。</li>
         <li><strong>会话连续性</strong> —— 同一个发信人在微信里连发 3 条消息，应该在 <em>同一个</em> coding session 里
             （同一个 <code class="inline">.jsonl</code> 文件）。否则每次发消息都开新会话，agent 完全没有上下文。</li>
         <li><strong>超时与重试</strong> —— LLM 跑长任务可能 30 秒 ~ 几分钟，微信的同步会话不允许挂那么久。
@@ -376,7 +376,7 @@
       <span class="anchor"></span>
       <h2><span class="num">03</span>整体架构</h2>
       <p class="lead">
-        左边是用户手机，右边是腾讯 iLink 服务器，中间是 pi-web（Next.js）。
+        左边是用户手机，右边是腾讯 iLink 服务器，中间是 pi-work（Next.js）。
         三方之间的 <strong>唯一通道</strong> 是 HTTPS POST —— 微信在浏览器侧只负责一个 QR 扫码。
       </p>
 
@@ -440,9 +440,9 @@
           <text x="380" y="322" fill="#9ba0ab" font-size="10" text-anchor="middle">Bearer + X-WECHAT-UIN</text>
           <text x="380" y="400" fill="#9ba0ab" font-size="10" text-anchor="middle">腾讯官方</text>
 
-          <!-- pi-web server -->
+          <!-- pi-work server -->
           <rect x="560" y="30" width="240" height="400" rx="14" fill="url(#boxAgent)" stroke="#a78bfa" stroke-opacity="0.5"/>
-          <text x="680" y="60" fill="#a78bfa" font-size="13" font-weight="600" text-anchor="middle">pi-web (Next.js)</text>
+          <text x="680" y="60" fill="#a78bfa" font-size="13" font-weight="600" text-anchor="middle">pi-work (Next.js)</text>
           <text x="680" y="80" fill="#9ba0ab" font-size="11" text-anchor="middle">in-process</text>
 
           <g font-family="var(--font-mono)" font-size="10">
@@ -513,7 +513,7 @@
           <line x1="800" y1="300" x2="855" y2="300" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow)"/>
           <line x1="855" y1="320" x2="800" y2="320" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow)"/>
         </svg>
-        <div class="caption">图 1 · 三方交互全景 —— 微信 ⇄ 腾讯 iLink ⇄ pi-web ⇄ AgentSession</div>
+        <div class="caption">图 1 · 三方交互全景 —— 微信 ⇄ 腾讯 iLink ⇄ pi-work ⇄ AgentSession</div>
       </div>
 
       <div class="callout info">
@@ -543,7 +543,7 @@
             <td class="msg"><span class="lbl">点 "开始登录"</span> <span class="note">→ POST /api/weixin/login</span></td>
           </tr>
           <tr>
-            <td class="actor">pi-web 后端</td>
+            <td class="actor">pi-work 后端</td>
             <td class="msg"><span class="lbl">get_bot_qrcode</span> <span class="note">→ iLink (固定 base URL)</span></td>
           </tr>
           <tr>
@@ -551,11 +551,11 @@
             <td class="msg back"><span class="lbl">返回 { qrcode, qrcode_img_content: "weixin://..." }</span></td>
           </tr>
           <tr>
-            <td class="actor">pi-web 后端</td>
+            <td class="actor">pi-work 后端</td>
             <td class="msg"><span class="lbl">QR.toDataURL(weixin://)</span> <span class="note">→ base64 PNG</span></td>
           </tr>
           <tr>
-            <td class="actor">pi-web 后端</td>
+            <td class="actor">pi-work 后端</td>
             <td class="msg"><span class="lbl">state.createSession({qrcode, baseUrl, ...})</span> <span class="note">→ 内存中保留 6min</span></td>
           </tr>
           <tr>
@@ -567,7 +567,7 @@
             <td class="msg"><span class="lbl">每 2s 轮询</span> <span class="note">→ GET /api/weixin/login?sessionKey=...</span></td>
           </tr>
           <tr>
-            <td class="actor">pi-web 后端</td>
+            <td class="actor">pi-work 后端</td>
             <td class="msg"><span class="lbl">get_qrcode_status</span> <span class="note">→ iLink</span></td>
           </tr>
           <tr>
@@ -575,7 +575,7 @@
             <td class="msg back"><span class="lbl">返回 { status: "wait" | "scaned" | "need_verifycode" | "confirmed" | ... }</span></td>
           </tr>
           <tr>
-            <td class="actor">pi-web 后端</td>
+            <td class="actor">pi-work 后端</td>
             <td class="msg"><span class="lbl">advancePhase()</span> <span class="note">→ LoginSession.phase 状态机</span></td>
           </tr>
           <tr>
@@ -659,7 +659,7 @@
 
           <!-- Note -->
           <text x="20" y="270" fill="#9ba0ab" font-size="11" font-family="var(--font-sans)">
-            关键点：<tspan fill="#1aad19">confirmed</tspan> 是唯一会写磁盘的节点 —— state.saveAccount() 落 ~/.pi-web/wechat/account.json (chmod 600)
+            关键点：<tspan fill="#1aad19">confirmed</tspan> 是唯一会写磁盘的节点 —— state.saveAccount() 落 ~/.pi-work/wechat/account.json (chmod 600)
           </text>
           <text x="20" y="290" fill="#9ba0ab" font-size="11" font-family="var(--font-sans)">
             之后 monitor 才会被 ensureMonitor() 拉起，否则永远空转。
@@ -791,7 +791,7 @@
           <!-- Swim lanes -->
           <rect x="20" y="20" width="1040" height="680" fill="none" stroke="#2a2d35"/>
           <line x1="20" y1="60" x2="1060" y2="60" stroke="#2a2d35"/>
-          <text x="40" y="48" fill="#9ba0ab" font-size="11" font-family="var(--font-sans)">入站消息流（一条 WeChat 文本消息从 iLink 抵达 pi-web）</text>
+          <text x="40" y="48" fill="#9ba0ab" font-size="11" font-family="var(--font-sans)">入站消息流（一条 WeChat 文本消息从 iLink 抵达 pi-work）</text>
 
           <!-- Lane labels -->
           <g font-family="var(--font-sans)" font-size="11" font-weight="600">
@@ -1155,7 +1155,7 @@ instrumentation.ts          <span class="c">// Next.js 启动钩子 → bootstra
       <span class="anchor"></span>
       <h2><span class="num">09</span>数据存到哪儿</h2>
       <p>
-        整套微信渠道在磁盘上只有 <strong>3 个文件</strong>，且都放在 <code class="inline">~/.pi-web/wechat/</code>。
+        整套微信渠道在磁盘上只有 <strong>3 个文件</strong>，且都放在 <code class="inline">~/.pi-work/wechat/</code>。
         session 文件（.jsonl）走的是 pi 自己的目录，<em>不归</em> 微信模块管。
       </p>
 
@@ -1165,13 +1165,13 @@ instrumentation.ts          <span class="c">// Next.js 启动钩子 → bootstra
         </thead>
         <tbody>
           <tr>
-            <td><code class="inline">~/.pi-web/wechat/account.json</code></td>
+            <td><code class="inline">~/.pi-work/wechat/account.json</code></td>
             <td>accountId / token / baseUrl / userId / currentWorkspaceId / currentSessionId / status</td>
             <td><span class="tag red">chmod 600</span></td>
             <td>登录时写入，logout 时清空</td>
           </tr>
           <tr>
-            <td><code class="inline">~/.pi-web/wechat/sessions.log</code></td>
+            <td><code class="inline">~/.pi-work/wechat/sessions.log</code></td>
             <td>JSONL 审计：inbound / cold_start / send / agent_event / agent_end / agent_error / reply / reply_failed</td>
             <td><span class="tag red">chmod 600</span></td>
             <td>append-only，永不删除</td>
@@ -1192,7 +1192,7 @@ instrumentation.ts          <span class="c">// Next.js 启动钩子 → bootstra
       </div>
 
       <h3>account.json 样例</h3>
-      <pre><span class="c">// ~/.pi-web/wechat/account.json</span>
+      <pre><span class="c">// ~/.pi-work/wechat/account.json</span>
 {
   <span class="h">"accountId"</span>: <span class="s">"bot_abc123@im.bot"</span>,     <span class="c">// ilink_bot_id</span>
   <span class="h">"token"</span>:     <span class="s">"eyJhbGciOiJIUzI1NiIsInR5cCI6..."</span>,  <span class="c">// bot_token (Bearer)</span>
@@ -1200,7 +1200,7 @@ instrumentation.ts          <span class="c">// Next.js 启动钩子 → bootstra
   <span class="h">"userId"</span>:    <span class="s">"u_xyz789@im.wechat"</span>,   <span class="c">// 扫码的用户（自己）</span>
   <span class="h">"savedAt"</span>:   <span class="s">"2026-06-06T14:30:00.000Z"</span>,
   <span class="h">"status"</span>:    <span class="s">"ok"</span>,                    <span class="c">// "ok" | "expired"</span>
-  <span class="h">"currentWorkspaceId"</span>: <span class="s">"/home/alone/p/pi-web"</span>,
+  <span class="h">"currentWorkspaceId"</span>: <span class="s">"/home/alone/p/pi-work"</span>,
   <span class="h">"currentSessionId"</span>:   <span class="s">"01HX..."</span>  <span class="c">// undefined ⇒ 下次冷启动</span>
 }</pre>
 
@@ -1234,7 +1234,7 @@ instrumentation.ts          <span class="c">// Next.js 启动钩子 → bootstra
         </div>
         <div class="card">
           <h3>❷ <span class="tag amber">时序</span> notifyStart 必须在 boot 重发</h3>
-          <p>重启 pi-web 后，iLink 会把"长时间没心跳"的 bot 当作离线、停止入队消息。
+          <p>重启 pi-work 后，iLink 会把"长时间没心跳"的 bot 当作离线、停止入队消息。
           <code class="inline">instrumentation.ts</code> 一启动就调一次 <code class="inline">notifyStart</code>，
           配合 <code class="inline">startup.ts</code> 的 30s rescan 兜底。</p>
         </div>
@@ -1286,8 +1286,8 @@ X-WECHAT-UIN:        <span class="h">base64(</span>random_uint32_decimal_string<
     <span class="s">"context_token"</span>: <span class="s">"..."</span>              <span class="c">// 从 inbound message 拿来</span>
   },
   <span class="s">"base_info"</span>: {
-    <span class="s">"channel_version"</span>: <span class="s">"pi-web/0.1.0"</span>,
-    <span class="s">"bot_agent"</span>:        <span class="s">"pi-web-demo"</span>     <span class="c">// ↑ 跟官方 OpenClaw 区分开</span>
+    <span class="s">"channel_version"</span>: <span class="s">"pi-work/0.1.0"</span>,
+    <span class="s">"bot_agent"</span>:        <span class="s">"pi-work-demo"</span>     <span class="c">// ↑ 跟官方 OpenClaw 区分开</span>
   }
 }</pre>
     </section>
@@ -1324,7 +1324,7 @@ X-WECHAT-UIN:        <span class="h">base64(</span>random_uint32_decimal_string<
             <line x1="480" y1="60" x2="480" y2="1180" stroke="#5b9dff" stroke-opacity="0.4" stroke-dasharray="3,3"/>
 
             <rect x="620" y="20" width="120" height="40" rx="6" fill="#1aad19" fill-opacity="0.20" stroke="#1aad19" stroke-width="1.5"/>
-            <text x="680" y="46" fill="#1aad19" text-anchor="middle" font-weight="600">pi-web</text>
+            <text x="680" y="46" fill="#1aad19" text-anchor="middle" font-weight="600">pi-work</text>
             <line x1="680" y1="60" x2="680" y2="1180" stroke="#1aad19" stroke-opacity="0.4" stroke-dasharray="3,3"/>
 
             <rect x="820" y="20" width="140" height="40" rx="6" fill="#a78bfa" fill-opacity="0.15" stroke="#a78bfa"/>
@@ -1438,7 +1438,7 @@ X-WECHAT-UIN:        <span class="h">base64(</span>random_uint32_decimal_string<
       <span class="anchor"></span>
       <h2><span class="num">12</span>如何亲自动手</h2>
 
-      <h3>本机启动 pi-web</h3>
+      <h3>本机启动 pi-work</h3>
       <pre><span class="c"># 1. 装依赖（已经装过可跳过）</span>
 npm install
 
@@ -1458,7 +1458,7 @@ npm run dev
       </div>
 
       <h3>看审计日志</h3>
-      <pre>tail -f ~/.pi-web/wechat/sessions.log | jq</pre>
+      <pre>tail -f ~/.pi-work/wechat/sessions.log | jq</pre>
 
       <h3>看聊天上下文</h3>
       <p>
@@ -1510,7 +1510,7 @@ npm run dev
 
 <footer>
   <div class="wrap">
-    生成于 <code class="inline">/home/alone/p/pi-web/wechat-integration.html</code> ·
+    生成于 <code class="inline">/home/alone/p/pi-work/wechat-integration.html</code> ·
     基于 <code class="inline">lib/wechat/</code> + <code class="inline">app/api/weixin/</code> + <code class="inline">components/WeChatPanel.tsx</code> 静态分析 ·
     共 1,722 LOC 真实代码
   </div>

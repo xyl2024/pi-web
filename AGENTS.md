@@ -72,7 +72,7 @@ A single careless command can wipe data that has no backup, is not in git, and c
 
 ### The hard rules
 
-- **NEVER** run overwrite commands (`cat > file`, `echo > file`, `> file`, `tee file`, `sed -i`, `python3 -c "open(p,'w').write(...)"`) on any file in `~/.pi-web/`, `~/.pi/`, `~/.config/...`, or any other user data directory. These truncate the file before the new content is written; if the new content is malformed, the original is gone with no undo.
+- **NEVER** run overwrite commands (`cat > file`, `echo > file`, `> file`, `tee file`, `sed -i`, `python3 -c "open(p,'w').write(...)"`) on any file in `~/.pi-work/`, `~/.pi/`, `~/.config/...`, or any other user data directory. These truncate the file before the new content is written; if the new content is malformed, the original is gone with no undo.
 - **NEVER** use shell heredoc (`<< EOF ... EOF`) to "create a small test file" at a path that overlaps with a real file. Heredoc + `>` overwrites silently.
 - **For tests that need to touch user data**: copy the file to `/tmp/` first, work on the copy, and never write back to the original path. If a test must hit the real file, drive it through the app's own API (POST/PATCH/DELETE) — those code paths are tested and validated.
 - **For JSON modification**: use `jq` (in-place with `jq ... file.json > tmp && mv tmp file.json`) or run a Node script. Do not use raw shell redirection.
@@ -80,10 +80,10 @@ A single careless command can wipe data that has no backup, is not in git, and c
 
 ### Why this is so dangerous in this project specifically
 
-- The user todo list is stored in `~/.pi-web/todos.db` (SQLite via `better-sqlite3`). The legacy `todos.json` was renamed to `todos.json.migrated.<ts>` on first DB read — it is **not** deleted and can be inspected with `cat`. To roll back: run `npx tsx scripts/todos-restore.ts` (writes a fresh `todos.json` from the DB; if `--out` already exists it is renamed to `<out>.restored.<ts>` first, matching the rename-not-delete migration pattern).
-- The `cat > ~/.pi-web/todos.db` (or `todos.json`) idiom is the kind of thing that looks safe in a one-liner test script but truncates the file immediately. If the heredoc body is wrong, the file is `0 bytes` and unrecoverable.
-- Other irreplaceable user data in this project: `~/.pi-web/todo_images/`, `~/.pi-web/workspace/`, `~/.pi-web/config.yaml`, `~/.pi-web/scheduler.db`, `~/.pi-web/favorites.json`, `~/.pi-web/agent-todo/`, `~/.pi/agent/sessions/`, `~/.pi/agent/models.json`, `~/.pi-web/pinned.json`, `~/.pi-web/todo-tools.json`.
-- The agent todo state lives in `~/.pi-web/agent-todo/<sessionId>.jsonl` (append-only snapshots). The current state is the last parsed line; truncating the file wipes it instantly with no DB backup.
+- The user todo list is stored in `~/.pi-work/todos.db` (SQLite via `better-sqlite3`). The legacy `todos.json` was renamed to `todos.json.migrated.<ts>` on first DB read — it is **not** deleted and can be inspected with `cat`. To roll back: run `npx tsx scripts/todos-restore.ts` (writes a fresh `todos.json` from the DB; if `--out` already exists it is renamed to `<out>.restored.<ts>` first, matching the rename-not-delete migration pattern).
+- The `cat > ~/.pi-work/todos.db` (or `todos.json`) idiom is the kind of thing that looks safe in a one-liner test script but truncates the file immediately. If the heredoc body is wrong, the file is `0 bytes` and unrecoverable.
+- Other irreplaceable user data in this project: `~/.pi-work/todo_images/`, `~/.pi-work/workspace/`, `~/.pi-work/config.yaml`, `~/.pi-work/scheduler.db`, `~/.pi-work/favorites.json`, `~/.pi-work/agent-todo/`, `~/.pi/agent/sessions/`, `~/.pi/agent/models.json`, `~/.pi-work/pinned.json`, `~/.pi-work/todo-tools.json`.
+- The agent todo state lives in `~/.pi-work/agent-todo/<sessionId>.jsonl` (append-only snapshots). The current state is the last parsed line; truncating the file wipes it instantly with no DB backup.
 
 ### If a write goes wrong
 
@@ -96,7 +96,7 @@ A single careless command can wipe data that has no backup, is not in git, and c
 
 # Pi Work
 
-Web UI for the pi coding agent. The product is called "Pi Work" (renamed from "Pi Agent Web"). The package is `@agegr/pi-web`.
+Web UI for the pi coding agent. The product is called "Pi Work" (renamed from "Pi Agent Web"). The package is `@xyl2024/pi-work`.
 
 ## Quick Start
 
@@ -215,9 +215,9 @@ latest list when removing by `toolCallId`.
 
 `lib/rpc-manager.ts` registers these as `customTools` on `createAgentSession`:
 
-- `user_todos_list` / `user_todo_description` — read-only todo queries against `~/.pi-web/todos.db` (`lib/todo-tools.ts`, gated by `~/.pi-web/todo-tools.json`). The first returns a lightweight summary filterable by `status` / `tags` / `create_time_window` / `due_time_window`; the second fetches full description + image URLs by id. Set `PI_WEB_PUBLIC_BASE_URL` to control the image origin in the second tool's output.
+- `user_todos_list` / `user_todo_description` — read-only todo queries against `~/.pi-work/todos.db` (`lib/todo-tools.ts`, gated by `~/.pi-work/todo-tools.json`). The first returns a lightweight summary filterable by `status` / `tags` / `create_time_window` / `due_time_window`; the second fetches full description + image URLs by id. Set `PI_WORK_PUBLIC_BASE_URL` to control the image origin in the second tool's output.
 - `show_file` — inline-render one or more files below the tool call in chat (`lib/show-file-tool.ts` + `lib/show-file-tool-types.ts`). Path validation reuses `lib/file-access.ts` (same allowed roots as `/api/files`).
-- `agent_todo` — single-tool action-dispatched (`create | update | list | get | delete | clear`); persisted per-session to `~/.pi-web/agent-todo/<sessionId>.jsonl` as append-only snapshots (`lib/agent-todo-store.ts`). Full design in `docs/agent-todo/`.
+- `agent_todo` — single-tool action-dispatched (`create | update | list | get | delete | clear`); persisted per-session to `~/.pi-work/agent-todo/<sessionId>.jsonl` as append-only snapshots (`lib/agent-todo-store.ts`). Full design in `docs/agent-todo/`.
 
 Server-only files (`*-tool.ts`, `*-store.ts` under `lib/`) import `@earendil-works/pi-coding-agent`, which transitively pulls in `child_process` and other Node modules. **Client code must import types/constants from the matching `-types.ts` file instead** — see the `IMPORTANT` comment at the top of each tool file.
 
@@ -242,19 +242,19 @@ app/api/
   auth/{providers,all-providers,login/[provider],logout/[provider],api-key/[provider]}
                                     provider auth flows (OAuth login + API-key set/clear)
   context/route.ts                  GET ?cwd= — AGENTS.md files for a cwd (cached 30s)
-  create-space/route.ts             POST { dir_name } — mkdir ~/.pi-web/workspace/<dir>
-  default-cwd/route.ts              POST — ensure ~/.pi-web/workspace/pi-cwd-default exists
+  create-space/route.ts             POST { dir_name } — mkdir ~/.pi-work/workspace/<dir>
+  default-cwd/route.ts              POST — ensure ~/.pi-work/workspace/pi-cwd-default exists
   home/route.ts                     GET { home } — homedir for the UI
-  pinned-cwds/route.ts              GET/PUT pinned project list (~/.pi-web/pinned.json)
+  pinned-cwds/route.ts              GET/PUT pinned project list (~/.pi-work/pinned.json)
   pinned-sessions/route.ts          GET/PUT pinned session list
   prompts/route.ts                  GET/POST slash-command prompt templates
   slash-commands/route.ts           GET aggregated slash commands for a cwd
   skills/{route,detail,install,search}
                                     list, inspect, install (npm/git), and search marketplace skills
-  settings/route.ts                 GET/PUT — read/write ~/.pi-web/config.yaml
+  settings/route.ts                 GET/PUT — read/write ~/.pi-work/config.yaml
   todos/route.ts                    GET/POST/PATCH/DELETE todos
   todos/[id]/export/route.ts        GET export todo as zip (markdown + images)
-  todo-images/route.ts              POST upload image to ~/.pi-web/todo_images/
+  todo-images/route.ts              POST upload image to ~/.pi-work/todo_images/
   todo-images/[filename]/route.ts   GET/DELETE one todo image
   todo-tools/route.ts               GET/PUT enabled-todo-tool config
   tags/route.ts                     PATCH rename / DELETE remove a tag globally
@@ -264,7 +264,7 @@ app/api/
   scheduled-tasks/[id]/runs/route.ts GET last N runs for one task
   scheduled-tasks/[id]/runs/mark-all-read/route.ts POST mark all runs as read
   scheduled-tasks/runs/[runId]/route.ts GET one run detail
-  favorites/route.ts                GET/PUT pinned session list (~/.pi-web/favorites.json)
+  favorites/route.ts                GET/PUT pinned session list (~/.pi-work/favorites.json)
   translate/route.ts                POST { text, provider, modelId, target } — in-memory LLM call, no disk
   weixin/{login,login/verify-code,logout,status,contacts,test-send,inbound,workspace}
                                     WeChat login, contacts, send/receive, push-to-workspace
@@ -280,12 +280,12 @@ lib/
   types.ts                  shared frontend types (AgentMessage, SessionEntry, etc.)
   pi-types.ts               narrowed shapes for the pi SDK objects we touch
   normalize.ts              normalizeToolCalls() — field name mismatch between file format and our types
-  config.ts                 read/write ~/.pi-web/config.yaml (system_prompt_replacements, dangerous_patterns)
-  db.ts                     SQLite handle for ~/.pi-web/todos.db (+ one-shot JSON→DB migration)
+  config.ts                 read/write ~/.pi-work/config.yaml (system_prompt_replacements, dangerous_patterns)
+  db.ts                     SQLite handle for ~/.pi-work/todos.db (+ one-shot JSON→DB migration)
   todo-store.ts             CRUD + validation on top of db.ts
   todo-tools.ts             pi customTools that expose the todo store to the agent
-  todo-tools-config.ts      read enabled-tool flags from ~/.pi-web/todo-tools.json
-  todo-images-utils.ts      helpers for ~/.pi-web/todo_images/
+  todo-tools-config.ts      read enabled-tool flags from ~/.pi-work/todo-tools.json
+  todo-images-utils.ts      helpers for ~/.pi-work/todo_images/
   todo-image-upload.ts      server-side image upload helper
   todo-color-presets.ts     shared palette for tag chips + Tiptap text color
   description-sanitize.ts   single DOMPurify config shared by every code path that touches todo descriptions
@@ -301,7 +301,7 @@ lib/
   agent-todo-tool.ts        server-side: pi customTool wrapping lib/agent-todo-tool/{reducer,invariants,response-envelope}
   agent-todo-tool-types.ts  client-safe types/constants (no pi SDK import)
   agent-todo-tool/          reducer.ts (pure) + invariants.ts + response-envelope.ts
-  agent-todo-store.ts       per-session JSONL persistence (~/.pi-web/agent-todo/<sid>.jsonl)
+  agent-todo-store.ts       per-session JSONL persistence (~/.pi-work/agent-todo/<sid>.jsonl)
   useAgentTodo is the client read-side hook
   show-file-tool.ts         server-side: pi customTool for inline file rendering
   show-file-tool-types.ts   client-safe types/constants
@@ -309,7 +309,7 @@ lib/
   translate.ts              shared translate prompts + language list (server + client)
   json-parser.ts            tolerant JSON parser for the JSON panel
   http-proxy.ts             proxyFetch core: server-side fetch with size + timeout guards
-  scheduler-db.ts           SQLite handle for ~/.pi-web/scheduler.db
+  scheduler-db.ts           SQLite handle for ~/.pi-work/scheduler.db
   scheduler-store.ts        CRUD + validation for scheduled tasks + runs
   scheduler/                loop.ts (self-rescheduling setTimeout) + runner.ts (per-task FIFO chain)
                             + startup.ts (instrumentation bootstrap)
@@ -331,14 +331,14 @@ components/
   ModelsConfig.tsx          modal for editing ~/.pi/agent/models.json
   SkillsConfig.tsx          modal for installing / browsing / toggling skills
   PromptsConfig.tsx         modal for managing slash-command prompts
-  SettingsModal.tsx         modal for ~/.pi-web/config.yaml (replacements, dangerous patterns)
+  SettingsModal.tsx         modal for ~/.pi-work/config.yaml (replacements, dangerous patterns)
   ProviderIcon.tsx          @lobehub/icons wrapper (one Mono or Color per provider, used in chat header + models modal)
   FileExplorer.tsx          file tree inside sidebar
   FileSearchBar.tsx         VS Code-style inline search bar (FileViewer)
   FileViewer.tsx            file content in a tab (text, image, audio, pdf)
   ShowFileRenderer.tsx      renders the `show_file` tool result inline in chat
   TabBar.tsx                tab bar (Chat + open file tabs + Todo)
-  TodoPanel.tsx             user-side todo list panel (~/.pi-web/todos.db)
+  TodoPanel.tsx             user-side todo list panel (~/.pi-work/todos.db)
   TodoDescriptionView.tsx   sanitized read-only HTML render for a todo description
   RichTextEditor.tsx + RichTextEditorInner.tsx
                             Tiptap-based rich text editor (used in TodoPanel)
@@ -393,7 +393,7 @@ hooks/
 
 extensions/
   clawd-on-desk/            vendored pi extension: shouldReport() forced to () => true
-                            (see `pi-web-never-binds-extension-ui` memory)
+                            (see `pi-work-never-binds-extension-ui` memory)
 
 electron-shell/
   main.js                   Electron entry: window + tray + global shortcut + single-instance
@@ -406,7 +406,7 @@ electron-shell/
 
 scripts/
   todos-restore.ts                   roll back todos.db → todos.json
-  deploy-systemd-user.sh             deploy to ~/.local/share/pi-web-fork + install user systemd unit
+  deploy-systemd-user.sh             deploy to ~/.local/share/pi-work-fork + install user systemd unit
   copy-excalidraw-fonts.mjs          one-time Excalidraw font copy (postinstall-ish)
 
 docs/
@@ -426,12 +426,12 @@ docs/
 - One `AgentSessionWrapper` per session id, keyed in `globalThis.__piSessions`
 - `globalThis` survives Next.js hot-reload; plain module-level Map does not
 - Idle timeout: 10 minutes. Concurrent `startRpcSession()` calls share a single start Promise (`globalThis.__piStartLocks`)
-- `customTools` registered here: `buildTodoTools(...)`, `buildShowFileTool()`, `buildAgentTodoTool()` — the trio that gives pi-web sessions their distinctive toolset
+- `customTools` registered here: `buildTodoTools(...)`, `buildShowFileTool()`, `buildAgentTodoTool()` — the trio that gives pi-work sessions their distinctive toolset
 
 ### Fork must destroy the wrapper immediately
 `AgentSession.fork()` **mutates the wrapper's inner state in-place** — after fork, `inner.sessionId` is the *new* session's id. If the wrapper stays alive in the registry under the old id, the next request gets the already-forked state and subsequent forks produce a corrupt `parentSession` chain.
 
-**Fix**: `send("fork")` captures `newSessionId`, then calls `this.destroy()` before returning. The next request for the original session reloads a clean AgentSession from the original file. Fork also copies the parent's `~/.pi-web/agent-todo/<oldSid>.jsonl` to the new session id so the agent's plan survives the branch point.
+**Fix**: `send("fork")` captures `newSessionId`, then calls `this.destroy()` before returning. The next request for the original session reloads a clean AgentSession from the original file. Fork also copies the parent's `~/.pi-work/agent-todo/<oldSid>.jsonl` to the new session id so the agent's plan survives the branch point.
 
 ### Two kinds of branching — don't confuse them
 - **Fork** (Fork button on user message): creates a new independent `.jsonl` file. Shown as a child in the sidebar tree via `parentSession` header field.
@@ -465,7 +465,7 @@ Newer pi emits `compaction_start` / `compaction_end`; older versions emitted `au
 `PermissionDialog` (Esc → deny, Enter → allow once, backdrop-click → deny) deliberately biases toward deny because "allow similar for this session" is a mouse-only action — keyboard users can never accidentally over-grant.
 
 ### pi extensions never see a UI
-`startRpcSession` does not call `bindExtensions`, so `ctx.hasUI` is `false` in every pi-web session. Extensions that gate on `hasUI` (e.g. `extensions/clawd-on-desk/`) need their vendored `index.ts` to override `shouldReport` to `() => true` — see the `pi-web-never-binds-extension-ui` memory for the full pattern.
+`startRpcSession` does not call `bindExtensions`, so `ctx.hasUI` is `false` in every pi-work session. Extensions that gate on `hasUI` (e.g. `extensions/clawd-on-desk/`) need their vendored `index.ts` to override `shouldReport` to `() => true` — see the `pi-work-never-binds-extension-ui` memory for the full pattern.
 
 ### Translate panel does not touch disk
 `/api/translate` builds a custom `ResourceLoader` that returns empty arrays for everything plus `SessionManager.inMemory()` + `SettingsManager.inMemory()` + `noTools: "all"`. This guarantees the request never reads `~/.pi/agent/settings.json`, never fires any extension hook, and never writes a `.jsonl` file — see the comment at the top of `app/api/translate/route.ts`.
@@ -490,7 +490,7 @@ Location: `~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`
 
 ## Agent Todo JSONL Format
 
-Location: `~/.pi-web/agent-todo/<sessionId>.jsonl`
+Location: `~/.pi-work/agent-todo/<sessionId>.jsonl`
 
 ```jsonl
 {"ts":<ms>,"action":"create","stateAfter":{"tasks":[...],"nextId":2}}

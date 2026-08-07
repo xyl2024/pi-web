@@ -3,7 +3,7 @@
  * supporting helpers in `lib/todo-tools-url.ts` / `lib/todo-images-utils.ts`.
  * Runnable-TS pattern:
  *   - mkdtempSync tmp dir
- *   - override PI_WEB_TODOS_DB BEFORE importing anything that calls getDb()
+ *   - override PI_WORK_TODOS_DB BEFORE importing anything that calls getDb()
  *   - assertion failures exit(1); cleanup runs in `finally`
  *
  * The tests deliberately call the exported pure helpers
@@ -22,7 +22,7 @@ import { join } from "path";
 
 // Override DB path BEFORE importing anything that calls getDb().
 const tmpDir = mkdtempSync(join(tmpdir(), "todo-tools-test-"));
-process.env.PI_WEB_TODOS_DB = join(tmpDir, "test.db");
+process.env.PI_WORK_TODOS_DB = join(tmpDir, "test.db");
 
 import {
   TODO_TOOL_NAMES,
@@ -70,7 +70,7 @@ function cleanup(): void {
 function testBaseUrl(): void {
   console.log("\n=== getTodoImageBaseUrl ===");
 
-  delete process.env.PI_WEB_PUBLIC_BASE_URL;
+  delete process.env.PI_WORK_PUBLIC_BASE_URL;
   delete process.env.NEXTAUTH_URL;
   delete process.env.BASE_URL;
   process.env.PORT = "12345";
@@ -83,23 +83,23 @@ function testBaseUrl(): void {
   const r2 = getTodoImageBaseUrl();
   assert(r2 === "http://localhost:30141", `no PORT → http://localhost:30141, got ${r2}`);
 
-  process.env.PI_WEB_PUBLIC_BASE_URL = "https://x.example.com/";
+  process.env.PI_WORK_PUBLIC_BASE_URL = "https://x.example.com/";
   __resetTodoImageBaseUrlForTests();
   const r3 = getTodoImageBaseUrl();
-  assert(r3 === "https://x.example.com", `PI_WEB_PUBLIC_BASE_URL trailing slash stripped, got ${r3}`);
+  assert(r3 === "https://x.example.com", `PI_WORK_PUBLIC_BASE_URL trailing slash stripped, got ${r3}`);
 
-  process.env.PI_WEB_PUBLIC_BASE_URL = "not a url";
+  process.env.PI_WORK_PUBLIC_BASE_URL = "not a url";
   __resetTodoImageBaseUrlForTests();
   const r4 = getTodoImageBaseUrl();
-  assert(r4 === "http://localhost:30141", `malformed PI_WEB_PUBLIC_BASE_URL falls through, got ${r4}`);
+  assert(r4 === "http://localhost:30141", `malformed PI_WORK_PUBLIC_BASE_URL falls through, got ${r4}`);
 
-  process.env.PI_WEB_PUBLIC_BASE_URL = "https://y.example.com";
+  process.env.PI_WORK_PUBLIC_BASE_URL = "https://y.example.com";
   process.env.NEXTAUTH_URL = "https://z.example.com";
   __resetTodoImageBaseUrlForTests();
   const r5 = getTodoImageBaseUrl();
-  assert(r5 === "https://y.example.com", `PI_WEB_PUBLIC_BASE_URL beats NEXTAUTH_URL, got ${r5}`);
+  assert(r5 === "https://y.example.com", `PI_WORK_PUBLIC_BASE_URL beats NEXTAUTH_URL, got ${r5}`);
 
-  delete process.env.PI_WEB_PUBLIC_BASE_URL;
+  delete process.env.PI_WORK_PUBLIC_BASE_URL;
   __resetTodoImageBaseUrlForTests();
   const r6 = getTodoImageBaseUrl();
   assert(r6 === "https://z.example.com", `NEXTAUTH_URL beats BASE_URL/PORT, got ${r6}`);
@@ -367,7 +367,7 @@ function testDescriptionPayload(): void {
   });
 
   // Force origin so url is deterministic.
-  process.env.PI_WEB_PUBLIC_BASE_URL = "https://example.test";
+  process.env.PI_WORK_PUBLIC_BASE_URL = "https://example.test";
   __resetTodoImageBaseUrlForTests();
 
   const fetched: Todo | undefined = getTodoById(created.id);
@@ -417,7 +417,7 @@ function testDescriptionPayload(): void {
   assert(missingTodo === undefined, `unknown id → undefined`);
 
   // Restore default origin
-  delete process.env.PI_WEB_PUBLIC_BASE_URL;
+  delete process.env.PI_WORK_PUBLIC_BASE_URL;
   __resetTodoImageBaseUrlForTests();
 }
 

@@ -3,7 +3,7 @@
  *
  * The monitor is normally lazy-started by the /api/weixin/contacts endpoint
  * when the user opens the WeChat panel. That fails one important case:
- * pi-web boots up with an existing account.json on disk, and the user
+ * pi-work boots up with an existing account.json on disk, and the user
  * never opens the panel — incoming WeChat messages would sit in the
  * upstream queue unconsumed.
  *
@@ -11,7 +11,7 @@
  * server-process boot. It also schedules a periodic re-check so a future
  * login from another tab/process is picked up without a server restart.
  *
- * When multiple pi-web processes run on the same machine (e.g. `next
+ * When multiple pi-work processes run on the same machine (e.g. `next
  * start` on port 14514 + `next dev` on port 30141), only the lock holder
  * from `monitor-lock.ts` actually runs the monitor — the others stay
  * silent so the inbound poller is never duplicated.

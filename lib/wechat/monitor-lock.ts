@@ -1,14 +1,14 @@
 /**
  * Single-instance lock for the WeChat inbound monitor.
  *
- * Why this exists: pi-web may be started more than once on the same
+ * Why this exists: pi-work may be started more than once on the same
  * machine — e.g. `next start` on port 14514 and `next dev` on port
  * 30141 both run from this checkout. Without a lock, each process
  * boots its own copy of the monitor + its own 30-second rescan timer,
  * so the inbound poller is duplicated and the rescan logs drown out
  * every other log channel.
  *
- * The lock is a small JSON file at ~/.pi-web/wechat-monitor.lock. The
+ * The lock is a small JSON file at ~/.pi-work/wechat-monitor.lock. The
  * holder writes its PID + a renewedAt timestamp every 30 seconds.
  * Newcomers read the file and ask (a) is the holder's PID alive, (b)
  * is the renewedAt fresh. If either check fails, the lock is stale
@@ -19,7 +19,7 @@
  * existing user-data file is removed, and the file is one we wrote
  * ourselves, not user content.)
  *
- * What this does NOT do: it does not lock the rest of pi-web, only
+ * What this does NOT do: it does not lock the rest of pi-work, only
  * the wechat monitor + its rescan timer.
  */
 import {
@@ -37,7 +37,7 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("wechat/monitor-lock");
 
-const LOCK_PATH = join(homedir(), ".pi-web", "wechat-monitor.lock");
+const LOCK_PATH = join(homedir(), ".pi-work", "wechat-monitor.lock");
 const STALE_RENEW_MS = 90_000;
 const RENEW_INTERVAL_MS = 30_000;
 

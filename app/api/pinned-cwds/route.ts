@@ -5,7 +5,7 @@ import { createLogger, elapsedMs } from "@/lib/logger";
 import { readStringArray, writeStringArray } from "@/lib/json-array-store";
 
 const log = createLogger("api/pinned-cwds");
-const PINNED_FILE = join(homedir(), ".pi-web", "pinned.json");
+const PINNED_FILE = join(homedir(), ".pi-work", "pinned.json");
 
 // GET /api/pinned-cwds
 export async function GET() {

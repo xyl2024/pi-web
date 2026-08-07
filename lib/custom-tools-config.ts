@@ -1,7 +1,7 @@
 /**
  * Read which agent-side custom tools are enabled for `createAgentSession`.
  *
- * Backed by `~/.pi-web/config.yaml` → `custom_tools.enabled` (array of
+ * Backed by `~/.pi-work/config.yaml` → `custom_tools.enabled` (array of
  * tool names). Parsing + fail-open defaults live in `lib/config.ts`
  * (`parseCustomTools`); this file is just the typed accessor used by
  * `lib/rpc-manager.ts`.

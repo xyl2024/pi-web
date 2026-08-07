@@ -41,10 +41,10 @@ export async function getAllowedRoots(): Promise<Set<string>> {
   for (const root of globalThis.__piCreatedSpaceRoots ?? []) {
     roots.add(root);
   }
-  // Also allow ~/.pi-web/workspace/pi-cwd-* directories created by the default-cwd endpoint
+  // Also allow ~/.pi-work/workspace/pi-cwd-* directories created by the default-cwd endpoint
   const home = (await import("os")).homedir();
   const { readdirSync } = await import("fs");
-  const workspace = path.join(home, ".pi-web", "workspace");
+  const workspace = path.join(home, ".pi-work", "workspace");
   try {
     for (const name of readdirSync(workspace)) {
       if (/^pi-cwd-(\d{8}|default)$/.test(name)) {

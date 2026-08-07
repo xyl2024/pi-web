@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Token audit panel — a small dashboard for `~/.pi-web/token-audit.db`.
+ * Token audit panel — a small dashboard for `~/.pi-work/token-audit.db`.
  *
  * Fetches four parallel JSON snapshots from `/api/token-audit/*` and lays them
  * out as a KPI strip + a 2-column ECharts grid + a compact recent-calls table.

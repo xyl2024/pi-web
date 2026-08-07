@@ -1,6 +1,6 @@
 /**
  * Smoke test for `lib/token-audit-store.ts`. Runs all CRUD ops against a
- * temp DB (PI_WEB_TOKEN_AUDIT_DB env var override), prints results, exits.
+ * temp DB (PI_WORK_TOKEN_AUDIT_DB env var override), prints results, exits.
  *
  * Usage:  npx tsx scripts/test-token-audit-store.ts
  */
@@ -11,7 +11,7 @@ import { join } from "path";
 
 // Override DB path BEFORE importing anything that calls getTokenAuditDb.
 const tmpDir = mkdtempSync(join(tmpdir(), "token-audit-test-"));
-process.env.PI_WEB_TOKEN_AUDIT_DB = join(tmpDir, "test.db");
+process.env.PI_WORK_TOKEN_AUDIT_DB = join(tmpDir, "test.db");
 
 import {
   clearAllData,

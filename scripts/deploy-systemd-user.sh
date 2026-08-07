@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
-DEPLOY_DIR="${PI_WEB_DEPLOY_DIR:-/home/alone/.local/share/pi-web-fork}"
-SERVICE_NAME="${PI_WEB_SERVICE_NAME:-pi-web.service}"
+DEPLOY_DIR="${PI_WORK_DEPLOY_DIR:-/home/alone/.local/share/pi-work-fork}"
+SERVICE_NAME="${PI_WORK_SERVICE_NAME:-pi-work.service}"
 
 if [[ "$DEPLOY_DIR" == "$REPO_DIR" ]]; then
   echo "Refusing to deploy into the source directory: $DEPLOY_DIR" >&2

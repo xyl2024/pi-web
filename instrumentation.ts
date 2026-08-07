@@ -2,7 +2,7 @@
  * Next.js server-startup hook. Runs once per server process boot, before
  * any request is served. Used here to start the WeChat inbound monitor
  * so an existing logged-in account is handled even when no one has yet
- * loaded any pi-web page.
+ * loaded any pi-work page.
  *
  * Next.js picks this file up automatically (no opt-in needed in 16.x).
  *

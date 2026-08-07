@@ -6,7 +6,7 @@ import { createLogger, elapsedMs } from "@/lib/logger";
 import { TODO_IMAGE_FILENAME_RE, mimeForTodoImageFilename } from "@/lib/todo-images-utils";
 
 const log = createLogger("api/todo-images/[filename]");
-const TODO_IMAGES_DIR = join(homedir(), ".pi-web", "todo_images");
+const TODO_IMAGES_DIR = join(homedir(), ".pi-work", "todo_images");
 
 // GET /api/todo-images/[filename]
 export async function GET(

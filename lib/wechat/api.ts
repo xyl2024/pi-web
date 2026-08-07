@@ -1,5 +1,5 @@
 /**
- * iLink Bot CGI client — minimal HTTP wrapper used by the pi-web demo.
+ * iLink Bot CGI client — minimal HTTP wrapper used by the pi-work demo.
  *
  * Mirrors the request shape used by the openclaw-weixin plugin:
  *   POST ilink/bot/<endpoint>   application/json
@@ -29,13 +29,13 @@ const log = createLogger("wechat/api");
 
 const FIXED_QR_BASE = "https://ilinkai.weixin.qq.com";
 const ILINK_APP_ID = "bot";
-const PLUGIN_VERSION = "pi-web-demo/0.1.0";
+const PLUGIN_VERSION = "pi-work-demo/0.1.0";
 
 /** Read version from package.json (best effort). */
 function readVersion(): string {
   try {
     const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { version?: string };
-    return pkg.version ? `pi-web/${pkg.version}` : PLUGIN_VERSION;
+    return pkg.version ? `pi-work/${pkg.version}` : PLUGIN_VERSION;
   } catch {
     return PLUGIN_VERSION;
   }
@@ -44,7 +44,7 @@ function readVersion(): string {
 function baseInfo(): BaseInfo {
   return {
     channel_version: readVersion(),
-    bot_agent: "pi-web-demo",
+    bot_agent: "pi-work-demo",
   };
 }
 

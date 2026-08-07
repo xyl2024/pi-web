@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import type { PiWebConfig } from "@/lib/config";
+import type { PiWorkConfig } from "@/lib/config";
 import { isContentEqual } from "@/lib/shallowEqual";
 
 /**
- * Settings store — client-side mirror of ~/.pi-web/config.yaml.
+ * Settings store — client-side mirror of ~/.pi-work/config.yaml.
  *
  * Pattern follows hooks/sessionUiStore.ts (module-scoped state +
  * useSyncExternalStore + isContentEqual guard) per the CLAUDE.md rule:
@@ -27,7 +27,7 @@ import { isContentEqual } from "@/lib/shallowEqual";
  * as visible while the fetch is in flight or after a failure.
  */
 
-let state: PiWebConfig | null = null;
+let state: PiWorkConfig | null = null;
 let initialFetchStarted = false;
 const listeners = new Set<() => void>();
 
@@ -35,7 +35,7 @@ function emit() {
   for (const l of listeners) l();
 }
 
-export function setSettings(next: PiWebConfig) {
+export function setSettings(next: PiWorkConfig) {
   if (state && isContentEqual(state, next)) return;
   state = next;
   emit();
@@ -48,15 +48,15 @@ function subscribe(cb: () => void) {
   };
 }
 
-function getSnapshot(): PiWebConfig | null {
+function getSnapshot(): PiWorkConfig | null {
   return state;
 }
 
-function getServerSnapshot(): PiWebConfig | null {
+function getServerSnapshot(): PiWorkConfig | null {
   return null;
 }
 
-export function useSettings(): PiWebConfig | null {
+export function useSettings(): PiWorkConfig | null {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
@@ -66,7 +66,7 @@ export function useSettings(): PiWebConfig | null {
  * (initialFetchStarted is module-scoped) and across React strict-mode
  * double-invokes.
  */
-export function useEnsureSettings(): PiWebConfig | null {
+export function useEnsureSettings(): PiWorkConfig | null {
   const settings = useSettings();
   useEffect(() => {
     if (state !== null) return;
@@ -74,7 +74,7 @@ export function useEnsureSettings(): PiWebConfig | null {
     initialFetchStarted = true;
     void fetch("/api/settings")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: PiWebConfig | null) => {
+      .then((d: PiWorkConfig | null) => {
         if (d) setSettings(d);
       })
       .catch(() => {

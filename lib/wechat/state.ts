@@ -1,7 +1,7 @@
 /**
  * Persistent account storage + in-memory login session map + contact list.
  *
- * Credentials:    ~/.pi-web/wechat/account.json (chmod 600)
+ * Credentials:    ~/.pi-work/wechat/account.json (chmod 600)
  * Login sessions: in-memory Map, lost on restart (intentional — user re-scans).
  * Contacts:       in-memory Map keyed by accountId → userId → WeChatContact.
  *                 Lost on restart (intentional — fresh slate after server bounce).
@@ -16,7 +16,7 @@ import type { LoginSession, WeChatAccount, WeChatContact } from "./types";
 const log = createLogger("wechat/state");
 
 function wechatDir(): string {
-  return join(homedir(), ".pi-web", "wechat");
+  return join(homedir(), ".pi-work", "wechat");
 }
 
 function accountPath(): string {

@@ -3,7 +3,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { TODO_TOOL_NAMES, type TodoToolName } from "./todo-tools";
 
-const CONFIG_DIR = join(homedir(), ".pi-web");
+const CONFIG_DIR = join(homedir(), ".pi-work");
 const CONFIG_PATH = join(CONFIG_DIR, "todo-tools.json");
 
 function isTodoToolName(value: unknown): value is TodoToolName {
@@ -22,7 +22,7 @@ function validate(value: unknown): TodoToolName[] {
 }
 
 /**
- * Read the enabled todo tool names from ~/.pi-web/todo-tools.json.
+ * Read the enabled todo tool names from ~/.pi-work/todo-tools.json.
  * On missing / corrupt / unknown file, returns the default (all 4 enabled).
  */
 export function readEnabledTodoTools(): TodoToolName[] {

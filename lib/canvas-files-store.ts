@@ -34,7 +34,7 @@ import {
 } from "idb-keyval";
 import type { BinaryFileData } from "@excalidraw/excalidraw/types";
 
-const DB_NAME = "pi-web-canvas";
+const DB_NAME = "pi-work-canvas";
 const STORE_NAME = "files-store";
 
 // Official Excalidraw uses 24h. Recent deletes remain recoverable via undo

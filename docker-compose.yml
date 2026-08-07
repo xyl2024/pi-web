@@ -1,5 +1,5 @@
 services:
-  pi-web:
+  pi-work:
     build:
       context: .
       dockerfile: Dockerfile

@@ -1,5 +1,5 @@
 /**
- * iLink Bot CGI protocol types — minimal subset for the pi-web demo.
+ * iLink Bot CGI protocol types — minimal subset for the pi-work demo.
  * Mirrors the structure used by openclaw-weixin but trimmed to what
  * the demo actually needs.
  */

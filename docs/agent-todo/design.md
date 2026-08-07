@@ -2,7 +2,7 @@
 
 > 一个由 **pi agent 自己在会话内维护**的任务清单，附带一个实时 UI 界面，让用户能随时看到 agent 的计划与执行进度。
 >
-> **注意：这不是用户侧的 todo 列表**（`lib/todo-tools.ts` / `components/TodoPanel.tsx`，持久化到 `~/.pi-web/todos.db`）。两套系统相互独立，命名上刻意拉开距离，避免任何冲突。
+> **注意：这不是用户侧的 todo 列表**（`lib/todo-tools.ts` / `components/TodoPanel.tsx`，持久化到 `~/.pi-work/todos.db`）。两套系统相互独立，命名上刻意拉开距离，避免任何冲突。
 
 ---
 
@@ -14,7 +14,7 @@
 
 - agent 可以 `create` / `update` / `list` / `get` / `delete` / `clear` 任务，action 集合与 rpiv-todo 完全对齐。
 - 状态**绑定到单个会话分支**（这是 agent 的工作记忆，不是跨会话的长期记录）。fork 复制父计划；reload 重新水合；compact 不影响（因为不再依赖 `.jsonl`）。
-- 状态**独立持久化**到 `~/.pi-web/agent-todo/<sessionId>.jsonl`，追加写、保留每次变更的完整快照，方便追溯历史。文件可被 grep / `cat` / 备份工具直接读取。
+- 状态**独立持久化**到 `~/.pi-work/agent-todo/<sessionId>.jsonl`，追加写、保留每次变更的完整快照，方便追溯历史。文件可被 grep / `cat` / 备份工具直接读取。
 - UI 在一个流式 turn 内能感知到每一次变更，渲染**对话区域左侧空白处垂直居中的浮动面板**。
 - 不引入新的 DB、不引入新的 RPC 命令。
 
@@ -46,8 +46,8 @@
 | ---------- | -------------------------------------- | ------------------------------------------ |
 | 工具名     | `user_todos_list` / `user_todo_description` | `agent_todo`（单工具，action 区分）        |
 | `label`    | `User Todos List` / `User Todo Description` | `Agent Todo`                               |
-| 存储       | `~/.pi-web/todos.db`（SQLite）          | `~/.pi-web/agent-todo/<sessionId>.jsonl`（JSONL 追加写） |
-| 作用域     | 跨会话、跨 pi-web                      | 单个会话分支                              |
+| 存储       | `~/.pi-work/todos.db`（SQLite）          | `~/.pi-work/agent-todo/<sessionId>.jsonl`（JSONL 追加写） |
+| 作用域     | 跨会话、跨 pi-work                      | 单个会话分支                              |
 | 历史追溯   | 全部变更都在 DB 里可查                  | 每次 action 写一行 JSONL，含 `stateAfter`，可 `cat` / `grep` |
 | UI         | `TodoPanel` 右栏 tab                   | `AgentTodoPanel`，对话区域**左侧空白处垂直居中浮动** |
 
@@ -153,7 +153,7 @@ reducer 是纯函数；工具的 `execute` 调它，commit 新状态，返回结
 ```
 
 `details` 仍会进 session `.jsonl`（这是 pi 自己决定的，我们管不了），
-但**不**再依赖它做持久化 —— 真正的状态在 `~/.pi-web/agent-todo/<sessionId>.jsonl`
+但**不**再依赖它做持久化 —— 真正的状态在 `~/.pi-work/agent-todo/<sessionId>.jsonl`
 里，第 5 节会展开。`details` 只在 agent 自己的回放需要时作为 fallback
 （比如 agent 在另一个工具里读 `toolResult.details` 之类的场景）。
 
@@ -197,13 +197,13 @@ promptGuidelines:
 
 ## 5. 持久化：独立 JSONL 文件，按会话切分
 
-agent todo 状态独立持久化到 `~/.pi-web/agent-todo/<sessionId>.jsonl`。
+agent todo 状态独立持久化到 `~/.pi-work/agent-todo/<sessionId>.jsonl`。
 格式是 JSONL（每行一条 JSON），追加写，不做 in-place 改写。
 
 ### 5.1 目录与文件
 
 ```
-~/.pi-web/agent-todo/
+~/.pi-work/agent-todo/
   <sessionId-1>.jsonl
   <sessionId-2>.jsonl
   ...
@@ -290,9 +290,9 @@ O(n)，仅在用户主动查看历史时调用。
 
 | 事件                       | 文件动作                                                                                              |
 | -------------------------- | ----------------------------------------------------------------------------------------------------- |
-| 首次 `agent_todo` 调用      | `mkdir ~/.pi-web/agent-todo` + `appendFileSync` 创建文件 + 写第一行                                     |
+| 首次 `agent_todo` 调用      | `mkdir ~/.pi-work/agent-todo` + `appendFileSync` 创建文件 + 写第一行                                     |
 | `AgentSession.fork()`      | 复制 `parent.jsonl` → `child.jsonl`（保持父计划起点，子分支独立演进）                                  |
-| 删 session（DELETE 路由）  | `unlink` 对应 `~/.pi-web/agent-todo/<id>.jsonl`                                                       |
+| 删 session（DELETE 路由）  | `unlink` 对应 `~/.pi-work/agent-todo/<id>.jsonl`                                                       |
 | Next.js /reload / 服务重启 | 不动；下次打开会话时从文件读                                                                             |
 | Compact                    | 不动；agent todo 不再依赖 session `.jsonl`                                                               |
 
@@ -507,7 +507,7 @@ export function useAgentTodo(): {
 挂进 `useAgentSession` 的同一棵组件树（很可能挂在 `ChatWindow`
 或 `AppShell` 的 chat 容器节点上，与 `AgentTodoPanel` 兄弟。
 `sessionId` 变化时 Provider 重新拉取（在侧栏点开老会话，面板
-从 `~/.pi-web/agent-todo/<id>.jsonl` 末行水合）。
+从 `~/.pi-work/agent-todo/<id>.jsonl` 末行水合）。
 
 ### 7.4 与 `MessageView` 的关系
 
@@ -577,7 +577,7 @@ lib/
                                        （面板用）
 
 app/api/agent/[id]/
-  agent-todo/route.ts                  GET — 读 ~/.pi-web/agent-todo/<id>.jsonl
+  agent-todo/route.ts                  GET — 读 ~/.pi-work/agent-todo/<id>.jsonl
   events/route.ts                      +1 个 case：从 __piAgentTodoListeners
                                        透传 agent_todo_state
 
@@ -606,10 +606,10 @@ docs/agent-todo/
 | 事件                              | 发生什么                                                                                                    |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Session 创建                      | `customTools` 包含 `buildAgentTodoTool()`；工具立即可用。文件尚未创建。                                      |
-| `agent_todo` 首次调用             | `mkdir ~/.pi-web/agent-todo` + `appendFileSync` 创建文件 + 写第一行。                                         |
+| `agent_todo` 首次调用             | `mkdir ~/.pi-work/agent-todo` + `appendFileSync` 创建文件 + 写第一行。                                         |
 | `agent_todo` 后续调用             | 读末行 → reducer → 追加新行 + fsync → emit 实时事件 → 返回 tool 结果。                                       |
 | `AgentSession.fork()`             | `copyAgentTodoFile(parentId, newId)`；子分支继承父计划，独立演进。                                          |
-| 删 session（DELETE 路由）         | `unlink ~/.pi-web/agent-todo/<id>.jsonl`。                                                                   |
+| 删 session（DELETE 路由）         | `unlink ~/.pi-work/agent-todo/<id>.jsonl`。                                                                   |
 | 流式途中刷新页面                  | `GET /api/agent/[id]/agent-todo` 水合面板（读文件末行）；SSE 重连；实时事件继续。                            |
 | 打开不同 session                  | Provider 重新拉 endpoint、重新订阅 SSE。                                                                      |
 | Session 闲置 10 分钟              | `AgentSessionWrapper.destroy()` 触发；进程内 state 丢弃，文件不动；下次 reload 重新水合。                      |
@@ -634,7 +634,7 @@ docs/agent-todo/
 非不可替代"的位置（agent 重做会重新生成），但与 `todos.db` / 聊天
 记录同一目录。写操作走 `fs.appendFileSync` + `fsync`，不引入
 `cat > file` 这种截断惯用法；fork 复制走 `fs.copyFileSync`；删
-session 走 `fs.unlink` —— 全部走 Node 标准 API。手动 `cat > ~/.pi-web/agent-todo/...`
+session 走 `fs.unlink` —— 全部走 Node 标准 API。手动 `cat > ~/.pi-work/agent-todo/...`
 是用户的责任，与本设计无关。
 
 **自定义事件是自定义的。** SSE 通道已经透传 `session.onEvent` 的所有
@@ -670,10 +670,10 @@ guidance 文案，但这超出本文档范围。
 
 ## 12. 明确不在本设计内
 
-- **没有 `/todos` slash command。** pi-web 的 chat 输入框没有 slash
+- **没有 `/todos` slash command。** pi-work 的 chat 输入框没有 slash
   command 表面。web 里 `/todos` 的等价物就是始终可见的左侧浮动面板。
 - **没有"查看历史" UI。** history 数据全在 JSONL 里，可以
-  `cat ~/.pi-web/agent-todo/<id>.jsonl | jq`；endpoint
+  `cat ~/.pi-work/agent-todo/<id>.jsonl | jq`；endpoint
   `GET /api/agent/[id]/agent-todo/history` 也已留好。但不渲染到
   UI —— 历史是给排查用的，UI 上展示反而抢戏。如果将来要做"历史
   抽屉"，可以另起一节。

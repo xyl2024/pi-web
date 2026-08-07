@@ -10,7 +10,7 @@ import { extractTodoImageFilenames } from "@/lib/todo-images-utils";
 import { buildDescriptionSanitizeConfig } from "@/lib/description-sanitize";
 
 const log = createLogger("api/todos/[id]/export");
-const TODO_IMAGES_DIR = join(homedir(), ".pi-web", "todo_images");
+const TODO_IMAGES_DIR = join(homedir(), ".pi-work", "todo_images");
 
 // Build a filesystem-safe slug from the todo title. Keep ASCII letters/digits
 // and CJK ideographs; collapse everything else into a single hyphen. Cap at

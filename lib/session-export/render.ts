@@ -78,7 +78,7 @@ export function renderHtml(ctx: SessionRenderContext): string {
     "<head>",
     `<meta charset="utf-8">`,
     `<meta name="viewport" content="width=device-width, initial-scale=1">`,
-    `<meta name="generator" content="pi-web export">`,
+    `<meta name="generator" content="pi-work export">`,
     `<meta name="locale" content="${escapeHtml(ctx.locale)}">`,
     `<title>${escapeHtml(ctx.title)}</title>`,
     `<style>${EXPORT_CSS}</style>`,
@@ -107,7 +107,7 @@ function renderHeader(ctx: SessionRenderContext): string {
 
 // ─── Footer ────────────────────────────────────────────────
 function renderFooter(): string {
-  return '<footer class="export-footer">Exported from pi-web</footer>';
+  return '<footer class="export-footer">Exported from pi-work</footer>';
 }
 
 // ─── Per-message dispatch ──────────────────────────────────

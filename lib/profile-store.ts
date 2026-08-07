@@ -5,7 +5,7 @@ import { createLogger } from "./logger";
 
 const log = createLogger("profile-store");
 
-export const PROFILE_DIR = join(homedir(), ".pi-web", "profile");
+export const PROFILE_DIR = join(homedir(), ".pi-work", "profile");
 const USER_FILE = join(PROFILE_DIR, "user.json");
 const AVATAR_FILE = join(PROFILE_DIR, "avatar.png");
 
@@ -30,7 +30,7 @@ function normalizeUsername(raw: unknown): string | null {
 }
 
 /**
- * Read the user profile from ~/.pi-web/profile/user.json.
+ * Read the user profile from ~/.pi-work/profile/user.json.
  * Returns { username: null } when the file is missing or malformed.
  */
 export function readProfile(): UserProfile {
@@ -48,7 +48,7 @@ export function readProfile(): UserProfile {
 }
 
 /**
- * Write the user profile to ~/.pi-web/profile/user.json.
+ * Write the user profile to ~/.pi-work/profile/user.json.
  * Returns the normalized profile.
  */
 export function writeProfile(profile: UserProfile): UserProfile {

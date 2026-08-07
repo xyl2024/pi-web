@@ -6,7 +6,7 @@
  * pattern as `lib/scheduler-db.ts` so Next.js dev-mode HMR doesn't open
  * a fresh handle on every reload.
  *
- * File location: `~/.pi-web/rss.db` by default, override with `PI_WEB_RSS_DB`
+ * File location: `~/.pi-work/rss.db` by default, override with `PI_WORK_RSS_DB`
  * env var.
  *
  * Schema highlights:
@@ -32,9 +32,9 @@ declare global {
 }
 
 function resolveDbPath(): string {
-  const override = process.env.PI_WEB_RSS_DB?.trim();
+  const override = process.env.PI_WORK_RSS_DB?.trim();
   if (override) return override;
-  return join(homedir(), ".pi-web", "rss.db");
+  return join(homedir(), ".pi-work", "rss.db");
 }
 
 const SCHEMA = `

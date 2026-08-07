@@ -5,7 +5,7 @@
  * given a userId + time window, you can reconstruct everything that
  * happened in chronological order.
  *
- * File: ~/.pi-web/wechat/sessions.log (chmod 600 best-effort)
+ * File: ~/.pi-work/wechat/sessions.log (chmod 600 best-effort)
  */
 import { appendFileSync, mkdirSync, existsSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -24,7 +24,7 @@ export type SessionLogEvent =
   | { kind: "reply_failed"; sessionId: string; fromUserId: string; error: string };
 
 function logPath(): string {
-  return join(homedir(), ".pi-web", "wechat", "sessions.log");
+  return join(homedir(), ".pi-work", "wechat", "sessions.log");
 }
 
 let initialized = false;
@@ -34,7 +34,7 @@ function ensureInit(): void {
   const p = logPath();
   if (!existsSync(p)) {
     try {
-      mkdirSync(join(homedir(), ".pi-web", "wechat"), { recursive: true });
+      mkdirSync(join(homedir(), ".pi-work", "wechat"), { recursive: true });
       writeFileSync(p, "", "utf8");
     } catch {
       // best-effort

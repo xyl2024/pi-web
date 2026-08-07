@@ -13,10 +13,10 @@
                        ↓                 ↓                     ↓
                 lib/inbox-store     /api/inbox/messages   InboxBell (badge)
                        ↓                 ↓                     ↓
-                ~/.pi-web/inbox.db   GET / DELETE          InboxModal (5s 轮询)
+                ~/.pi-work/inbox.db   GET / DELETE          InboxModal (5s 轮询)
 ```
 
-- **写入**：推送源 `import { pushMessage } from "@/lib/inbox-store"` → SQLite（`~/.pi-web/inbox.db`，可用 `PI_WEB_INBOX_DB` 覆盖）
+- **写入**：推送源 `import { pushMessage } from "@/lib/inbox-store"` → SQLite（`~/.pi-work/inbox.db`，可用 `PI_WORK_INBOX_DB` 覆盖）
 - **读取**：
   - 铃铛 badge：30s 轮询 `?limit=500`，返回的消息总数即 badge 数字（消息清空后下次轮询归零）
   - 模态列表：5s 轮询 `?limit=200`（仅模态打开时挂载定时器，关闭即卸载）
@@ -132,7 +132,7 @@ export class InboxValidationError extends Error {
 - **索引**：`idx_inbox_messages_ts (ts DESC)` + `idx_inbox_messages_source_ts (source, ts DESC)`
 - **单例**：通过 `globalThis.__piInboxDb` 防止 Next.js dev HMR 重复打开句柄（与 `lib/scheduler-db.ts` 同样的模式）
 - **WAL + synchronous = NORMAL**：高频插入友好
-- **环境变量**：`PI_WEB_INBOX_DB` 覆盖默认路径 `~/.pi-web/inbox.db`
+- **环境变量**：`PI_WORK_INBOX_DB` 覆盖默认路径 `~/.pi-work/inbox.db`
 
 ### 关键 API
 

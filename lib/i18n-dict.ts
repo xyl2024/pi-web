@@ -359,7 +359,7 @@ export const ZH_TRANSLATIONS = {
   "WeChat account linked": "微信账号已绑定",
   "WeChat account logged out": "微信账号已退出",
   "Message sent": "消息已发送",
-  "Hello from pi-web!": "你好，这是来自 pi-web 的消息！",
+  "Hello from pi-work!": "你好，这是来自 pi-work 的消息！",
   "Account": "账号",
   "Known contacts": "已联系过的用户",
   "No contacts yet. Ask a friend to scan the QR above and send you a message — they'll appear here.":

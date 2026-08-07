@@ -30,7 +30,7 @@ export function readThemeBg(preset: ThemePreset, isDark: boolean): string {
 // Evaluate the code block as JS that produces an ECharts `option`.
 //
 // SECURITY: this runs LLM-generated JavaScript via `new Function` (never
-// `eval`). pi-web is a local single-user tool and the content originates from
+// `eval`). pi-work is a local single-user tool and the content originates from
 // the user's own assistant session, so the trust boundary is the same as any
 // other rendered assistant output. Every evaluation is wrapped in try/catch so
 // a malformed option can never take down the surrounding page.

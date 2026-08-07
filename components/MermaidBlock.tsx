@@ -15,7 +15,7 @@ function loadLib(): Promise<typeof BeautifulMermaid> {
 }
 
 // Strip the Google Fonts @import that beautiful-mermaid embeds for the chosen
-// `font` option. pi-web's own font stack handles typography elsewhere; the
+// `font` option. pi-work's own font stack handles typography elsewhere; the
 // @import would otherwise trigger a network round-trip on first render and
 // makes the rendered SVG non-self-contained when network is restricted.
 // The font-family CSS rule is left intact, so the browser falls back through

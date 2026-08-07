@@ -3,7 +3,7 @@
 // Used by app/api/sessions/[id]/export to materialise show_file referenced
 // paths into self-contained `data:` URLs. Reuses the same `getAllowedRoots`
 // allowlist as the in-conversation show_file tool so the export never expands
-// the permissions boundary beyond what the user could already read in pi-web.
+// the permissions boundary beyond what the user could already read in pi-work.
 //
 // 5 MB threshold (5 * 1024 * 1024 bytes) — anything larger becomes a "skipped"
 // placeholder so the rendered HTML stays portable (under most SMTP gateways).

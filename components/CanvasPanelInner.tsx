@@ -26,7 +26,7 @@ import {
 // the IndexedDB image storage change — v1 image elements stored `fileId`
 // references without ever persisting the dataURL, so those images are
 // unrecoverable on reload. New keys cleanly orphan the v1 entry.
-const STORAGE_KEY = "pi-web:canvas:v2";
+const STORAGE_KEY = "pi-work:canvas:v2";
 const STORAGE_VERSION = 2;
 const DEBOUNCE_MS = 300;
 
@@ -290,12 +290,12 @@ export function CanvasPanelInner() {
 
   const theme = isDark ? "dark" as const : "light" as const;
 
-  // Map pi-web's "en" | "zh" locale to Excalidraw's BCP-47 language code.
+  // Map pi-work's "en" | "zh" locale to Excalidraw's BCP-47 language code.
   // Excalidraw internally calls `setLanguage(langCode)` inside
   // `InitializeApp` on every change (see packages/excalidraw/components/
   // InitializeApp.tsx), which dynamically imports the matching
   // `./locales/<code>.json` and re-renders translated strings. The canvas
-  // content (elements + appState) is persisted in pi-web's own localStorage
+  // content (elements + appState) is persisted in pi-work's own localStorage
   // and survives the brief remount during a language switch.
   const langCode = locale === "zh" ? "zh-CN" : "en";
 

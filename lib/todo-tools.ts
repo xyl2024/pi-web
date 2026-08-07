@@ -1,5 +1,5 @@
 /**
- * Custom Pi Agent tools for the pi-web todo list.
+ * Custom Pi Agent tools for the pi-work todo list.
  *
  * Two read-only tools are exposed to the agent:
  * - `user_todos_list`: lightweight summary (no description, no images),
@@ -9,9 +9,9 @@
  *
  * The agent never creates, updates, or deletes todos — those operations
  * remain user-side only. Custom tools are registered on `createAgentSession`
- * (see lib/rpc-manager.ts) so they only exist inside pi-web sessions.
+ * (see lib/rpc-manager.ts) so they only exist inside pi-work sessions.
  *
- * Files touched: ~/.pi-web/todos.db (via lib/todo-store.ts). No writes
+ * Files touched: ~/.pi-work/todos.db (via lib/todo-store.ts). No writes
  * are performed by these tools.
  *
  * The pure payload builders live in `lib/todo-tools-payloads.ts` so tests
@@ -123,7 +123,7 @@ const userTodosListTool = defineTool<typeof ListParams, ListDetails>({
   name: "user_todos_list",
   label: "User Todos List",
   description:
-    "Look up the user's pi-web todos and return a lightweight summary (no full description, no images). " +
+    "Look up the user's pi-work todos and return a lightweight summary (no full description, no images). " +
     "Each item exposes id, todo_name (title), status ('done' or 'processing'), priority ('high'/'medium'/'low' — omitted when unset), " +
     "create_time and due_time (epoch ms), tags, " +
     "and — for done items — completion_note (rich-text HTML) and completed_at (epoch ms). " +

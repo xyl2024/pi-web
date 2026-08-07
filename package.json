@@ -1,9 +1,9 @@
 {
-  "name": "@agegr/pi-web",
+  "name": "@xyl2024/pi-work",
   "version": "0.6.11",
-  "description": "Web UI for the pi coding agent",
+  "description": "Pi Work — Web UI for the pi coding agent",
   "bin": {
-    "pi-web": "bin/pi-web.js"
+    "pi-work": "bin/pi-work.js"
   },
   "files": [
     "bin",

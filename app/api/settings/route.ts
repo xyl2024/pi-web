@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readConfig, writeConfig, type PiWebConfig } from "@/lib/config";
+import { readConfig, writeConfig, type PiWorkConfig } from "@/lib/config";
 import { createLogger, elapsedMs } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ export async function GET() {
 export async function PUT(req: Request) {
   const startedAt = Date.now();
   try {
-    const body = (await req.json()) as PiWebConfig;
+    const body = (await req.json()) as PiWorkConfig;
     writeConfig(body);
     log.info("settings written", { durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ success: true });

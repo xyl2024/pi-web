@@ -9,7 +9,7 @@
  * the project root.
  *
  * Override order:
- *   1. `PI_WEB_PUBLIC_BASE_URL` — explicit public origin (recommended when
+ *   1. `PI_WORK_PUBLIC_BASE_URL` — explicit public origin (recommended when
  *      running behind a reverse proxy / ngrok / tunnel).
  *   2. `NEXTAUTH_URL` — NextAuth convention, often already set to the public
  *      origin in production.
@@ -48,7 +48,7 @@ function tryParse(value: string): string | undefined {
 
 function pickBaseUrl(): string {
   const candidates: Array<string | undefined> = [
-    process.env.PI_WEB_PUBLIC_BASE_URL?.trim(),
+    process.env.PI_WORK_PUBLIC_BASE_URL?.trim(),
     process.env.NEXTAUTH_URL?.trim(),
     process.env.BASE_URL?.trim(),
     `http://localhost:${process.env.PORT ?? DEFAULT_DEV_PORT}`,

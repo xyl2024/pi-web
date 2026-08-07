@@ -1,4 +1,4 @@
-# pi-web
+# pi-work
 
 [pi 编程智能体](https://github.com/badlogic/pi-mono) 的网页界面。在浏览器中浏览会话、与智能体对话、分叉对话、切换消息分支。
 
@@ -7,14 +7,14 @@
 **无需安装，直接运行：**
 
 ```bash
-npx @agegr/pi-web@latest
+npx @xyl2024/pi-work@latest
 ```
 
 **或全局安装后使用：**
 
 ```bash
-npm install -g @agegr/pi-web
-pi-web
+npm install -g @xyl2024/pi-work
+pi-work
 ```
 
 启动后打开 [http://localhost:30141](http://localhost:30141)。
@@ -22,11 +22,11 @@ pi-web
 **可选参数：**
 
 ```bash
-pi-web --port 8080               # 自定义端口
-pi-web --hostname 127.0.0.1      # 仅本机访问
-pi-web -p 8080 -H 127.0.0.1     # 组合使用
+pi-work --port 8080               # 自定义端口
+pi-work --hostname 127.0.0.1      # 仅本机访问
+pi-work -p 8080 -H 127.0.0.1     # 组合使用
 
-PORT=8080 pi-web                 # 也支持环境变量
+PORT=8080 pi-work                 # 也支持环境变量
 ```
 
 ## 功能介绍
@@ -56,34 +56,34 @@ npm run dev   # 端口 30141
 
 ## 后端日志
 
-pi-web 后端日志会同时输出到启动进程的终端，并追加写入日志文件。
+pi-work 后端日志会同时输出到启动进程的终端，并追加写入日志文件。
 
 默认日志文件：
 
 ```bash
-~/.pi-web/logs/pi-web-YYYY-MM-DD.log
+~/.pi-work/logs/pi-work-YYYY-MM-DD.log
 ```
 
 可用环境变量调整：
 
 ```bash
-PI_WEB_LOG_LEVEL=debug npm run dev              # debug/info/warn/error
-PI_WEB_LOG_FILE=/tmp/pi-web.log npm run dev     # 指定日志文件基名，实际写入 /tmp/pi-web-YYYY-MM-DD.log
-PI_WEB_LOG_DIR=/tmp/pi-web-logs npm run dev     # 指定日志目录，实际写入该目录下 pi-web-YYYY-MM-DD.log
-PI_WEB_LOG_FILE=off npm run dev                 # 关闭文件日志，仅输出终端
+PI_WORK_LOG_LEVEL=debug npm run dev              # debug/info/warn/error
+PI_WORK_LOG_FILE=/tmp/pi-work.log npm run dev     # 指定日志文件基名，实际写入 /tmp/pi-work-YYYY-MM-DD.log
+PI_WORK_LOG_DIR=/tmp/pi-work-logs npm run dev     # 指定日志目录，实际写入该目录下 pi-work-YYYY-MM-DD.log
+PI_WORK_LOG_FILE=off npm run dev                 # 关闭文件日志，仅输出终端
 ```
 
 Docker Compose 默认将 `/home/node` 挂载为 volume，容器内默认日志路径为：
 
 ```bash
-/home/node/.pi-web/logs/pi-web-YYYY-MM-DD.log
+/home/node/.pi-work/logs/pi-work-YYYY-MM-DD.log
 ```
 
 查看 Docker 日志：
 
 ```bash
-docker compose logs -f pi-web
-tail -f ./volumes/pi_home/.pi-web/logs/pi-web-$(date +%F).log
+docker compose logs -f pi-work
+tail -f ./volumes/pi_home/.pi-work/logs/pi-work-$(date +%F).log
 ```
 
 ## 生产模式启动
@@ -97,7 +97,7 @@ tail -f ./volumes/pi_home/.pi-web/logs/pi-web-$(date +%F).log
 - 默认数据目录为 `~/.pi/agent`；如需自定义可设置 `PI_CODING_AGENT_DIR`
 
 ```bash
-cd /home/alone/p/pi-web
+cd /home/alone/p/pi-work
 npm ci
 npm run build
 ```

@@ -25,7 +25,7 @@ import {
 const log = createLogger("api/rss/fetch");
 
 const PREVIEW_CHARS = 500;
-const PREVIEW_USER_AGENT = "pi-web/0.6 (+rss-preview)";
+const PREVIEW_USER_AGENT = "pi-work/0.6 (+rss-preview)";
 
 interface FetchBody {
   feedId?: unknown;

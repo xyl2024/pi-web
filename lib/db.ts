@@ -6,8 +6,8 @@
  * `globalThis` so Next.js dev-mode HMR doesn't open a fresh handle on every
  * reload.
  *
- * File location: `~/.pi-web/todos.db` by default, override with
- * `PI_WEB_TODOS_DB` env var.
+ * File location: `~/.pi-work/todos.db` by default, override with
+ * `PI_WORK_TODOS_DB` env var.
  */
 
 import Database from "better-sqlite3";
@@ -24,9 +24,9 @@ declare global {
 }
 
 function resolveDbPath(): string {
-  const override = process.env.PI_WEB_TODOS_DB?.trim();
+  const override = process.env.PI_WORK_TODOS_DB?.trim();
   if (override) return override;
-  return join(homedir(), ".pi-web", "todos.db");
+  return join(homedir(), ".pi-work", "todos.db");
 }
 
 const SCHEMA = `
@@ -164,7 +164,7 @@ function ensurePriorityColumn(db: Database.Database): void {
 }
 
 /**
- * One-shot import from the legacy `~/.pi-web/todos.json` into the new DB.
+ * One-shot import from the legacy `~/.pi-work/todos.json` into the new DB.
  * Called from `getDb()` on first open. The original JSON is renamed (not
  * deleted) to `todos.json.migrated.<unix_ts>` so the data is preserved as
  * a fallback.

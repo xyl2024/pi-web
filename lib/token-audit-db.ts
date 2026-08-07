@@ -8,8 +8,8 @@
  * (continuous INSERT per pi `message_end`, no cascade) shouldn't entangle with
  * any other domain.
  *
- * File location: `~/.pi-web/token-audit.db` by default, override with
- * `PI_WEB_TOKEN_AUDIT_DB` env var.
+ * File location: `~/.pi-work/token-audit.db` by default, override with
+ * `PI_WORK_TOKEN_AUDIT_DB` env var.
  */
 
 import Database from "better-sqlite3";
@@ -26,9 +26,9 @@ declare global {
 }
 
 function resolveDbPath(): string {
-  const override = process.env.PI_WEB_TOKEN_AUDIT_DB?.trim();
+  const override = process.env.PI_WORK_TOKEN_AUDIT_DB?.trim();
   if (override) return override;
-  return join(homedir(), ".pi-web", "token-audit.db");
+  return join(homedir(), ".pi-work", "token-audit.db");
 }
 
 const SCHEMA = `

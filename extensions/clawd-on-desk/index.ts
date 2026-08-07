@@ -317,9 +317,9 @@ function getProcessMetadata(): ProcessMetadata {
 
 export default function clawdPiExtension(pi: ExtensionAPI): void {
   core.attach(pi, {
-    // pi-web never calls bindExtensions() on its AgentSession, so ctx.hasUI
+    // pi-work never calls bindExtensions() on its AgentSession, so ctx.hasUI
     // resolves to false here even though every session is user-initiated.
-    // Override the default UI gate: pi-web sessions are always user-facing,
+    // Override the default UI gate: pi-work sessions are always user-facing,
     // and clawd-on-desk's postState fails silently if no server is listening.
     shouldReport: () => true,
     buildPayload: ({ state, event, nativeEvent, ctx }: {

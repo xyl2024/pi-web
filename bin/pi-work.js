@@ -44,7 +44,7 @@ if (!fs.existsSync(nextDir)) {
   process.exit(1);
 }
 
-const runtimeCwd = process.env.PI_WEB_WORKDIR || process.cwd();
+const runtimeCwd = process.env.PI_WORK_WORKDIR || process.cwd();
 const nextArgs = ["start", pkgDir, "-p", port];
 if (hostname) nextArgs.push("-H", hostname);
 

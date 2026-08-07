@@ -517,7 +517,7 @@ export async function startRpcSession(
     const enabledCustom = readEnabledCustomTools();
     // Build path list for vendored built-in extensions. Read once per session start.
     const additionalExtensionPaths: string[] = [];
-    // APPEND_SYSTEM.md loader toggle (see PiWebConfig.append_system): when the
+    // APPEND_SYSTEM.md loader toggle (see PiWorkConfig.append_system): when the
     // user has disabled it, we hand DefaultResourceLoader an explicit empty
     // array so the `??` on `appendSystemPromptSource` short-circuits and
     // `discoverAppendSystemPromptFile()` never runs. Read once per session
@@ -654,9 +654,9 @@ export async function startRpcSession(
       sessionManager,
       resourceLoader,
       // Per-session customTools: user_todos_list / user_todo_description are
-      // gated by ~/.pi-web/todo-tools.json (see todo-tools-config); the two
+      // gated by ~/.pi-work/todo-tools.json (see todo-tools-config); the two
       // agent-side tools (show_file, agent_todo) are gated by
-      // ~/.pi-web/config.yaml → custom_tools.enabled. Read at startRpcSession
+      // ~/.pi-work/config.yaml → custom_tools.enabled. Read at startRpcSession
       // time only — already-running sessions keep their original tool set.
       customTools: [
         ...buildTodoTools(readEnabledTodoTools()),

@@ -5,7 +5,7 @@ import { createLogger, elapsedMs } from "@/lib/logger";
 import { readStringArray, writeStringArray } from "@/lib/json-array-store";
 
 const log = createLogger("api/favorites");
-const FAVORITES_FILE = join(homedir(), ".pi-web", "favorites.json");
+const FAVORITES_FILE = join(homedir(), ".pi-work", "favorites.json");
 
 // GET /api/favorites
 export async function GET() {

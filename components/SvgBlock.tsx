@@ -31,7 +31,7 @@ const SVG_TAG_RE = /<svg[\s>]/i;
  * before injection via dangerouslySetInnerHTML. That profile strips
  * `<script>`, event handlers, `javascript:` URLs, and other active content
  * while preserving the SVG element + attribute set — so a hostile SVG
- * cannot execute JS in the pi-web page context.
+ * cannot execute JS in the pi-work page context.
  *
  * If the sanitized output doesn't contain an `<svg>` element (invalid
  * markup, empty block, comments-only, host of active content that DOMPurify

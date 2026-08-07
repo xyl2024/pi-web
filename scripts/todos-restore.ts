@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Rollback tool: read `~/.pi-web/todos.db` and write a fresh
- * `~/.pi-web/todos.json` (or a custom path). Use this if the SQLite-backed
+ * Rollback tool: read `~/.pi-work/todos.db` and write a fresh
+ * `~/.pi-work/todos.json` (or a custom path). Use this if the SQLite-backed
  * code path needs to be reverted to the previous JSON-file implementation.
  *
  * Usage:
@@ -46,8 +46,8 @@ interface Todo {
 function parseArgs(argv: string[]): { dbPath: string; outPath: string } {
   const dbOverride = argv.find((a) => a.startsWith("--db="))?.slice("--db=".length);
   const outOverride = argv.find((a) => a.startsWith("--out="))?.slice("--out=".length);
-  const dbPath = dbOverride ?? process.env.PI_WEB_TODOS_DB ?? join(homedir(), ".pi-web", "todos.db");
-  const outPath = outOverride ?? join(homedir(), ".pi-web", "todos.json");
+  const dbPath = dbOverride ?? process.env.PI_WORK_TODOS_DB ?? join(homedir(), ".pi-work", "todos.db");
+  const outPath = outOverride ?? join(homedir(), ".pi-work", "todos.json");
   return { dbPath, outPath };
 }
 

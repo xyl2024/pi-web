@@ -637,7 +637,7 @@ export function upsertArticlesFromFeedXml(
 // Fetch + refresh (the bit the loop and the manual /fetch route share)
 // ---------------------------------------------------------------------------
 
-const RSS_USER_AGENT = "pi-web/0.6 (+rss)";
+const RSS_USER_AGENT = "pi-work/0.6 (+rss)";
 
 /** Record the outcome of a fetch attempt so the UI can show stale/error state. */
 function recordFetchOutcome(feedId: string, fields: {

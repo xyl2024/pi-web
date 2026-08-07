@@ -11,11 +11,11 @@ declare global {
 }
 
 // POST /api/default-cwd
-// Creates ~/.pi-web/workspace/pi-cwd-default if it doesn't exist and returns the path.
+// Creates ~/.pi-work/workspace/pi-cwd-default if it doesn't exist and returns the path.
 export async function POST() {
   const startedAt = Date.now();
   try {
-    const dir = join(homedir(), ".pi-web", "workspace", "pi-cwd-default");
+    const dir = join(homedir(), ".pi-work", "workspace", "pi-cwd-default");
     mkdirSync(dir, { recursive: true });
     globalThis.__piAllowedRootsCache?.roots.add(dir);
     log.info("default cwd created", { cwd: dir, durationMs: elapsedMs(startedAt) });

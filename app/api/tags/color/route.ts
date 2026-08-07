@@ -5,7 +5,7 @@ import { createLogger, elapsedMs } from "@/lib/logger";
 import { setTagColor, TodoValidationError } from "@/lib/todo-store";
 
 const log = createLogger("api/tags-color");
-const TODOS_FILE = join(homedir(), ".pi-web", "todos.json");
+const TODOS_FILE = join(homedir(), ".pi-work", "todos.json");
 
 function validationResponse(err: TodoValidationError) {
   return NextResponse.json({ error: err.message }, { status: 400 });

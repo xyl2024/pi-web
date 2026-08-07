@@ -7,8 +7,8 @@
  * the schemas are unrelated and the lifecycle (delete with cascade) should
  * not entangle the two domains.
  *
- * File location: `~/.pi-web/scheduler.db` by default, override with
- * `PI_WEB_SCHEDULER_DB` env var.
+ * File location: `~/.pi-work/scheduler.db` by default, override with
+ * `PI_WORK_SCHEDULER_DB` env var.
  */
 
 import Database from "better-sqlite3";
@@ -25,9 +25,9 @@ declare global {
 }
 
 function resolveDbPath(): string {
-  const override = process.env.PI_WEB_SCHEDULER_DB?.trim();
+  const override = process.env.PI_WORK_SCHEDULER_DB?.trim();
   if (override) return override;
-  return join(homedir(), ".pi-web", "scheduler.db");
+  return join(homedir(), ".pi-work", "scheduler.db");
 }
 
 const SCHEMA = `

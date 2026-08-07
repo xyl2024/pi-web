@@ -45,7 +45,7 @@ export interface AgentTodoDetails {
   error?: string;
 }
 
-/** One row of `~/.pi-web/agent-todo/<sessionId>.jsonl`. */
+/** One row of `~/.pi-work/agent-todo/<sessionId>.jsonl`. */
 export interface AgentTodoLogEntry {
   v: 1;
   ts: number;

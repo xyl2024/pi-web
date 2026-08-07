@@ -6,7 +6,7 @@
  *
  * Validation reuses lib/file-access.ts so the path is restricted to the
  * same allowed roots the `/api/files` route enforces (sessions' cwds +
- * `~/.pi-web/workspace/pi-cwd-*`).
+ * `~/.pi-work/workspace/pi-cwd-*`).
  *
  * IMPORTANT: This file imports `@earendil-works/pi-coding-agent`, which
  * transitively pulls in server-only Node modules. Client code that needs

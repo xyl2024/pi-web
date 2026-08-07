@@ -6,8 +6,8 @@
  * - WAL + NORMAL synchronous for fast inserts
  * - globalThis singleton so Next.js dev-mode HMR doesn't reopen the handle
  *
- * File location: `~/.pi-web/inbox.db` by default, override with
- * `PI_WEB_INBOX_DB` env var.
+ * File location: `~/.pi-work/inbox.db` by default, override with
+ * `PI_WORK_INBOX_DB` env var.
  */
 
 import Database from "better-sqlite3";
@@ -23,9 +23,9 @@ declare global {
 }
 
 function resolveDbPath(): string {
-  const override = process.env.PI_WEB_INBOX_DB?.trim();
+  const override = process.env.PI_WORK_INBOX_DB?.trim();
   if (override) return override;
-  return join(homedir(), ".pi-web", "inbox.db");
+  return join(homedir(), ".pi-work", "inbox.db");
 }
 
 const SCHEMA = `

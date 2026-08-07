@@ -3,7 +3,7 @@
  *
  * The model invokes one of `create | update | list | get | delete | clear`
  * in each call. The wrapper:
- *   1. reads the current task state from `~/.pi-web/agent-todo/<sid>.jsonl`,
+ *   1. reads the current task state from `~/.pi-work/agent-todo/<sid>.jsonl`,
  *   2. runs the pure reducer to produce a new state,
  *   3. appends an audit entry to the JSONL file (with fsync),
  *   4. emits an `agent_todo_state` event to in-process listeners,

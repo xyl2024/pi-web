@@ -1,6 +1,6 @@
 # `third/openclaw-weixin` — OpenClaw 微信通道插件解析
 
-> 范围：`/home/alone/p/pi-web/third/openclaw-weixin`（即 npm 包 `@tencent-weixin/openclaw-weixin`，当前版本 2.4.3）。本文档只讲"它怎么和 OpenClaw 接驳"，不重复 README 里的用户操作步骤。
+> 范围：`/home/alone/p/pi-work/third/openclaw-weixin`（即 npm 包 `@tencent-weixin/openclaw-weixin`，当前版本 2.4.3）。本文档只讲"它怎么和 OpenClaw 接驳"，不重复 README 里的用户操作步骤。
 
 ---
 

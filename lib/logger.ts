@@ -16,7 +16,7 @@ let fileLogPathBase: string | null | undefined;
 let fileLoggingFailed = false;
 
 function getConfiguredLevel(): LogLevel {
-  const value = process.env.PI_WEB_LOG_LEVEL?.toLowerCase();
+  const value = process.env.PI_WORK_LOG_LEVEL?.toLowerCase();
   if (value === "debug" || value === "info" || value === "warn" || value === "error") {
     return value;
   }
@@ -47,10 +47,10 @@ function resolveConfiguredPath(value: string): string {
 }
 
 function getDefaultLogDir(): string {
-  const configuredDir = process.env.PI_WEB_LOG_DIR?.trim();
+  const configuredDir = process.env.PI_WORK_LOG_DIR?.trim();
   if (configuredDir) return resolveConfiguredPath(configuredDir);
 
-  return join(homedir(), ".pi-web", "logs");
+  return join(homedir(), ".pi-work", "logs");
 }
 
 function getDateStamp(date = new Date()): string {
@@ -70,7 +70,7 @@ function addDateToFileName(filePath: string, dateStamp: string): string {
 function getFileLogPathBase(): string | null {
   if (fileLogPathBase !== undefined) return fileLogPathBase;
 
-  const configuredFile = process.env.PI_WEB_LOG_FILE?.trim();
+  const configuredFile = process.env.PI_WORK_LOG_FILE?.trim();
   if (configuredFile?.toLowerCase() === "off" || configuredFile?.toLowerCase() === "false") {
     fileLogPathBase = null;
     return fileLogPathBase;
@@ -78,7 +78,7 @@ function getFileLogPathBase(): string | null {
 
   fileLogPathBase = configuredFile
     ? resolveConfiguredPath(configuredFile)
-    : join(getDefaultLogDir(), "pi-web.log");
+    : join(getDefaultLogDir(), "pi-work.log");
   return fileLogPathBase;
 }
 
