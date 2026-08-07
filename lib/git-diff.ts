@@ -9,11 +9,19 @@ import path from "path";
 import { createLogger } from "@/lib/logger";
 import type { GitDiffFile, GitFileStatus } from "@/lib/git-diff-types";
 
+declare global {
+  // Short-lived cache for getRepoRoot — same `globalThis` pattern as
+  // __piAllowedRootsCache, so it survives Next.js hot reload.
+  var __piRepoRootCache: Map<string, { root: string | null; expiresAt: number }> | undefined;
+}
+
 const execFileAsync = promisify(execFile);
 
 const log = createLogger("git-diff");
 
 const GIT_TIMEOUT_MS = 10_000;
+/** TTL for the getRepoRoot cache; same 5s window as getAllowedRoots. */
+const REPO_ROOT_TTL_MS = 5_000;
 
 /** Cap on a single file's diff output; anything larger is truncated and
  *  flagged so the panel can show a warning instead of a frozen UI. */
@@ -49,12 +57,21 @@ async function runGit(cwd: string, args: string[]): Promise<GitResult | null> {
 }
 
 /** Absolute repo root for cwd, or null when cwd is not inside a git repo
- *  (or git is not installed). */
+ *  (or git is not installed). Cached for 5s in `globalThis` so the burst
+ *  of `git rev-parse` spawns from `/api/git` + `/api/git/diff` (open
+ *  panel → click files → toggle staged) collapses to one. */
 export async function getRepoRoot(cwd: string): Promise<string | null> {
+  const now = Date.now();
+  const cache = globalThis.__piRepoRootCache;
+  if (cache) {
+    const hit = cache.get(cwd);
+    if (hit && hit.expiresAt > now) return hit.root;
+  }
   const res = await runGit(cwd, ["rev-parse", "--show-toplevel"]);
-  if (!res) return null;
-  const root = res.stdout.trim();
-  return root || null;
+  const root = res ? res.stdout.trim() || null : null;
+  if (!cache) globalThis.__piRepoRootCache = new Map();
+  globalThis.__piRepoRootCache!.set(cwd, { root, expiresAt: now + REPO_ROOT_TTL_MS });
+  return root;
 }
 
 /** Current branch name, or null (detached HEAD / bare / no repo). */
@@ -149,39 +166,52 @@ export async function getRepoStatus(cwd: string): Promise<{
     return { repoRoot: null, branch: null, files: [] };
   }
 
-  const [statusRes, unstagedNumstat, stagedNumstat, branch] = await Promise.all([
-    runGit(repoRoot, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]),
+  // `git status --untracked-files=no` skips the (expensive) untracked scan,
+  // which we run in parallel via `git ls-files --others --exclude-standard`.
+  // Result is equivalent to `--untracked-files=all` for our per-file list
+  // (every untracked file appears as `??`), without forcing `status` to
+  // recursively walk every untracked directory.
+  const [statusRes, untrackedRes, unstagedNumstat, stagedNumstat, branch] = await Promise.all([
+    runGit(repoRoot, ["status", "--porcelain=v1", "-z", "--untracked-files=no"]),
+    runGit(repoRoot, ["ls-files", "--others", "--exclude-standard", "-z"]),
     runGit(repoRoot, ["diff", "--numstat", "-z"]),
     runGit(repoRoot, ["diff", "--cached", "--numstat", "-z"]),
     getBranch(repoRoot),
   ]);
 
-  const files: GitDiffFile[] = [];
-  if (statusRes) {
-    const unstagedStats = unstagedNumstat ? parseNumstatZ(unstagedNumstat.stdout) : new Map();
-    const stagedStats = stagedNumstat ? parseNumstatZ(stagedNumstat.stdout) : new Map();
-
-    for (const rec of parseStatusZ(statusRes.stdout)) {
-      // Untracked files don't appear in numstat; count lines directly.
-      let add = 0, del = 0;
-      if (rec.status === "??") {
-        const counted = countUntrackedLines(repoRoot, rec.path);
-        if (counted) { add = counted.add; del = counted.del; }
-      } else {
-        const u = unstagedStats.get(rec.path);
-        const s = stagedStats.get(rec.path);
-        add = (u?.add ?? 0) + (s?.add ?? 0);
-        del = (u?.del ?? 0) + (s?.del ?? 0);
-      }
-      files.push({
-        path: rec.path,
-        status: rec.status,
-        hasStaged: rec.hasStaged,
-        hasUnstaged: rec.hasUnstaged,
-        additions: add,
-        deletions: del,
-      });
+  const records = parseStatusZ(statusRes?.stdout ?? "");
+  // Untracked files come from `ls-files --others` (one path per NUL token);
+  // status with `--untracked-files=no` never produces `??` entries.
+  if (untrackedRes) {
+    for (const p of untrackedRes.stdout.split("\0")) {
+      if (!p) continue;
+      records.push({ path: p, status: "??", hasStaged: false, hasUnstaged: true });
     }
+  }
+
+  const unstagedStats = unstagedNumstat ? parseNumstatZ(unstagedNumstat.stdout) : new Map();
+  const stagedStats = stagedNumstat ? parseNumstatZ(stagedNumstat.stdout) : new Map();
+  const files: GitDiffFile[] = [];
+  for (const rec of records) {
+    // Untracked files don't appear in numstat; count lines directly.
+    let add = 0, del = 0;
+    if (rec.status === "??") {
+      const counted = countUntrackedLines(repoRoot, rec.path);
+      if (counted) { add = counted.add; del = counted.del; }
+    } else {
+      const u = unstagedStats.get(rec.path);
+      const s = stagedStats.get(rec.path);
+      add = (u?.add ?? 0) + (s?.add ?? 0);
+      del = (u?.del ?? 0) + (s?.del ?? 0);
+    }
+    files.push({
+      path: rec.path,
+      status: rec.status,
+      hasStaged: rec.hasStaged,
+      hasUnstaged: rec.hasUnstaged,
+      additions: add,
+      deletions: del,
+    });
   }
 
   // Stable ordering: staged-first (M/A/D by index), then worktree changes,
