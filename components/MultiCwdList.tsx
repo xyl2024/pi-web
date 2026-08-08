@@ -331,9 +331,9 @@ function CwdGroup({
           cursor: "pointer",
         }}
       >
-        {/* Fold/unfold chevron — left side. Points down when expanded,
-            right when collapsed (rotates -90deg). Pure visual indicator;
-            clicking the header row toggles. */}
+        {/* Folder icon — marks this row as a cwd. The fold/unfold chevron
+            moved next to the basename (see below); clicking the header row
+            still toggles expand/collapse. */}
         <span
           aria-hidden
           style={{
@@ -341,20 +341,19 @@ function CwdGroup({
             width: 14, height: 22,
             color: "var(--text-dim)",
             flexShrink: 0,
-            transition: "transform 0.15s",
-            transform: expanded ? "rotate(0deg)" : "rotate(-90deg)",
           }}
         >
-          <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="2 4 5 7 8 4" />
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
           </svg>
         </span>
 
-        {/* Path (no count, no tooltip) */}
+        {/* Path — basename, then the fold/unfold chevron immediately after
+            (not right-aligned), then the running dot. */}
         <span
           style={{
             flex: 1, minWidth: 0,
-            display: "flex", alignItems: "center", gap: 6,
+            display: "flex", alignItems: "center", gap: 4,
             color: "var(--text-muted)",
             fontFamily: "var(--font-mono)",
             fontSize: 11,
@@ -362,10 +361,27 @@ function CwdGroup({
           }}
         >
           <span style={{
-            flex: 1, minWidth: 0,
+            flex: "0 1 auto", minWidth: 0,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>
             {basenameOf(workspace.cwd)}
+          </span>
+
+          {/* Fold/unfold chevron — sits right after the basename. Points
+              down when expanded, right when collapsed (rotates -90deg). */}
+          <span
+            aria-hidden
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+              color: "var(--text-dim)",
+              transition: "transform 0.15s",
+              transform: expanded ? "rotate(0deg)" : "rotate(-90deg)",
+            }}
+          >
+            <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="2 4 5 7 8 4" />
+            </svg>
           </span>
           {workspace.runningCount > 0 && (
             <span
