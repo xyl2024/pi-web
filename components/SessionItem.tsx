@@ -320,25 +320,10 @@ export function SessionItem({
               </svg>
             </span>
           )}
-          {/* Running indicator — pulses while the agent is between agent_start and agent_end */}
-          {session.running && (
-            <span
-              aria-label={t("running")}
-              title={t("running")}
-              style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
-            >
-              <span
-                className="animate-[pulse_1.5s_infinite]"
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: "var(--accent)",
-                }}
-              />
-            </span>
-          )}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Running indicator — the title turns accent and breathes slowly
+              while the agent is between agent_start and agent_end (replaces
+              the old pulsing dot; see pi-running-title-breathe keyframes) */}
+          <div style={{ flex: 1, minWidth: 0 }} aria-label={session.running ? `${title} (${t("running")})` : title}>
             <Tooltip content={title}>
             <div
               style={{
@@ -348,7 +333,8 @@ export function SessionItem({
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
-                color: "var(--text)",
+                color: session.running ? "var(--accent)" : "var(--text)",
+                animation: session.running ? "pi-running-title-breathe 2.8s ease-in-out infinite" : undefined,
               }}
             >
               {title}
