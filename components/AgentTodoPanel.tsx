@@ -25,7 +25,13 @@
  *   `n/m` counter and the in-progress task subject (when collapsed while
  *   an in-progress task exists).
  * - Panel height is capped at 30% of the chat container (`maxHeight: 30%`)
- *   so it never visually competes with the message column.
+ *   so it never visually competes with the message column. The panel itself
+ *   is a `flex column` with `overflow: hidden` and the scroll lives on the
+ *   inner task list, so the header stays pinned and visible no matter how
+ *   far the list is scrolled. (A `position: sticky` header was rejected: the
+ *   panel background is ~50% transparent, so a sticky header would need its
+ *   own opaque fill to avoid text-over-text bleed, which would show up as a
+ *   color patch on the translucent panel.)
  * - Read-only: no click-to-jump and no tooltip. Tasks are a static
  *   at-a-glance status display; the per-task "<button>" affordance was
  *   removed alongside the tooltip to keep the panel unambiguously passive.
@@ -156,11 +162,18 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
           // height so it never visually competes with the message column.
           // The chat container is `flex flex-1 overflow-hidden`, so its
           // height is well-defined and percentage resolution works.
+          //
+          // The panel clips rather than scrolls (`overflow: hidden`); the
+          // scrollport is the inner task list, which keeps the header row
+          // pinned at the top of the panel.
           position: "absolute",
           left: 16,
           top: 16,
           width: 256,
           maxHeight: "30%",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
           padding: "10px 6px",
           background: "color-mix(in srgb, var(--bg-panel) 50%, transparent)",
           backdropFilter: "blur(8px)",
@@ -168,7 +181,6 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
           border: "1px solid var(--border)",
           borderRadius: 8,
           boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-          overflowY: "auto",
           zIndex: 10,
           fontFamily: "var(--font-sans)",
           animation: "agent-todo-fade-in 200ms ease",
@@ -185,6 +197,9 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
             justifyContent: "space-between",
             gap: 8,
             width: "100%",
+            // Never let the flex container squeeze the header when the task
+            // list overflows — the list is the only thing allowed to shrink.
+            flexShrink: 0,
             padding: collapsed ? "0 8px" : "0 8px 8px",
             background: "transparent",
             border: "none",
@@ -241,7 +256,10 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
           </span>
         </button>
         {!collapsed && (
-          <div>
+          // minHeight: 0 lets this flex item shrink below its content height
+          // so `overflowY: auto` actually engages instead of overflowing the
+          // panel's maxHeight.
+          <div style={{ overflowY: "auto", minHeight: 0 }}>
             {sortedTasks.map((task, idx) => (
               <TaskRow
                 key={task.id}
