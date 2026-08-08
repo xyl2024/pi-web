@@ -36,20 +36,6 @@ interface Props {
   profileRefreshKey?: number;
 }
 
-function formatRelativeTime(dateStr: string, t: ReturnType<typeof useI18n>["t"]): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-  if (mins < 1) return t("just now");
-  if (mins < 60) return `${mins}m ${t("ago")}`;
-  if (hours < 24) return `${hours}h ${t("ago")}`;
-  if (days < 7) return `${days}d ${t("ago")}`;
-  return date.toLocaleDateString();
-}
-
 function shortenCwd(cwd: string, homeDir?: string): string {
   const path = (homeDir && cwd.startsWith(homeDir)) ? "~" + cwd.slice(homeDir.length) : cwd;
   const sep = path.includes("/") ? "/" : "\\";
@@ -58,55 +44,6 @@ function shortenCwd(cwd: string, homeDir?: string): string {
   return "…/" + parts.slice(-5).join(sep);
 }
 
-
-interface SessionTreeNode {
-  session: SessionInfo;
-  children: SessionTreeNode[];
-}
-
-function buildSessionTree(sessions: SessionInfo[]): SessionTreeNode[] {
-  const byId = new Map<string, SessionTreeNode>();
-  for (const s of sessions) {
-    byId.set(s.id, { session: s, children: [] });
-  }
-
-  // Build a map of parentSessionId chains so we can resolve missing ancestors
-  const parentOf = new Map<string, string>();
-  for (const s of sessions) {
-    if (s.parentSessionId) parentOf.set(s.id, s.parentSessionId);
-  }
-
-  // Walk up the parentSessionId chain to find the nearest ancestor that exists in byId
-  function resolveAncestor(id: string): string | null {
-    let cur = parentOf.get(id);
-    const visited = new Set<string>();
-    while (cur) {
-      if (visited.has(cur)) return null; // cycle guard
-      visited.add(cur);
-      if (byId.has(cur)) return cur;
-      cur = parentOf.get(cur);
-    }
-    return null;
-  }
-
-  const roots: SessionTreeNode[] = [];
-  for (const node of byId.values()) {
-    const ancestor = resolveAncestor(node.session.id);
-    if (ancestor) {
-      byId.get(ancestor)!.children.push(node);
-    } else {
-      roots.push(node);
-    }
-  }
-
-  // Sort each level by modified desc
-  const sort = (nodes: SessionTreeNode[]) => {
-    nodes.sort((a, b) => b.session.modified.localeCompare(a.session.modified));
-    nodes.forEach((n) => sort(n.children));
-  };
-  sort(roots);
-  return roots;
-}
 
 const SCRAMBLE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
 
@@ -598,12 +535,13 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
         .filter((s): s is SessionInfo => s !== undefined)
     : [];
 
-  // Build parent-child tree within the filtered set, excluding pinned sessions
-  // (they're shown separately in the Pinned section above to avoid duplicate display).
-  // Children of a pinned parent will become roots via buildSessionTree's resolveAncestor fallback.
-  const sessionTree = buildSessionTree(
-    filteredSessions.filter((s) => !pinnedSessionSet.has(s.id))
-  );
+  // Flat list of non-pinned sessions, sorted by modified desc. The (removed)
+  // (formerly a tree keyed on parentSessionId; now a flat list)
+  // everything is now a peer row.
+  const sortedSessions = filteredSessions
+    .filter((s) => !pinnedSessionSet.has(s.id))
+    .slice()
+    .sort((a, b) => b.modified.localeCompare(a.modified));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -1129,21 +1067,23 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
         </div>
       </div>
 
-      {/* Session list */}
-      <div ref={listScrollRef} style={{ flex: explorerOpen && (selectedCwdProp || selectedCwd) ? "1 1 0" : "1 1 auto", overflowY: "auto", padding: "0", minHeight: 80 }}>
+      {/* Session list — flex column with 6px gap so each session card "breathes"
+          like a real card. 4px vertical + 8px horizontal padding insulates the
+          first/last row from the container edges. */}
+      <div ref={listScrollRef} style={{ flex: explorerOpen && (selectedCwdProp || selectedCwd) ? "1 1 0" : "1 1 auto", overflowY: "auto", padding: "4px 8px", minHeight: 80, display: "flex", flexDirection: "column", gap: 6 }}>
         {loadError && !loading && (
-          <div style={{ padding: "12px 14px", color: "#f87171", fontSize: 12 }}>
+          <div style={{ padding: "12px 8px 6px", color: "#f87171", fontSize: 12 }}>
             {loadError}
           </div>
         )}
         {!loading && !loadError && sessions.length === 0 && (
-          <div style={{ padding: "16px 14px", color: "var(--text-muted)", fontSize: 12 }}>
+          <div style={{ padding: "16px 8px 6px", color: "var(--text-muted)", fontSize: 12 }}>
             {t("No sessions found")}
           </div>
         )}
         {pinnedSessionRows.length > 0 && (
           <>
-            <div style={{ padding: "8px 14px 4px", fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            <div style={{ padding: "12px 8px 6px", fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>
               {t("Pinned sessions")}
             </div>
             {pinnedSessionRows.map((s) => (
@@ -1154,7 +1094,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
                 onClick={() => onSelectSession(s)}
                 onRenamed={loadSessions}
                 onDeleted={(id) => { onSessionDeleted?.(id); loadSessions(); }}
-                depth={0}
                 isPinned
                 onTogglePin={() => toggleSessionPin(s.id)}
                 isFavorited={favoriteIds.includes(s.id)}
@@ -1163,39 +1102,38 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
             ))}
           </>
         )}
-        {sessionTree.map((node) => (
-          <SessionTreeItem
-            key={node.session.id}
-            node={node}
-            selectedSessionId={selectedSessionId}
-            onSelectSession={onSelectSession}
+        {sortedSessions.map((s) => (
+          <SessionItem
+            key={s.id}
+            session={s}
+            isSelected={s.id === selectedSessionId}
+            onClick={() => onSelectSession(s)}
             onRenamed={loadSessions}
-            onSessionDeleted={(id) => {
+            onDeleted={(id) => {
               onSessionDeleted?.(id);
               loadSessions();
             }}
-            depth={0}
-            pinnedSessionSet={pinnedSessionSet}
-            onTogglePin={toggleSessionPin}
-            favoriteSet={new Set(favoriteIds)}
-            onToggleFavorite={onToggleFavorite}
+            isPinned={pinnedSessionSet.has(s.id)}
+            onTogglePin={() => toggleSessionPin(s.id)}
+            isFavorited={favoriteIds.includes(s.id)}
+            onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(s.id) : undefined}
           />
         ))}
 
         {/* Pagination footer: end-of-list marker, in-flight spinner, or
             load-more retry button on a failed page fetch. */}
         {!loading && sessions.length > 0 && !hasMore && (
-          <div style={{ padding: "10px 14px", color: "var(--text-dim)", fontSize: 11, textAlign: "center" }}>
+          <div style={{ padding: "12px 8px 6px", color: "var(--text-muted)", fontSize: 11, textAlign: "center" }}>
             {t("End of sessions")}
           </div>
         )}
         {loadingMore && (
-          <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 11, textAlign: "center" }}>
+          <div style={{ padding: "12px 8px 6px", color: "var(--text-muted)", fontSize: 11, textAlign: "center" }}>
             {t("Loading more...")}
           </div>
         )}
         {loadError && !loading && !loadingMore && (
-          <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <div style={{ padding: "12px 8px 6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             <span style={{ color: "#f87171", fontSize: 11 }}>{loadError}</span>
             <button
               onClick={() => { setLoadError(null); void fetchPage(nextCursor, "append"); }}
@@ -1320,95 +1258,12 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
   );
 }
 
-function SessionTreeItem({
-  node,
-  selectedSessionId,
-  onSelectSession,
-  onRenamed,
-  onSessionDeleted,
-  depth,
-  pinnedSessionSet,
-  onTogglePin,
-  favoriteSet,
-  onToggleFavorite,
-}: {
-  node: SessionTreeNode;
-  selectedSessionId: string | null;
-  onSelectSession: (s: SessionInfo) => void;
-  onRenamed?: () => void;
-  onSessionDeleted?: (id: string) => void;
-  depth: number;
-  pinnedSessionSet: Set<string>;
-  onTogglePin: (sessionId: string) => void;
-  favoriteSet: Set<string>;
-  onToggleFavorite?: (sessionId: string) => void;
-}) {
-  const [collapsed, setCollapsed] = useState(false);
-  const hasChildren = node.children.length > 0;
-
-  return (
-    <div>
-      <div style={{ position: "relative" }}>
-        {/* Indent line for child sessions */}
-        {depth > 0 && (
-          <div style={{
-            position: "absolute",
-            left: depth * 12 + 6,
-            top: 0, bottom: 0,
-            width: 1,
-            background: "var(--border)",
-            pointerEvents: "none",
-          }} />
-        )}
-        <SessionItem
-          session={node.session}
-          isSelected={node.session.id === selectedSessionId}
-          onClick={() => onSelectSession(node.session)}
-          onRenamed={onRenamed}
-          onDeleted={(id) => onSessionDeleted?.(id)}
-          depth={depth}
-          hasChildren={hasChildren}
-          collapsed={collapsed}
-          onToggleCollapse={() => setCollapsed((v) => !v)}
-          isPinned={pinnedSessionSet.has(node.session.id)}
-          onTogglePin={() => onTogglePin(node.session.id)}
-          isFavorited={favoriteSet.has(node.session.id)}
-          onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(node.session.id) : undefined}
-        />
-      </div>
-      {hasChildren && !collapsed && (
-        <div>
-          {node.children.map((child) => (
-            <SessionTreeItem
-              key={child.session.id}
-              node={child}
-              selectedSessionId={selectedSessionId}
-              onSelectSession={onSelectSession}
-              onRenamed={onRenamed}
-              onSessionDeleted={onSessionDeleted}
-              depth={depth + 1}
-              pinnedSessionSet={pinnedSessionSet}
-              onTogglePin={onTogglePin}
-              favoriteSet={favoriteSet}
-              onToggleFavorite={onToggleFavorite}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function SessionItem({
   session,
   isSelected,
   onClick,
   onRenamed,
   onDeleted,
-  depth = 0,
-  hasChildren = false,
-  collapsed = false,
-  onToggleCollapse,
   isPinned = false,
   onTogglePin,
   isFavorited = false,
@@ -1419,10 +1274,6 @@ function SessionItem({
   onClick: () => void;
   onRenamed?: () => void;
   onDeleted?: (id: string) => void;
-  depth?: number;
-  hasChildren?: boolean;
-  collapsed?: boolean;
-  onToggleCollapse?: () => void;
   isPinned?: boolean;
   onTogglePin?: () => void;
   isFavorited?: boolean;
@@ -1575,7 +1426,33 @@ function SessionItem({
   }, []);
 
   // Fixed-height outer wrapper — content swaps in place so the list never reflows
-  const ITEM_HEIGHT = 54;
+  // 36px matches Notion/Linear session rows: 13px title + 8px top/bottom padding
+  // + ~1px border per side. Border 1px on every state (transparent in default)
+  // so hover/selected don't cause layout shift. 8px corners + 6px gap (from
+  // the list container) make this look like a real card, not a list row.
+  const ITEM_HEIGHT = 36;
+
+  // Border is a 1px ring instead of the old 2px left bar so the rounded
+  // corner doesn't fight with a hard rectangular accent strip.
+  // color-mix keeps the selected ring on-theme (forest green, synthwave pink, etc.).
+  const itemBorder = confirmDelete
+    ? "1px solid rgba(239,68,68,0.4)"
+    : isSelected
+      ? "1px solid color-mix(in srgb, var(--accent) 40%, transparent)"
+      : hovered
+        ? "1px solid var(--border)"
+        : "1px solid transparent";
+
+  // Shadow only appears on hover/selected so 50+ rows don't all cast a shadow
+  // at rest. The 0.12 vs 0.08 opacity gives selected a "stronger lift" without
+  // recoloring for non-blue accent themes.
+  const itemShadow = confirmDelete
+    ? "none"
+    : isSelected
+      ? "0 1px 3px rgba(0,0,0,0.12)"
+      : hovered
+        ? "0 1px 2px rgba(0,0,0,0.08)"
+        : "none";
 
   return (
     <div
@@ -1586,16 +1463,16 @@ function SessionItem({
         height: ITEM_HEIGHT,
         display: "flex",
         alignItems: "center",
-        paddingLeft: depth > 0 ? depth * 12 + 14 : 14,
+        paddingLeft: 8,
         paddingRight: 8,
         cursor: confirmDelete || renaming ? "default" : "pointer",
         background: confirmDelete
           ? "rgba(239,68,68,0.06)"
           : isSelected ? "var(--bg-selected)" : hovered ? "var(--bg-hover)" : "transparent",
-        borderLeft: confirmDelete
-          ? "2px solid #ef4444"
-          : isSelected ? "2px solid var(--accent)" : "2px solid transparent",
-        transition: "background 0.1s",
+        border: itemBorder,
+        borderRadius: 8,
+        boxShadow: itemShadow,
+        transition: "background 0.1s, box-shadow 0.15s, border-color 0.15s",
         opacity: deleting ? 0.5 : 1,
         gap: 6,
         overflow: "hidden",
@@ -1612,14 +1489,14 @@ function SessionItem({
               onClick={handleDeleteConfirm}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
-                height: 30, padding: "0 11px",
+                height: 28, padding: "0 10px",
                 background: "#ef4444", border: "none",
                 borderRadius: 6, color: "#fff",
-                cursor: "pointer", fontSize: 12, fontWeight: 600,
+                cursor: "pointer", fontSize: 11, fontWeight: 600,
                 whiteSpace: "nowrap",
               }}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
                 <path d="M10 11v6M14 11v6" />
@@ -1631,10 +1508,10 @@ function SessionItem({
               onClick={handleDeleteCancel}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
-                height: 30, padding: "0 11px",
+                height: 28, padding: "0 10px",
                 background: "var(--bg)", border: "1px solid var(--border)",
                 borderRadius: 6, color: "var(--text-muted)",
-                cursor: "pointer", fontSize: 12, fontWeight: 500,
+                cursor: "pointer", fontSize: 11, fontWeight: 500,
                 whiteSpace: "nowrap",
               }}
             >
@@ -1657,31 +1534,23 @@ function SessionItem({
           style={{
             flex: 1,
             fontSize: 12,
-            padding: "5px 8px",
+            padding: "4px 8px",
             border: "1px solid var(--accent)",
             borderRadius: 5,
             outline: "none",
             background: "var(--bg)",
             color: "var(--text)",
-            height: 30,
+            height: 28,
           }}
         />
       ) : (
         /* ── Normal view ── */
         <>
-          {/* Fork indicator for child sessions */}
-          {depth > 0 && (
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-              <line x1="6" y1="3" x2="6" y2="15" />
-              <circle cx="18" cy="6" r="3" />
-              <circle cx="6" cy="18" r="3" />
-              <path d="M18 9a9 9 0 0 1-9 9" />
-            </svg>
-          )}
+          {/* (The previous fork indicator was removed together with the fork feature.) */}
           {/* Static pinned indicator — visible without hover so users can see pinned state at a glance */}
           {isPinned && (
             <span aria-hidden style={{ display: "flex", alignItems: "center", flexShrink: 0 }} title={t("Pinned sessions")}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="var(--accent)" stroke="none">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="var(--accent)" stroke="none">
                 <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2Z" />
               </svg>
             </span>
@@ -1689,7 +1558,7 @@ function SessionItem({
           {/* Static favorited indicator — visible without hover */}
           {isFavorited && (
             <span aria-hidden style={{ display: "flex", alignItems: "center", flexShrink: 0 }} title={t("Favorites")}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="var(--accent)" stroke="none">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="var(--accent)" stroke="none">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
             </span>
@@ -1704,8 +1573,8 @@ function SessionItem({
               <span
                 className="animate-[pulse_1.5s_infinite]"
                 style={{
-                  width: 8,
-                  height: 8,
+                  width: 6,
+                  height: 6,
                   borderRadius: "50%",
                   background: "var(--accent)",
                 }}
@@ -1716,8 +1585,8 @@ function SessionItem({
             <Tooltip content={title}>
             <div
               style={{
-                fontSize: 12,
-                fontWeight: isSelected ? 500 : 400,
+                fontSize: 13,
+                fontWeight: isSelected ? 600 : 400,
                 lineHeight: 1.4,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -1728,32 +1597,11 @@ function SessionItem({
               {title}
             </div>
             </Tooltip>
-            <div style={{ marginTop: 2, display: "flex", gap: 8, color: "var(--text-dim)", fontSize: 11 }}>
-              <Tooltip content={session.modified}><span>{formatRelativeTime(session.modified, t)}</span></Tooltip>
-              <span>{session.messageCount} {t("msgs")}</span>
-            </div>
+            {/* Time + message-count subline removed in the sidebar-2.0 pass:
+                it pushed the row to 54px and made the list feel dense. The
+                full modified ISO is still available in the title tooltip via
+                the session header elsewhere. */}
           </div>
-
-          {/* Collapse toggle — always visible when has children */}
-          {hasChildren && (
-            <Tooltip content={collapsed ? t("Expand forks") : t("Collapse forks")}>
-            <button
-              onClick={(e) => { e.stopPropagation(); onToggleCollapse?.(); }}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                width: 20, height: 20, padding: 0, flexShrink: 0,
-                background: "none", border: "none",
-                color: "var(--text-dim)", cursor: "pointer",
-                transform: collapsed ? "rotate(-90deg)" : "none",
-                transition: "transform 0.15s",
-              }}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="2 3.5 5 6.5 8 3.5" />
-              </svg>
-            </button>
-            </Tooltip>
-          )}
 
           {/* "..." trigger — shown on row hover; toggles the action menu on click (no hover-open) */}
           {(hovered || triggerHovered || menuOpen) && (
@@ -1766,10 +1614,10 @@ function SessionItem({
                 onMouseLeave={() => { setTriggerHovered(false); if (menuOpen) scheduleMenuClose(); }}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 26, height: 26, padding: 0,
+                  width: 24, height: 24, padding: 0,
                   background: menuOpen ? "var(--bg-selected)" : "none",
-                  border: menuOpen ? "1px solid rgba(37,99,235,0.35)" : "1px solid transparent",
-                  borderRadius: 7,
+                  border: menuOpen ? "1px solid color-mix(in srgb, var(--accent) 35%, transparent)" : "1px solid transparent",
+                  borderRadius: 6,
                   color: menuOpen ? "var(--accent)" : "var(--text-muted)",
                   cursor: "pointer", flexShrink: 0,
                   transition: "background 0.12s, color 0.12s, border-color 0.12s",
@@ -1785,7 +1633,7 @@ function SessionItem({
                   e.currentTarget.style.color = "var(--text-muted)";
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{ opacity: menuOpen ? 1 : 0.85 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{ opacity: menuOpen ? 1 : 0.85 }}>
                   <circle cx="5" cy="12" r="2" />
                   <circle cx="12" cy="12" r="2" />
                   <circle cx="19" cy="12" r="2" />
