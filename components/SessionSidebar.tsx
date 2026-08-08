@@ -1461,6 +1461,12 @@ function SessionItem({
       onMouseLeave={() => { setHovered(false); }}
       style={{
         height: ITEM_HEIGHT,
+        // The list container is a flex column with overflow-y: auto, so this
+        // row is a flex item. Default flex-shrink:1 makes 50+ rows share the
+        // available height (each collapses to ~2px, e.g. /tmp with 395
+        // sessions). flex-shrink:0 keeps every row at ITEM_HEIGHT and lets
+        // the container scroll.
+        flexShrink: 0,
         display: "flex",
         alignItems: "center",
         paddingLeft: 8,
