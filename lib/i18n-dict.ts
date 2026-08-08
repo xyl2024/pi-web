@@ -21,7 +21,7 @@ export const ZH_TRANSLATIONS = {
   "Show sidebar": "显示侧边栏",
   "Switch language": "切换语言",
   "Switch theme": "切换主题",
-  "System": "系统",
+  "System Prompts": "系统提示词",
   "System prompt is empty (tools are disabled)": "系统提示词为空（工具已禁用）",
   "Send a message to load the system prompt. (Because of Pi's design: system prompt words are not pre-set; they are only constructed when needed.)": "发送一条消息后加载系统提示词（因为 Pi 的设计是：系统提示词不预先设置，只在需要时才构造。）",
   "Change project": "切换项目",

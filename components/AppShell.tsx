@@ -897,7 +897,7 @@ export function AppShell() {
                   <line x1="8" y1="13" x2="16" y2="13" />
                   <line x1="8" y1="17" x2="13" y2="17" />
                 </svg>
-                <span>{t("System")}</span>
+                <span>{t("System Prompts")}</span>
               </button>
               <Tooltip content={agentsFiles.length > 0 ? `${agentsFiles.length} AGENTS.md file(s)` : t("No AGENTS.md files found")}>
               <button
