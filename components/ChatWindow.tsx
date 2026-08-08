@@ -486,6 +486,46 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
   const [isExporting, setIsExporting] = useState(false);
 
+  // ── Auto-name scheduling for brand-new sessions ──────────────────────
+  // The first assistant message of a new session lands only after pi lazily
+  // persists the .jsonl, which is exactly when /api/sessions/[id]/auto-name
+  // can read it. We piggyback on the existing onFirstAssistantReady prop,
+  // forward it to AppShell (sidebar refresh), and schedule a 1s timer to
+  // run auto-name. The actual runner lives below where it can close over
+  // currentSessionId / agentRunning / etc.; we keep a ref so the timer
+  // always reads the latest closure. currentSessionNameRef mirrors
+  // session.name so the post-LLM race check sees the freshest value.
+  const autoNamedSessionIdsRef = useRef<Set<string>>(new Set());
+  const autoNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const runAutoNameRef = useRef<((opts: { mode: "manual" | "auto" }) => Promise<void>) | null>(null);
+  const currentSessionNameRef = useRef<string | null>(session?.name ?? null);
+
+  const wrappedOnFirstAssistantReady = useCallback(() => {
+    // Forward to AppShell (sidebar refresh — unchanged behavior).
+    onFirstAssistantReady?.();
+    const sid = session?.id;
+    if (!sid) return;
+    if (autoNamedSessionIdsRef.current.has(sid)) return;
+    autoNamedSessionIdsRef.current.add(sid);
+    if (autoNameTimerRef.current) clearTimeout(autoNameTimerRef.current);
+    autoNameTimerRef.current = setTimeout(() => {
+      autoNameTimerRef.current = null;
+      runAutoNameRef.current?.({ mode: "auto" });
+    }, 1000);
+  }, [onFirstAssistantReady, session?.id]);
+
+  // Drop a still-pending timer on unmount (session switch / window teardown)
+  // so we never PATCH against a stale session id.
+  useEffect(
+    () => () => {
+      if (autoNameTimerRef.current) {
+        clearTimeout(autoNameTimerRef.current);
+        autoNameTimerRef.current = null;
+      }
+    },
+    [],
+  );
+
   // Tool call stats: wire the context emit into useAgentSession
   const statsEmit = useToolCallStatsEmit();
 
@@ -503,7 +543,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     userMessageHistory,
     activeLeafId, currentSessionId,
   } = useAgentSession({
-    session, newSessionCwd, onAgentEnd, onSessionCreated, onFirstAssistantReady,
+    session, newSessionCwd, onAgentEnd, onSessionCreated, onFirstAssistantReady: wrappedOnFirstAssistantReady,
     modelsRefreshKey,
     statsEmit,
     scrollToEntryId,
@@ -891,13 +931,34 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const [isAutoNaming, setIsAutoNaming] = useState(false);
   const confirm = useConfirm();
   const currentSessionName = session?.name ?? null;
-  const handleAutoName = useCallback(async () => {
+
+  // Keep the ref in sync so the post-LLM race check (after the 5–30s wait)
+  // sees a freshly-named session even though the in-flight closure has
+  // captured the pre-LLM render value.
+  useEffect(() => {
+    currentSessionNameRef.current = currentSessionName;
+  }, [currentSessionName]);
+
+  // Shared core for both the manual button (mode "manual") and the
+  // 1s-after-first-assistant auto-trigger (mode "auto"). Manual preserves
+  // the user-confirm modal and the agent-running guard; auto skips both
+  // (silent, may piggyback on the in-flight first turn) but enforces the
+  // race guard: if session.name is already non-empty at trigger time or
+  // when the LLM response arrives, bail silently — manual rename wins
+  // (Q3 = A).
+  const runAutoName = useCallback(async ({ mode }: { mode: "manual" | "auto" }) => {
     if (!sessionId) return;
     if (isAutoNaming) return;
-    if (agentRunning) return;
+    if (mode === "manual" && agentRunning) return;
     if (!firstUserMessageText || !firstUserMessageText.trim()) return;
 
-    if (currentSessionName && currentSessionName.trim()) {
+    // Auto-mode pre-flight: a sidebar rename that landed in the 1s window
+    // before the LLM call already won — no LLM call needed.
+    if (mode === "auto" && currentSessionNameRef.current && currentSessionNameRef.current.trim()) {
+      return;
+    }
+
+    if (mode === "manual" && currentSessionName && currentSessionName.trim()) {
       const ok = await confirm({
         title: t("Auto-name session?"),
         description: t("This will replace the current session name."),
@@ -928,6 +989,12 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
         return;
       }
 
+      // Auto-mode post-LLM race check: a sidebar rename during the LLM
+      // call now wins — silent skip, no error toast (Q3 = A).
+      if (mode === "auto" && currentSessionNameRef.current && currentSessionNameRef.current.trim()) {
+        return;
+      }
+
       const patchRes = await fetch(
         `/api/sessions/${encodeURIComponent(sessionId)}`,
         {
@@ -944,7 +1011,9 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
 
       onSessionNameChange?.(name);
       try { await onRenameCompleted?.(); } catch { /* sidebar refresh is best-effort */ }
-      toast.show({ kind: "success", message: `${t("Renamed")} ${name}` });
+      if (mode === "manual") {
+        toast.show({ kind: "success", message: `${t("Renamed")} ${name}` });
+      }
     } catch (error) {
       toast.show({
         kind: "error",
@@ -967,6 +1036,18 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     onRenameCompleted,
     t,
   ]);
+
+  // Keep the timer-side ref pointing at the latest closure so it always
+  // sees the freshest sessionId / agentRunning / currentSessionName.
+  useEffect(() => {
+    runAutoNameRef.current = runAutoName;
+  }, [runAutoName]);
+
+  // Manual button entry point — today's behavior (confirm + agent-running
+  // guard) lives in runAutoName({ mode: "manual" }).
+  const handleAutoName = useCallback(() => {
+    void runAutoName({ mode: "manual" });
+  }, [runAutoName]);
 
   // Auto-name is only available when there's a session, a usable first user
   // message, the agent isn't running, and no LLM call is already in flight.
