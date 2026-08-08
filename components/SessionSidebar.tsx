@@ -16,7 +16,7 @@ interface Props {
   onInitialRestoreDone?: () => void;
   refreshKey?: number;
   onSessionDeleted?: (sessionId: string) => void;
-  onNewSession?: () => void;
+  onNewSession?: (cwd?: string) => void;
   selectedCwd?: string | null;
   onCwdChange?: (cwd: string | null) => void;
   onOpenFile?: (filePath: string, fileName: string) => void;
@@ -758,7 +758,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
               return (
                 <Tooltip content={t("New session")}>
                   <button
-                    onClick={onNewSession}
+                    onClick={() => { onNewSession(); }}
                     disabled={!canNew}
                     style={{
                       display: "flex", alignItems: "center", justifyContent: "center",
@@ -1284,6 +1284,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
         onToggleFavorite={onToggleFavorite}
         onSessionRenamed={handleSessionRenamed}
         onSessionDeleted={handleSessionDeleted}
+        onNewSession={onNewSession}
       />
 
       {/* File Explorer section */}

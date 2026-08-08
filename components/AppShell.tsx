@@ -334,9 +334,12 @@ export function AppShell() {
     router.replace("/", { scroll: false });
   }, [router]);
 
-  // Called when /new slash command is triggered
-  const handleSlashNew = useCallback(() => {
-    const cwd = selectedSession?.cwd ?? activeCwd;
+  // Called when /new slash command is triggered. Pass a `cwdOverride` to
+  // pick a non-active cwd (e.g. the per-cwd "+" button in the sidebar)
+  // — otherwise we reuse the currently selected session's cwd, falling
+  // back to the sidebar's active picker cwd.
+  const handleSlashNew = useCallback((cwdOverride?: string) => {
+    const cwd = cwdOverride ?? selectedSession?.cwd ?? activeCwd;
     if (!cwd) return;
     const tempId = typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
@@ -760,6 +763,9 @@ export function AppShell() {
       onSessionDeleted={handleSessionDeleted}
       onNewSession={handleSlashNew}
       selectedCwd={selectedSession?.cwd ?? newSessionCwd ?? null}
+      // handleSlashNew accepts an optional cwd — passing the picker active
+      // cwd from here keeps the top-bar "+" identical to before, while
+      // MultiCwdList can pass a specific cwd through the same callback.
       onCwdChange={handleCwdChange}
       onOpenFile={handleOpenFile}
       explorerRefreshKey={explorerRefreshKey}

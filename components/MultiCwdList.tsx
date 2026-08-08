@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { SessionInfo, Workspace } from "@/lib/types";
 import { useI18n } from "@/hooks/useI18n";
 import { SessionItem } from "./SessionItem";
+import { Tooltip } from "./Tooltip";
 
 /**
  * Per-cwd session loader state. Held in a Map keyed by cwd so each group
@@ -47,6 +48,10 @@ interface MultiCwdListProps {
   onToggleFavorite?: (sessionId: string) => void;
   onSessionRenamed: () => void;
   onSessionDeleted: (sessionId: string) => void;
+  /** Called with the workspace cwd when the per-cwd "+" button is clicked.
+   *  Wraps the parent-side new-session handler so the caller can decide
+   *  which cwd wins regardless of the picker's active selection. */
+  onNewSession?: (cwd: string) => void;
 }
 
 /**
@@ -74,6 +79,7 @@ export function MultiCwdList({
   onToggleFavorite,
   onSessionRenamed,
   onSessionDeleted,
+  onNewSession,
 }: MultiCwdListProps) {
   const { t } = useI18n();
 
@@ -132,6 +138,7 @@ export function MultiCwdList({
             onToggleFavorite={onToggleFavorite}
             onSessionRenamed={() => onSessionRenamed()}
             onSessionDeleted={onSessionDeleted}
+            onNewSession={onNewSession}
           />
         );
       })}
@@ -183,6 +190,7 @@ interface CwdGroupProps {
   onToggleFavorite?: (sessionId: string) => void;
   onSessionRenamed: () => void;
   onSessionDeleted: (sessionId: string) => void;
+  onNewSession?: (cwd: string) => void;
 }
 
 function CwdGroup({
@@ -202,6 +210,7 @@ function CwdGroup({
   onToggleFavorite,
   onSessionRenamed,
   onSessionDeleted,
+  onNewSession,
 }: CwdGroupProps) {
   const { t } = useI18n();
   const headerRef = useRef<HTMLDivElement | null>(null);
@@ -370,6 +379,45 @@ function CwdGroup({
             />
           )}
         </span>
+
+        {/* "+" trigger — shown only on row hover (matches the existing "…"
+            trigger pattern). Click creates a new session in this cwd
+            without disturbing the picker's active selection. stopPropagation
+            keeps the parent header click from also toggling expand. */}
+        {onNewSession && rowHovered && (
+          <Tooltip content={t("New session in this project")}>
+            <button
+              aria-label={t("New session in this project")}
+              onClick={(e) => {
+                e.stopPropagation();
+                onNewSession(workspace.cwd);
+              }}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 22, height: 22, padding: 0, flexShrink: 0,
+                background: "transparent",
+                border: "1px solid transparent",
+                borderRadius: 6,
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                transition: "background 0.12s, color 0.12s, border-color 0.12s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--bg-hover)";
+                e.currentTarget.style.color = "var(--text)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "var(--text-muted)";
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <line x1="7" y1="2" x2="7" y2="12" />
+                <line x1="2" y1="7" x2="12" y2="7" />
+              </svg>
+            </button>
+          </Tooltip>
+        )}
 
         {/* "…" trigger — shown on row hover or while menu is open. Mirrors
             SessionItem's row-hover trigger pattern. Click opens the menu. */}
