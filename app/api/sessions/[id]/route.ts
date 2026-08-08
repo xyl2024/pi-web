@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
+import { readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import {
@@ -33,8 +33,12 @@ export async function GET(
 
     const sm = SessionManager.open(filePath);
     const entries = sm.getEntries() as never;
-    const tree = sm.getTree();
-    const leafId = sm.getLeafId();
+    // session_info is display metadata (the session name), not a branch node.
+    // Appending one on rename used to pollute the branch tree with a stray
+    // node; strip it here (children promoted) and fall the leaf back to a real
+    // entry so already-renamed sessions render clean too.
+    const tree = stripSessionInfoNodes(sm.getTree());
+    const leafId = fallbackSessionLeafId(sm, sm.getLeafId());
     const context = buildSessionContext(entries, leafId);
 
     const header = sm.getHeader();
@@ -113,8 +117,41 @@ export async function PATCH(
       log.warn("rename session not found", { id, durationMs: elapsedMs(startedAt) });
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
-    const sm = SessionManager.open(filePath);
-    sm.appendSessionInfo(name.trim());
+    // Update the name in place instead of appending a new session_info entry.
+    // appendSessionInfo() writes the entry with parentId = current leaf and
+    // advances the leaf to it, so renaming used to add a stray node to the
+    // branch tree (and, on reload, made later messages hang off it). Rewriting
+    // the existing entry keeps the tree structure untouched.
+    const cleanName = name.replace(/[\r\n]+/g, " ").trim();
+    const raw = readFileSync(filePath, "utf8");
+    const lines = raw.split("\n");
+    let lastInfoIdx = -1;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const e = JSON.parse(lines[i]) as { type?: string };
+        if (e.type === "session_info") {
+          lastInfoIdx = i;
+          break;
+        }
+      } catch {
+        /* skip malformed lines */
+      }
+    }
+    if (lastInfoIdx >= 0) {
+      const entry = JSON.parse(lines[lastInfoIdx]) as Record<string, unknown>;
+      entry.name = cleanName;
+      lines[lastInfoIdx] = JSON.stringify(entry);
+      // Atomic replace: write a temp file in the same dir, then rename over.
+      // Avoids readers (sidebar, GET) observing a truncated file mid-write.
+      const tmpPath = `${filePath}.rename.tmp`;
+      writeFileSync(tmpPath, lines.join("\n"));
+      renameSync(tmpPath, filePath);
+    } else {
+      // First naming: the session has no session_info entry yet, and the name
+      // must live in one for getSessionName()/listAllSessions() to see it.
+      const sm = SessionManager.open(filePath);
+      sm.appendSessionInfo(cleanName);
+    }
     invalidateSessionListCache();
     log.info("rename session completed", {
       id,
@@ -127,6 +164,39 @@ export async function PATCH(
     log.error("rename session failed", { id, error, durationMs: elapsedMs(startedAt) });
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
+}
+
+// session_info entries are session metadata (name), not conversation branch
+// nodes. Strip them out of the branch tree (children promoted to the slot),
+// so historical renames don't show up as stray "session_info" nodes.
+function stripSessionInfoNodes<T extends { entry: { type?: string }; children: T[] }>(nodes: T[]): T[] {
+  const out: T[] = [];
+  for (const n of nodes) {
+    if (n.entry.type === "session_info") {
+      out.push(...stripSessionInfoNodes(n.children));
+    } else {
+      out.push({ ...n, children: stripSessionInfoNodes(n.children) });
+    }
+  }
+  return out;
+}
+
+// When a session_info entry is the last one in the file, reloading makes it
+// the leaf; subsequent messages would then hang off the metadata entry. Walk
+// back to the nearest real entry so the returned leaf stays a real message.
+function fallbackSessionLeafId(
+  sm: ReturnType<typeof SessionManager.open>,
+  leafId: string | null,
+): string | null {
+  let cur = leafId;
+  const seen = new Set<string>();
+  while (cur && !seen.has(cur)) {
+    seen.add(cur);
+    const entry = sm.getEntry(cur);
+    if (!entry || (entry as { type?: string }).type !== "session_info") break;
+    cur = (entry as { parentId?: string | null }).parentId ?? null;
+  }
+  return cur;
 }
 
 // DELETE /api/sessions/[id]
