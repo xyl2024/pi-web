@@ -91,6 +91,18 @@ const THINKING_BORDER_COLOR: Record<typeof THINKING_LEVELS[number], string> = {
   high: "rgba(249,115,22,0.55)",    // orange-500
   xhigh: "rgba(239,68,68,0.55)",    // red-500
 };
+// Solid (opaque) palette — same hues as THINKING_BORDER_COLOR, used to
+// paint the per-level indicator inside the thinking picker so each option
+// is visually tied to the color the input border will adopt when picked.
+const THINKING_LEVEL_COLOR: Record<typeof THINKING_LEVELS[number], string> = {
+  auto: "var(--text-dim)",
+  off: "#94a3b8",   // slate-400
+  minimal: "#38bdf8", // sky-400
+  low: "#3b82f6",    // blue-500
+  medium: "#8b5cf6",  // violet-500
+  high: "#f97316",    // orange-500
+  xhigh: "#ef4444",   // red-500
+};
 const SLASH_PAGE_SIZE = 5;
 
 const BUILTIN_NEW_SESSION: SlashResource = {
@@ -1374,7 +1386,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                           {isActive
                             ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="1.5 5 4 7.5 8.5 2.5" /></svg>
                             : <span style={{ width: 10, flexShrink: 0 }} />}
-                          <span style={{ flex: 1 }}>
+                          <span style={{ flex: 1, color: THINKING_LEVEL_COLOR[lvl] }}>
                             {displayLabel}
                             {showOriginal && <span style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "var(--font-mono)", marginLeft: 5 }}>({lvl})</span>}
                           </span>
