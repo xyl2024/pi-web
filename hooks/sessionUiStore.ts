@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
-import type { SessionTreeNode, AgentsFile } from "@/lib/types";
+import type { SessionTreeNode } from "@/lib/types";
 import type { AgentControls } from "@/lib/commands";
 import { isContentEqual } from "@/lib/shallowEqual";
 
@@ -39,7 +39,6 @@ export interface SessionUiState {
   branchTree: SessionTreeNode[];
   branchActiveLeafId: string | null;
   systemPrompt: string | null;
-  agentsFiles: AgentsFile[];
   sessionStats: SessionStats;
   contextUsage: ContextUsage;
 }
@@ -48,7 +47,6 @@ const INITIAL: SessionUiState = {
   branchTree: [],
   branchActiveLeafId: null,
   systemPrompt: null,
-  agentsFiles: [],
   sessionStats: null,
   contextUsage: null,
 };

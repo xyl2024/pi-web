@@ -226,12 +226,6 @@ export interface SessionMessageSearchResponse {
   totalMatches: number;
 }
 
-export interface AgentsFile {
-  path: string;
-  content: string;
-  label: string;
-}
-
 /**
  * Workspace row returned by GET /api/workspaces.
  *

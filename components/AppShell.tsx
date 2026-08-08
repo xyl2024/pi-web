@@ -73,6 +73,46 @@ function isButtonVisible(cfg: RightSideBarConfig | null, id: RightBarButtonId): 
   return cfg[id] !== false;
 }
 
+// Split a fully-assembled system prompt into "Pi base + Append" segments and
+// "<project_instructions path=...>...</project_instructions>" segments — the
+// pi SDK wraps each AGENTS.md file in those tags, so they're our only reliable
+// per-source boundary in the rendered string. Each AGENTS.md segment is then
+// colored differently in the System panel.
+type SystemPromptSegment =
+  | { kind: "base"; text: string }
+  | { kind: "agents"; path: string; text: string };
+
+// Color palette for AGENTS.md segments. Loops if there are more files than colors.
+const AGENTS_SEGMENT_COLORS = [
+  "#3b82f6", // blue
+  "#a855f7", // purple
+  "#ec4899", // pink
+  "#f59e0b", // amber
+  "#10b981", // emerald
+  "#06b6d4", // cyan
+];
+
+function splitSystemPrompt(systemPrompt: string): SystemPromptSegment[] {
+  const segments: SystemPromptSegment[] = [];
+  const re = /<project_instructions path="([^"]+)">([\s\S]*?)<\/project_instructions>/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(systemPrompt)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ kind: "base", text: systemPrompt.slice(lastIndex, match.index) });
+    }
+    // pi's buildSystemPrompt wraps content as `<tag>\n${content}\n</tag>`;
+    // strip the wrapper-introduced leading/trailing newlines so the rendered
+    // segment matches the original file rather than the assembly scaffolding.
+    segments.push({ kind: "agents", path: match[1], text: match[2].replace(/^\n+|\n+$/g, "") });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < systemPrompt.length) {
+    segments.push({ kind: "base", text: systemPrompt.slice(lastIndex) });
+  }
+  return segments;
+}
+
 export function AppShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -166,18 +206,9 @@ export function AppShell() {
   // stats, context usage) is owned by useAgentSession in ChatWindow and
   // published to a module-level store. The top bar / branch navigator / context
   // panel here read from that store.
-  const { branchTree, branchActiveLeafId, systemPrompt, agentsFiles } = useSessionUiState();
+  const { branchTree, branchActiveLeafId, systemPrompt } = useSessionUiState();
   const handleBranchLeafChange = useSessionLeafChange();
   const systemBtnRef = useRef<HTMLButtonElement>(null);
-
-  // agentsFiles is an array; AppShell owns the "which one is currently shown"
-  // index. Reset to 0 whenever the list contents change. The store's
-  // content-based change check guards against the IIFE-derived agentsFiles
-  // value re-firing this effect on every render.
-  const [selectedAgentsFileIndex, setSelectedAgentsFileIndex] = useState<number>(0);
-  useEffect(() => {
-    setSelectedAgentsFileIndex(0);
-  }, [agentsFiles]);
 
   // Tools list — fetched once per session, cached for button clicks
   const [tools, setTools] = useState<ToolInfo[]>([]);
@@ -199,10 +230,10 @@ export function AppShell() {
   }, [sessionKey, selectedSession?.id, fetchTools]);
 
   // Single active panel — only one dropdown open at a time
-  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "context" | "tools" | null>(null);
+  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "tools" | null>(null);
   const [topPanelPos, setTopPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  const toggleTopPanel = useCallback((panel: "branches" | "system" | "context" | "tools") => {
+  const toggleTopPanel = useCallback((panel: "branches" | "system" | "tools") => {
     setActiveTopPanel((cur) => cur === panel ? null : panel);
   }, []);
 
@@ -899,36 +930,6 @@ export function AppShell() {
                 </svg>
                 <span>{t("System Prompts")}</span>
               </button>
-              <Tooltip content={agentsFiles.length > 0 ? `${agentsFiles.length} AGENTS.md file(s)` : t("No AGENTS.md files found")}>
-              <button
-                onClick={() => toggleTopPanel("context")}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  height: "100%", padding: "0 12px",
-                  background: activeTopPanel === "context" ? "var(--bg-selected)" : "none",
-                  border: "none",
-                  borderTop: activeTopPanel === "context" ? "2px solid var(--accent)" : "2px solid transparent",
-                  borderRight: "1px solid var(--border)",
-                  cursor: agentsFiles.length > 0 ? "pointer" : "default",
-                  color: agentsFiles.length > 0 ? (activeTopPanel === "context" ? "var(--text)" : "var(--text-muted)") : "var(--text-dim)",
-                  fontSize: 11, whiteSpace: "nowrap", transition: "color 0.1s, background 0.1s",
-                  opacity: agentsFiles.length > 0 ? 1 : 0.5,
-                }}
-                onMouseEnter={(e) => { if (agentsFiles.length > 0) e.currentTarget.style.color = "var(--text)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = agentsFiles.length > 0 ? (activeTopPanel === "context" ? "var(--text)" : "var(--text-muted)") : "var(--text-dim)"; }}
-                >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                  <line x1="8" y1="7" x2="16" y2="7" />
-                  <line x1="8" y1="11" x2="14" y2="11" />
-                </svg>
-                <span>{t("Context")}</span>
-                {agentsFiles.length > 1 && (
-                  <span style={{ fontSize: 10, opacity: 0.7 }}>({agentsFiles.length})</span>
-                )}
-              </button>
-              </Tooltip>
               <Tooltip content={tools.length > 0 ? `${tools.filter((t) => t.active).length} / ${tools.length} ${t("Active").toLowerCase()}` : t("No tools available for this session")}>
               <button
                 ref={toolsBtnRef}
@@ -1070,20 +1071,96 @@ export function AppShell() {
                   background: "var(--bg-panel)",
                   borderBottom: "1px solid var(--border)",
                 }}>
-                  {systemPrompt ? (
-                    <div style={{
-                      maxHeight: "min(600px, 75vh)",
-                      overflowY: "auto",
-                      padding: "12px 16px",
-                      color: "var(--text-muted)",
-                      fontSize: 12,
-                      lineHeight: 1.6,
-                      whiteSpace: "pre-wrap",
-                      fontFamily: "var(--font-mono)",
-                    }}>
-                      {systemPrompt}
-                    </div>
-                  ) : systemPrompt === "" ? (
+                  {systemPrompt ? (() => {
+                    const segments = splitSystemPrompt(systemPrompt);
+                    // Assign each AGENTS.md path a stable color by first appearance
+                    const pathColor = new Map<string, string>();
+                    for (const seg of segments) {
+                      if (seg.kind === "agents" && !pathColor.has(seg.path)) {
+                        pathColor.set(seg.path, AGENTS_SEGMENT_COLORS[pathColor.size % AGENTS_SEGMENT_COLORS.length]);
+                      }
+                    }
+                    const agentsSegments = segments.filter((s): s is Extract<SystemPromptSegment, { kind: "agents" }> => s.kind === "agents");
+                    return (
+                      <>
+                        {agentsSegments.length > 0 && (
+                          <div style={{
+                            display: "flex", flexWrap: "wrap", gap: 12,
+                            padding: "8px 16px",
+                            borderBottom: "1px solid var(--border)",
+                            fontSize: 11,
+                            color: "var(--text-muted)",
+                          }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{
+                                width: 10, height: 10, borderRadius: 2,
+                                background: "var(--text-dim)", flexShrink: 0,
+                              }} />
+                              <span>{t("Pi base + Append")}</span>
+                            </div>
+                            {agentsSegments.map((seg) => {
+                              const color = pathColor.get(seg.path)!;
+                              return (
+                                <div key={seg.path} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                                  <span style={{
+                                    width: 10, height: 10, borderRadius: 2,
+                                    background: color, flexShrink: 0,
+                                  }} />
+                                  <span style={{
+                                    fontFamily: "var(--font-mono)",
+                                    maxWidth: 360,
+                                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                  }} title={seg.path}>
+                                    {seg.path}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div style={{
+                          maxHeight: "min(600px, 75vh)",
+                          overflowY: "auto",
+                          padding: "12px 16px",
+                          color: "var(--text-muted)",
+                          fontSize: 12,
+                          lineHeight: 1.6,
+                          whiteSpace: "pre-wrap",
+                          fontFamily: "var(--font-mono)",
+                        }}>
+                          {segments.map((seg, idx) => {
+                            if (seg.kind === "base") {
+                              return <span key={`base-${idx}`}>{seg.text}</span>;
+                            }
+                            const color = pathColor.get(seg.path)!;
+                            return (
+                              <span key={`agents-${idx}-${seg.path}`} style={{
+                                display: "block",
+                                borderLeft: `3px solid ${color}`,
+                                background: `${color}14`, // ~8% opacity
+                                marginTop: 8,
+                                marginBottom: 8,
+                                paddingLeft: 10,
+                                paddingTop: 4,
+                                paddingBottom: 4,
+                              }}>
+                                <div style={{
+                                  fontSize: 10,
+                                  fontFamily: "var(--font-mono)",
+                                  color: color,
+                                  marginBottom: 4,
+                                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                }} title={seg.path}>
+                                  {seg.path}
+                                </div>
+                                {seg.text}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </>
+                    );
+                  })() : systemPrompt === "" ? (
                     <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
                       {t("System prompt is empty (tools are disabled)")}
                     </div>
@@ -1091,55 +1168,6 @@ export function AppShell() {
                     <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
                       {t("Send a message to load the system prompt. (Because of Pi's design: system prompt words are not pre-set; they are only constructed when needed.)")}
                     </div>
-                  )}
-                </div>
-              )}
-              {activeTopPanel === "context" && (
-                <div style={{
-                  background: "var(--bg-panel)",
-                  borderBottom: "1px solid var(--border)",
-                }}>
-                  {agentsFiles.length === 0 ? (
-                    <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
-                      {t("No AGENTS.md files found for this project")}
-                    </div>
-                  ) : (
-                    <>
-                      {agentsFiles.length > 1 && (
-                        <div style={{ display: "flex", gap: 4, padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
-                          {agentsFiles.map((file, idx) => (
-                            <button
-                              key={file.path}
-                              onClick={() => setSelectedAgentsFileIndex(idx)}
-                              style={{
-                                padding: "4px 10px",
-                                fontSize: 11,
-                                background: selectedAgentsFileIndex === idx ? "var(--bg-selected)" : "none",
-                                border: "1px solid var(--border)",
-                                borderRadius: 6,
-                                cursor: "pointer",
-                                color: selectedAgentsFileIndex === idx ? "var(--text)" : "var(--text-muted)",
-                                transition: "background 0.1s, color 0.1s",
-                              }}
-                            >
-                              {file.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      <div style={{
-                        maxHeight: "min(600px, 75vh)",
-                        overflowY: "auto",
-                        padding: "12px 16px",
-                        color: "var(--text-muted)",
-                        fontSize: 12,
-                        lineHeight: 1.6,
-                        whiteSpace: "pre-wrap",
-                        fontFamily: "var(--font-mono)",
-                      }}>
-                        {agentsFiles[selectedAgentsFileIndex]?.content}
-                      </div>
-                    </>
                   )}
                 </div>
               )}

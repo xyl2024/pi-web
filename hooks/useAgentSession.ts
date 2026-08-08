@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useReducer, useMemo } from "react";
-import type { AgentMessage, SessionInfo, SessionTreeNode, AgentsFile, TextContent, UserMessage } from "@/lib/types";
+import type { AgentMessage, SessionInfo, SessionTreeNode, TextContent, UserMessage } from "@/lib/types";
 import { normalizeToolCalls } from "@/lib/normalize";
 import { sendAgentCommand } from "@/lib/agent-client";
 import type { ToolCallStatsDispatch } from "./ToolCallStatsContext";
@@ -139,7 +139,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [retryInfo, setRetryInfo] = useState<{ attempt: number; maxAttempts: number; errorMessage?: string } | null>(null);
   const [contextUsage, setContextUsage] = useState<{ percent: number | null; contextWindow: number; tokens: number | null } | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
-  const [agentsFiles, setAgentsFiles] = useState<AgentsFile[]>([]);
   const [currentModelOverride, setCurrentModelOverride] = useState<{ provider: string; modelId: string } | null>(null);
   const [pendingModel, setPendingModel] = useState<{ provider: string; modelId: string } | null>(null);
   const [agentPhase, setAgentPhase] = useState<AgentPhase>(null);
@@ -173,7 +172,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   // flickered because the agent started a new assistant message after a tool
   // call". The former should re-engage sticky-bottom; the latter must not.
   const userJustSentRef = useRef(false);
-  const loadingAgentsFilesRef = useRef<string | null>(null);
 
   const setNewSessionModel = opts.setNewSessionModel ?? setNewSessionModelState;
   const setToolPresetState = opts.setToolPreset ?? setToolPreset;
@@ -288,23 +286,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       console.error("Failed to load tools:", e);
     }
   }, [setToolPresetState]);
-
-  const loadAgentsFiles = useCallback(async (cwd: string) => {
-    if (loadingAgentsFilesRef.current === cwd) return;
-    loadingAgentsFilesRef.current = cwd;
-    try {
-      const res = await fetch(`/api/context?cwd=${encodeURIComponent(cwd)}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      if (loadingAgentsFilesRef.current !== cwd) return;
-      const d = await res.json() as { files: AgentsFile[] };
-      setAgentsFiles(d.files ?? []);
-    } catch (e) {
-      console.error("Failed to load agents files:", e);
-      setAgentsFiles([]);
-    } finally {
-      if (loadingAgentsFilesRef.current === cwd) loadingAgentsFilesRef.current = null;
-    }
-  }, []);
 
   const connectEvents = useCallback((sid: string) => {
     if (eventSourceRef.current) {
@@ -657,12 +638,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     container.scrollTo({ top: elAbsTop - 16, behavior: "smooth" });
   }, []);
 
-  // Load session + agents files on mount (parallel)
+  // Load session on mount
   useEffect(() => {
     if (session) {
       sessionIdRef.current = session.id;
-      // Start both in parallel; agents files won't clobber if session.cwd changes mid-flight
-      if (session.cwd) loadAgentsFiles(session.cwd);
       loadSession(session.id, true, true).then(async (agentState) => {
         if (agentState?.running) {
           loadTools(session.id);
@@ -691,8 +670,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           onScrollCompleteRef.current?.();
         }
       });
-    } else if (newSessionCwd) {
-      loadAgentsFiles(newSessionCwd);
     }
     return () => {
       eventSourceRef.current?.close();
@@ -704,13 +681,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   useEffect(() => {
     setSessionUiState({ systemPrompt });
   }, [systemPrompt]);
-
-  // Load agents files whenever cwd changes (session switch or new session)
-  useEffect(() => {
-    const cwd = session?.cwd ?? newSessionCwd;
-    if (cwd) loadAgentsFiles(cwd);
-    else setAgentsFiles([]);
-  }, [session?.cwd, newSessionCwd, loadAgentsFiles]);
 
   useEffect(() => {
     setSessionUiState({ branchTree: data?.tree ?? [], branchActiveLeafId: activeLeafId });
@@ -761,7 +731,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   // the same scalar contents.
   useEffect(() => { setSessionUiState({ sessionStats }); }, [sessionStats]);
   useEffect(() => { setSessionUiState({ contextUsage }); }, [contextUsage]);
-  useEffect(() => { setSessionUiState({ agentsFiles }); }, [agentsFiles]);
 
   return {
     // State
@@ -771,7 +740,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     currentModel, displayModel, sessionStats,
     agentPhase,
     isNew,
-    agentsFiles,
     currentSessionId,
     userMessageHistory,
     // Refs
@@ -779,7 +747,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     lastUserMsgRef, pendingScrollToUserRef, initialScrollDoneRef, userJustSentRef,
     // Actions
     handleSend, handleAbort, handleNavigate, handleModelChange,
-    handleToolPresetChange, handleThinkingLevelChange, loadTools, loadAgentsFiles, setActiveLeafId, setData, setMessages,
+    handleToolPresetChange, handleThinkingLevelChange, loadTools, setActiveLeafId, setData, setMessages,
     dispatch, setAgentRunning,
     // Subscriptions
     handleAgentEventRef,

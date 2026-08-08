@@ -177,7 +177,7 @@ need to load any page first.
 The right side of `AppShell` hosts a stack of tool panels, each backed by a
 module-scoped store using `useSyncExternalStore`:
 
-- `sessionUiStore` — branch leaf (`branchTree`/`ActiveLeafId`), `systemPrompt`, `agentsFiles`, `sessionStats`, `contextUsage`. Owned by `useAgentSession`, read by `AppShell`. Imperative session controls (model/thinking/tools/compact) are bridged to `CommandPalette` ⌘K via the separate `useAgentControls()` hook, **not** part of this store's snapshot.
+- `sessionUiStore` — branch leaf (`branchTree`/`ActiveLeafId`), `systemPrompt`, `sessionStats`, `contextUsage`. Owned by `useAgentSession`, read by `AppShell`. Imperative session controls (model/thinking/tools/compact) are bridged to `CommandPalette` ⌘K via the separate `useAgentControls()` hook, **not** part of this store's snapshot.
 - `toolCallStatsStore` — per-turn tool call statistics, owned by `useAgentSession`, read by the vertical button + `ToolCallStatsPanel`.
 
 The store pattern eliminates the previous "5 separate `onXxxChange` props +
@@ -241,7 +241,6 @@ app/api/
   models-config/route.ts            GET/PUT — read/write ~/.pi/agent/models.json
   auth/{providers,all-providers,login/[provider],logout/[provider],api-key/[provider]}
                                     provider auth flows (OAuth login + API-key set/clear)
-  context/route.ts                  GET ?cwd= — AGENTS.md files for a cwd (cached 30s)
   create-space/route.ts             POST { dir_name } — mkdir ~/.pi-work/workspace/<dir>
   default-cwd/route.ts              POST — ensure ~/.pi-work/workspace/pi-cwd-default exists
   home/route.ts                     GET { home } — homedir for the UI
