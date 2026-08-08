@@ -791,7 +791,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
             </Tooltip>
           </div>
           {explorerOpen && (
-            <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
+            <div data-hover-scrollbar style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
               <FileExplorer
                 cwd={selectedCwdProp!}
                 onOpenFile={onOpenFile ?? (() => {})}

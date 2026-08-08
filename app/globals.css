@@ -167,6 +167,36 @@ body {
   height: 0;
 }
 
+/* Scrollbars in the left sidebar (session list + file explorer) stay
+   hidden until the mouse enters the scroll area, then appear on hover.
+   The thumb's resting color is the panel background — it must stay
+   opaque: Chromium stops applying :hover style switches to a thumb that
+   is fully transparent at rest (it treats the thumb as absent), so a
+   transparent rest state would never appear on hover. */
+[data-hover-scrollbar] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-panel) transparent;
+}
+[data-hover-scrollbar]:hover {
+  scrollbar-color: var(--border) transparent;
+}
+[data-hover-scrollbar]::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+[data-hover-scrollbar]::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-hover-scrollbar]::-webkit-scrollbar-thumb {
+  background: var(--bg-panel);
+}
+[data-hover-scrollbar]:hover::-webkit-scrollbar-thumb {
+  background: var(--border);
+}
+[data-hover-scrollbar]:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
 :root {
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-mono: 'Consolas', var(--font-noto-mono), 'JetBrains Mono', 'Fira Code', ui-monospace, 'PingFang SC', 'Microsoft YaHei', monospace;
