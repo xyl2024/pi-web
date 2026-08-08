@@ -23,7 +23,9 @@
  * - The whole header is a `<button>` so the entire row is clickable to
  *   collapse/expand. The header label switches between "Agent Plan" +
  *   `n/m` counter and the in-progress task subject (when collapsed while
- *   an in-progress task exists).
+ *   an in-progress task exists). Starts collapsed: the default view is the
+ *   one-line "what is the agent doing right now" summary, and expanding to
+ *   the full plan is an explicit opt-in.
  * - Panel height is capped at 30% of the chat container (`maxHeight: 30%`)
  *   so it never visually competes with the message column. The panel itself
  *   is a `flex column` with `overflow: hidden` and the scroll lives on the
@@ -113,7 +115,7 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
 }) {
   const { tasks, empty, counts, enabled } = useAgentTodo(sessionId);
   const { t } = useI18n();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const handleToggle = useCallback(() => {
     setCollapsed((v) => !v);
