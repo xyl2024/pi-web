@@ -176,12 +176,10 @@ export function SessionItem({
     setConfirmDelete(false);
   }, []);
 
-  // Fixed-height outer wrapper — content swaps in place so the list never reflows
-  // 36px matches Notion/Linear session rows: 13px title + 8px top/bottom padding
-  // + ~1px border per side. Border 1px on every state (transparent in default)
-  // so hover/selected don't cause layout shift. 8px corners + 6px gap (from
-  // the list container) make this look like a real card, not a list row.
-  const ITEM_HEIGHT = 36;
+  // Fixed-height outer wrapper — content swaps in place so the list never reflows.
+  // 28px keeps the row compact for long session lists; the 24px "..." trigger
+  // and 28px delete/rename controls still fit and stay vertically centered.
+  const ITEM_HEIGHT = 28;
 
   // Selected / hover visual is now purely a background tint — no border ring,
   // no bold text. The shadow on selected keeps a subtle "lift" cue without
