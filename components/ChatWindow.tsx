@@ -1193,7 +1193,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       slashResources={slashResources}
       slashResourceKey={slashResourceKey}
       onSlashAction={(action) => { if (action === "new") onNewSessionRequest?.(); }}
-      onNewSession={onNewSessionRequest}
       sessionId={currentSessionId}
       userMessageHistory={userMessageHistory}
       cwd={cwd ?? null}

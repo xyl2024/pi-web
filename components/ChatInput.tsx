@@ -56,7 +56,6 @@ interface Props {
   onCwdChange?: (cwd: string) => void;
   /** When true (no session selected), render the CwdPicker right of the model picker. */
   showCwdPicker?: boolean;
-  onNewSession?: () => void;
   sessionId?: string | null;
   /**
    * Plain-text user messages from the active session, oldest first. Sourced
@@ -306,7 +305,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   cwd,
   onCwdChange,
   showCwdPicker,
-  onNewSession,
   sessionId,
   userMessageHistory,
 }: Props, ref) {
@@ -1447,22 +1445,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   </div>
                 )}
               </div>
-            )}
-
-            {onNewSession && (
-              <IconHoverButton
-                onClick={onNewSession}
-                variant="accent"
-                expandDirection="left"
-                label={t("New")}
-                ariaLabel={t("New session")}
-                icon={
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                    <line x1="6" y1="1.5" x2="6" y2="10.5" />
-                    <line x1="1.5" y1="6" x2="10.5" y2="6" />
-                  </svg>
-                }
-              />
             )}
 
             {isStreaming && (
