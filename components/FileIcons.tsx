@@ -1,241 +1,143 @@
-// Flat monochrome file & folder icons — all use currentColor / var(--text-dim)
+// File & folder icons for the sidebar file tree.
+//
+// Icons are sourced from vscode-icons (MIT, https://github.com/vscode-icons/vscode-icons)
+// and served as static SVGs from /file-icons/*.svg. The icon set has ~1200 entries
+// covering most common file types (React, Python, Go, Rust, Vue, etc.) plus folder
+// variants. The lookup map (lib/file-icon-map.ts) is auto-generated from the
+// vscode-icons source data.
+//
+// For files / folders not in the vscode-icons map we fall back to a minimal
+// monochrome placeholder so the tree is never blank.
+
+import {
+  fileIconByName,
+  fileIconByExt,
+  fileIconCombos,
+  folderIconByName,
+  defaultFolderIcon,
+  defaultFolderOpenIcon,
+} from "@/lib/file-icon-map";
 
 interface IconProps {
   size?: number;
 }
 
-const DIM = "var(--text-dim)";
+const FILE_ICON_PREFIX = "/file-icons/file_type_";
+const FOLDER_ICON_PREFIX = "/file-icons/folder_type_";
 
-// ── Folder ────────────────────────────────────────────────────────────────
-
-export function FolderIcon({ size = 14, open = false }: IconProps & { open?: boolean }) {
-  if (open) {
-    return (
-      <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-        <path d="M1 4.5A1 1 0 0 1 2 3.5H5.5L7 5h7.5v1H1V4.5Z" fill={DIM} />
-        <path d="M1 6h14.5L14 13H2L1 6Z" stroke={DIM} strokeWidth="1" fill={DIM} fillOpacity="0.12" />
-      </svg>
-    );
-  }
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-      <path d="M1 4.5A1 1 0 0 1 2 3.5H5.5L7 5H14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4.5Z"
-        stroke={DIM} strokeWidth="1" fill={DIM} fillOpacity="0.1" />
-    </svg>
-  );
+/** Build the /file-icons/*.svg URL for an icon name. vscode-icons stores the
+ *  default fallback icons (`default_file`, `default_folder`,
+ *  `default_root_folder`, …) at the root of /file-icons/ with no
+ *  `file_type_` / `folder_type_` prefix; every other icon has the prefix. */
+function iconUrl(name: string, kind: "file" | "folder"): string {
+  if (name.startsWith("default_")) return `/file-icons/${name}.svg`;
+  const prefix = kind === "file" ? FILE_ICON_PREFIX : FOLDER_ICON_PREFIX;
+  return `${prefix}${name}.svg`;
 }
 
-// ── Generic file (fallback) ────────────────────────────────────────────────
-
-function GenericFileIcon({ size = 14 }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-      <path d="M3 2h7l3 3v9H3V2Z" stroke={DIM} strokeWidth="1" fill={DIM} fillOpacity="0.08" />
-      <path d="M10 2v3h3" stroke={DIM} strokeWidth="1" fill="none" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-// ── File with label text (used for most types) ────────────────────────────
-// Renders the file outline + a short text badge
-
-function LabelFileIcon({ label, size = 14 }: { label: string; size?: number }) {
-  const s = size / 14; // scale factor
-  return (
-    <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
-      <path d="M2.5 1h6l3 3v9h-9V1Z" stroke={DIM} strokeWidth="0.9" fill={DIM} fillOpacity="0.07" strokeLinejoin="round" />
-      <path d="M8.5 1v3h3" stroke={DIM} strokeWidth="0.9" fill="none" strokeLinejoin="round" />
-      <text
-        x="7" y="9.5"
-        textAnchor="middle"
-        fontSize={3.4 * s}
-        fontFamily="var(--font-mono), monospace"
-        fontWeight="600"
-        fill={DIM}
-        letterSpacing="0"
-      >{label}</text>
-    </svg>
-  );
-}
-
-// ── Specific icons ────────────────────────────────────────────────────────
-
-function TypeScriptIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="TS" size={size} />;
-}
-function TypeScriptReactIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="TSX" size={size} />;
-}
-function JavaScriptIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="JS" size={size} />;
-}
-function JavaScriptReactIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="JSX" size={size} />;
-}
-function PythonIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="PY" size={size} />;
-}
-function JsonIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="{}" size={size} />;
-}
-function CssIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="CSS" size={size} />;
-}
-function ScssIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="SC" size={size} />;
-}
-function HtmlIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="HTM" size={size} />;
-}
-function MarkdownIcon({ size = 14 }: IconProps) {
-  // file outline + M↓ symbol
-  return (
-    <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
-      <path d="M2.5 1h6l3 3v9h-9V1Z" stroke={DIM} strokeWidth="0.9" fill={DIM} fillOpacity="0.07" strokeLinejoin="round" />
-      <path d="M8.5 1v3h3" stroke={DIM} strokeWidth="0.9" fill="none" strokeLinejoin="round" />
-      {/* M */}
-      <path d="M3.5 9.5V7l1.5 1.5L6.5 7v2.5" stroke={DIM} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      {/* down arrow */}
-      <path d="M8 7v2.5M7 9l1 1.5 1-1.5" stroke={DIM} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    </svg>
-  );
-}
-function YamlIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="YML" size={size} />;
-}
-function TomlIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="TOM" size={size} />;
-}
-function ShellIcon({ size = 14 }: IconProps) {
-  // file outline + > prompt
-  return (
-    <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
-      <path d="M2.5 1h6l3 3v9h-9V1Z" stroke={DIM} strokeWidth="0.9" fill={DIM} fillOpacity="0.07" strokeLinejoin="round" />
-      <path d="M8.5 1v3h3" stroke={DIM} strokeWidth="0.9" fill="none" strokeLinejoin="round" />
-      <path d="M4 7.5l2 1.5-2 1.5" stroke={DIM} strokeWidth="0.95" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      <path d="M7.5 10.5h2.5" stroke={DIM} strokeWidth="0.95" strokeLinecap="round" />
-    </svg>
-  );
-}
-function RustIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="RS" size={size} />;
-}
-function GoIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="GO" size={size} />;
-}
-function SqlIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="SQL" size={size} />;
-}
-function GraphqlIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="GQL" size={size} />;
-}
-function TerraformIcon({ size = 14 }: IconProps) {
-  return <LabelFileIcon label="TF" size={size} />;
-}
-function DockerfileIcon({ size = 14 }: IconProps) {
-  // file outline + container stack
-  return (
-    <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
-      <path d="M2.5 1h6l3 3v9h-9V1Z" stroke={DIM} strokeWidth="0.9" fill={DIM} fillOpacity="0.07" strokeLinejoin="round" />
-      <path d="M8.5 1v3h3" stroke={DIM} strokeWidth="0.9" fill="none" strokeLinejoin="round" />
-      <rect x="3.5" y="6.5" width="2" height="1.5" rx="0.3" stroke={DIM} strokeWidth="0.8" />
-      <rect x="6" y="6.5" width="2" height="1.5" rx="0.3" stroke={DIM} strokeWidth="0.8" />
-      <rect x="3.5" y="8.5" width="2" height="1.5" rx="0.3" stroke={DIM} strokeWidth="0.8" />
-    </svg>
-  );
-}
-function EnvIcon({ size = 14 }: IconProps) {
-  // file outline + key symbol
-  return (
-    <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
-      <path d="M2.5 1h6l3 3v9h-9V1Z" stroke={DIM} strokeWidth="0.9" fill={DIM} fillOpacity="0.07" strokeLinejoin="round" />
-      <path d="M8.5 1v3h3" stroke={DIM} strokeWidth="0.9" fill="none" strokeLinejoin="round" />
-      <circle cx="5.5" cy="8.5" r="1.5" stroke={DIM} strokeWidth="0.9" />
-      <path d="M7 8.5h2.5M8.5 8.5v1.5" stroke={DIM} strokeWidth="0.9" strokeLinecap="round" />
-    </svg>
-  );
-}
-function GitIcon({ size = 14 }: IconProps) {
-  // file outline + git branch lines
-  return (
-    <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
-      <path d="M2.5 1h6l3 3v9h-9V1Z" stroke={DIM} strokeWidth="0.9" fill={DIM} fillOpacity="0.07" strokeLinejoin="round" />
-      <path d="M8.5 1v3h3" stroke={DIM} strokeWidth="0.9" fill="none" strokeLinejoin="round" />
-      <circle cx="5" cy="6.5" r="1" stroke={DIM} strokeWidth="0.85" />
-      <circle cx="9" cy="6.5" r="1" stroke={DIM} strokeWidth="0.85" />
-      <circle cx="5" cy="10" r="1" stroke={DIM} strokeWidth="0.85" />
-      <path d="M5 7.5V9" stroke={DIM} strokeWidth="0.85" strokeLinecap="round" />
-      <path d="M9 7.5v.5a2 2 0 0 1-2 2H6" stroke={DIM} strokeWidth="0.85" strokeLinecap="round" fill="none" />
-    </svg>
-  );
-}
-function LockFileIcon({ size = 14 }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
-      <path d="M2.5 1h6l3 3v9h-9V1Z" stroke={DIM} strokeWidth="0.9" fill={DIM} fillOpacity="0.07" strokeLinejoin="round" />
-      <path d="M8.5 1v3h3" stroke={DIM} strokeWidth="0.9" fill="none" strokeLinejoin="round" />
-      <rect x="4.5" y="8.5" width="5" height="3" rx="0.6" stroke={DIM} strokeWidth="0.9" />
-      <path d="M5.5 8.5V7.5a1.5 1.5 0 0 1 3 0v1" stroke={DIM} strokeWidth="0.9" strokeLinecap="round" fill="none" />
-    </svg>
-  );
-}
-function ConfigIcon({ size = 14 }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
-      <path d="M2.5 1h6l3 3v9h-9V1Z" stroke={DIM} strokeWidth="0.9" fill={DIM} fillOpacity="0.07" strokeLinejoin="round" />
-      <path d="M8.5 1v3h3" stroke={DIM} strokeWidth="0.9" fill="none" strokeLinejoin="round" />
-      <circle cx="7" cy="8.5" r="1.3" stroke={DIM} strokeWidth="0.9" />
-      <path d="M7 6.5v.7M7 10.3v.7M5 8.5h.7M8.3 8.5H9M5.5 6.9l.5.5M8.5 9.6l-.5-.5M5.5 10.1l.5-.5M8.5 7.4l-.5.5"
-        stroke={DIM} strokeWidth="0.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-// ── Main resolver ─────────────────────────────────────────────────────────
-
-export function getFileIcon(name: string, size = 14): React.ReactNode {
+/** Look up the vscode-icons icon name for a file. Returns the SVG stem (without
+ *  the `file_type_` prefix) or null when the name doesn't match anything. */
+export function lookupFileIconName(name: string): string | null {
   const lower = name.toLowerCase();
-  const ext = lower.split(".").pop() ?? "";
-
-  if (lower === "dockerfile" || lower.startsWith("dockerfile.")) return <DockerfileIcon size={size} />;
-  if (lower === ".env" || lower.startsWith(".env.")) return <EnvIcon size={size} />;
-  if (lower === ".gitignore" || lower === ".gitattributes" || lower === ".gitmodules") return <GitIcon size={size} />;
-  if (lower === "package-lock.json" || lower === "yarn.lock" || lower === "bun.lock" || lower === "pnpm-lock.yaml" || lower === "cargo.lock") return <LockFileIcon size={size} />;
-  if (lower.endsWith(".config.ts") || lower.endsWith(".config.js") || lower.endsWith(".config.mjs") || lower.endsWith(".config.cjs")) return <ConfigIcon size={size} />;
-  if ([".eslintrc", ".eslintrc.js", ".eslintrc.json", ".eslintrc.yml", "eslint.config.mjs", "eslint.config.js"].includes(lower)) return <ConfigIcon size={size} />;
-
-  switch (ext) {
-    case "ts":      return <TypeScriptIcon size={size} />;
-    case "tsx":     return <TypeScriptReactIcon size={size} />;
-    case "js":
-    case "mjs":
-    case "cjs":     return <JavaScriptIcon size={size} />;
-    case "jsx":     return <JavaScriptReactIcon size={size} />;
-    case "py":      return <PythonIcon size={size} />;
-    case "json":
-    case "jsonl":   return <JsonIcon size={size} />;
-    case "css":
-    case "less":    return <CssIcon size={size} />;
-    case "scss":    return <ScssIcon size={size} />;
-    case "html":
-    case "htm":     return <HtmlIcon size={size} />;
-    case "md":
-    case "mdx":     return <MarkdownIcon size={size} />;
-    case "yaml":
-    case "yml":     return <YamlIcon size={size} />;
-    case "toml":    return <TomlIcon size={size} />;
-    case "sh":
-    case "bash":
-    case "zsh":
-    case "fish":    return <ShellIcon size={size} />;
-    case "rs":      return <RustIcon size={size} />;
-    case "go":      return <GoIcon size={size} />;
-    case "sql":     return <SqlIcon size={size} />;
-    case "graphql":
-    case "gql":     return <GraphqlIcon size={size} />;
-    case "tf":
-    case "hcl":     return <TerraformIcon size={size} />;
-    case "lock":    return <LockFileIcon size={size} />;
-    default:        return <GenericFileIcon size={size} />;
+  // 1. Exact filename match (handles package.json, Dockerfile, .gitignore, etc.)
+  if (Object.prototype.hasOwnProperty.call(fileIconByName, lower)) {
+    return fileIconByName[lower];
   }
+  const dot = lower.lastIndexOf(".");
+  if (dot > 0) {
+    const stem = lower.slice(0, dot);
+    const ext = lower.slice(dot + 1);
+    // 2. stem + allowed extensions combo (e.g. tsconfig.json, vite.config.ts)
+    for (const c of fileIconCombos) {
+      if (c.filename === stem && c.exts.includes(ext)) return c.icon;
+    }
+    // 3. Plain extension (tsx → reactts, py → python, …)
+    if (Object.prototype.hasOwnProperty.call(fileIconByExt, ext)) {
+      return fileIconByExt[ext];
+    }
+  } else if (dot === 0) {
+    // 4. Dotfiles: ".env" → strip the leading dot, look up the rest as an
+    //    extension (handles `.env`, `.gitignore` once the fileIconByName
+    //    miss above fell through).
+    const ext = lower.slice(1);
+    if (Object.prototype.hasOwnProperty.call(fileIconByExt, ext)) {
+      return fileIconByExt[ext];
+    }
+  }
+  return null;
+}
+
+/** Look up the vscode-icons icon name for a folder (with optional `_opened`
+ *  suffix when open). */
+export function lookupFolderIconName(name: string, open: boolean): string | null {
+  const lower = name.toLowerCase();
+  const base = folderIconByName[lower];
+  if (!base) return null;
+  if (open) return base + "_opened";
+  return base;
+}
+
+// ── Rendering ──────────────────────────────────────────────────────────────
+
+function VscodeIcon({ src, size, title }: { src: string; size: number; title?: string }) {
+  // Inline-rendered SVG so it follows CSS currentColor / var() when the icon
+  // ships hardcoded fills we override at render time. `loading="lazy"` keeps
+  // the explorer snappy when folders have many files.
+  // <img> (not Next/Image): file tree icons are 14×14 px and not LCP-critical,
+  // and <img> lets the browser cache the SVGs across sessions without per-icon
+  // webpack ceremony.
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      width={size}
+      height={size}
+      alt={title ?? ""}
+      loading="lazy"
+      draggable={false}
+      style={{ display: "block", flexShrink: 0 }}
+    />
+  );
+}
+
+function FallbackFileIcon({ size }: { size: number }) {
+  // Minimal monochrome file outline for files vscode-icons doesn't cover.
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path
+        d="M3 2h7l3 3v9H3V2Z"
+        stroke="var(--text-dim)"
+        strokeWidth="1"
+        fill="var(--text-dim)"
+        fillOpacity="0.08"
+      />
+      <path d="M10 2v3h3" stroke="var(--text-dim)" strokeWidth="1" fill="none" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// ── Public API ──────────────────────────────────────────────────────────────
+
+/** Render the file tree icon for `name`. Tries the vscode-icons set first and
+ *  falls back to a monochrome outline when nothing matches. */
+export function getFileIcon(name: string, size = 14): React.ReactNode {
+  const iconName = lookupFileIconName(name);
+  if (iconName) {
+    return <VscodeIcon src={iconUrl(iconName, "file")} size={size} title={iconName} />;
+  }
+  return <FallbackFileIcon size={size} />;
+}
+
+/** Render the folder icon. Pass `name` so we can pick the matching icon
+ *  (`src`, `node_modules`, `.github`, …); without it we show the default
+ *  vscode-icons folder icon. */
+export function FolderIcon({
+  size = 14,
+  open = false,
+  name,
+}: IconProps & { open?: boolean; name?: string }) {
+  const matched = name ? lookupFolderIconName(name, open) : null;
+  const fallback = open ? defaultFolderOpenIcon : defaultFolderIcon;
+  const iconName = matched ?? fallback;
+  return <VscodeIcon src={iconUrl(iconName, "folder")} size={size} title={iconName} />;
 }

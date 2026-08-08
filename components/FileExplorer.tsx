@@ -348,7 +348,7 @@ function TreeNode({
         )}
         {!node.isDir && <span style={{ width: 10, flexShrink: 0 }} />}
         <span style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
-          {node.isDir ? <FolderIcon size={14} open={open} /> : getFileIcon(node.name, 14)}
+          {node.isDir ? <FolderIcon size={14} open={open} name={node.name} /> : getFileIcon(node.name, 14)}
         </span>
         {renaming ? (
           <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
