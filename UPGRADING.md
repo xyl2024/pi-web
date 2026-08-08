@@ -43,10 +43,9 @@ npm run dev  # http://localhost:30141
 
 - [ ] 新建 session 并发送消息
 - [ ] 消息流式显示正常
-- [ ] Fork session（fork 后原 session 仍可继续使用）
 - [ ] In-session 分支切换（Continue 按钮 / BranchNavigator）
 - [ ] 文件查看器正常
-- [ ] Session sidebar 树展示正常
+- [ ] Session sidebar 展示正常
 
 ## 回滚
 
@@ -66,7 +65,7 @@ npm install @earendil-works/pi-ai@<last-good-version> \
 |---|---|
 | `.jsonl` session 文件格式 | pi 升级可能改字段名/结构，`lib/normalize.ts` 的规范化逻辑可能失效 |
 | ToolCall 格式 | `normalizeToolCalls()` 处理 `{id,name,arguments}` ↔ `{toolCallId,toolName,input}` 映射 |
-| `AgentSession` RPC 方法 | `rpc-manager.ts` 调用的 `session.prompt()`、`session.fork()` 等 |
+| `AgentSession` RPC 方法 | `rpc-manager.ts` 调用的 `session.prompt()` 等 |
 | `parentSession` header | 影响 sidebar 树展示 |
 
 ## 历史版本记录

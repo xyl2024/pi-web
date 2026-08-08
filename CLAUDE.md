@@ -360,7 +360,7 @@ components/
                             WeChat login + send-to-workspace settings
 
 hooks/
-  useAgentSession.ts        everything chat-window-related: load, stream, fork,
+  useAgentSession.ts        everything chat-window-related: load, stream,
                             navigate, set model/tools/thinking, compact
   useAgentTodo.ts           polls /api/agent/[id]/agent-todo every 1.5s for the active session
   useI18n.tsx               en/zh dictionary + locale toggle (t() / useI18n())
@@ -412,14 +412,8 @@ docs/
 - Idle timeout: 10 minutes. Concurrent `startRpcSession()` calls share a single start Promise (`globalThis.__piStartLocks`)
 - `customTools` registered here: `buildTodoTools(...)`, `buildShowFileTool()`, `buildAgentTodoTool()` — the trio that gives pi-work sessions their distinctive toolset
 
-### Fork must destroy the wrapper immediately
-`AgentSession.fork()` **mutates the wrapper's inner state in-place** — after fork, `inner.sessionId` is the *new* session's id. If the wrapper stays alive in the registry under the old id, the next request gets the already-forked state and subsequent forks produce a corrupt `parentSession` chain.
-
-**Fix**: `send("fork")` captures `newSessionId`, then calls `this.destroy()` before returning. The next request for the original session reloads a clean AgentSession from the original file. Fork also copies the parent's `~/.pi-work/agent-todo/<oldSid>.jsonl` to the new session id so the agent's plan survives the branch point.
-
-### Two kinds of branching — don't confuse them
-- **Fork** (Fork button on user message): creates a new independent `.jsonl` file. Shown as a child in the sidebar tree via `parentSession` header field.
-- **In-session branch** (Continue button / BranchNavigator): calls `navigate_tree` within the same file. Multiple entries share the same `parentId`. Switching between them calls `/api/sessions/[id]/context?leafId=`.
+### In-session branching only
+Branches live inside a single `.jsonl` file. The `Edit from here` button on any user message calls `navigate_tree` against the current session; the resulting entries share a `parentId` and the BranchNavigator lets the user switch between them. Switching between leaves calls `/api/sessions/[id]/context?leafId=`.
 
 ### Session files can be fully rewritten
 `parentSession` in the header is **display metadata only** — has zero effect on chat content. Safe to `writeFileSync` the entire file (pi does this itself during migrations). Used when cascade-reparenting children on delete.
@@ -470,7 +464,7 @@ Location: `~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`
 {"type":"session_info","id":"...","parentId":"...","name":"user-defined name"}
 ```
 
-`entryIds[]` in `SessionContext` is a parallel array to `messages[]` — maps each displayed message back to its `.jsonl` entry id, used for fork and navigate_tree calls.
+`entryIds[]` in `SessionContext` is a parallel array to `messages[]` — maps each displayed message back to its `.jsonl` entry id, used for navigate_tree calls.
 
 ## Agent Todo JSONL Format
 
@@ -517,7 +511,7 @@ When adding or modifying frontend components:
 
 When adding or modifying frontend interactions, decide whether a toast is needed:
 
-- **Add a toast** for: server-bound actions (save, delete, rename, fork, send, copy, fetch, OAuth login, install, export, scheduler run, HTTP send/cancel) and for successes of operations that otherwise complete silently.
+- **Add a toast** for: server-bound actions (save, delete, rename, send, copy, fetch, OAuth login, install, export, scheduler run, HTTP send/cancel) and for successes of operations that otherwise complete silently.
 - **Skip a toast** for: actions whose feedback is purely local UI state (toggles, expand/collapse, theme switch, sound on/off) and for forms where the error must stay inline next to the field (rename conflicts, validation messages, modal-internal footer text).
 
 Conventions:

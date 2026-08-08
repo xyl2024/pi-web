@@ -38,7 +38,6 @@ interface Props {
   newSessionCwd: string | null;
   onAgentEnd?: () => void;
   onSessionCreated?: (session: SessionInfo) => void;
-  onSessionForked?: (newSessionId: string) => void;
   modelsRefreshKey?: number;
   chatInputRef?: React.RefObject<ChatInputHandle | null>;
   /** If set, navigate to this entry after the session finishes loading */
@@ -476,7 +475,7 @@ function ProcessDetailsGroup({
   );
 }
 
-function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest, onRenameCompleted, onSessionNameChange }: Props) {
+function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest, onRenameCompleted, onSessionNameChange }: Props) {
   const { t, locale } = useI18n();
   const toast = useToast();
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
@@ -488,19 +487,19 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const {
     loading, error, messages, entryIds, streamState,
     agentRunning, modelNames, modelList, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
-    retryInfo, forkingEntryId, contextUsage,
+    retryInfo, contextUsage,
     isCompacting, compactError, displayModel: displayModelValue,
     agentPhase,
     isNew,
     messagesEndRef, scrollContainerRef,
     lastUserMsgRef,
-    handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
+    handleSend, handleAbort, handleNavigate, handleModelChange,
     handleCompact, handleAbortCompaction,
     handleToolPresetChange, handleThinkingLevelChange,
     userMessageHistory,
     activeLeafId, currentSessionId,
   } = useAgentSession({
-    session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
+    session, newSessionCwd, onAgentEnd, onSessionCreated,
     modelsRefreshKey,
     statsEmit,
     scrollToEntryId,
@@ -1150,8 +1149,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                     toolResults={toolResultsMap}
                     modelNames={modelNames}
                     entryId={renderEntryIds[idx]}
-                    onFork={agentRunning || isNew || (idx === 0 && msg.role === "user") ? undefined : handleFork}
-                    forking={forkingEntryId === renderEntryIds[idx]}
                     onNavigate={agentRunning ? undefined : handleNavigate}
                     prevAssistantEntryId={agentRunning ? undefined : prevAssistantEntryId}
                     onEditContent={(content) => chatInputRef?.current?.insertIfEmpty(content)}

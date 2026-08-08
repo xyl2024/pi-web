@@ -374,17 +374,6 @@ export function AppShell() {
     setExplorerRefreshKey((k) => k + 1);
   }, []);
 
-  const handleSessionForked = useCallback((newSessionId: string) => {
-    setRefreshKey((k) => k + 1);
-    setSessionKey((k) => k + 1);
-    setNewSessionCwd(null);
-    setSelectedSession((prev) => ({
-      ...(prev ?? { path: "", cwd: "", created: "", modified: "", messageCount: 0, firstMessage: "", running: false }),
-      id: newSessionId,
-    }));
-    router.replace(`?session=${encodeURIComponent(newSessionId)}`, { scroll: false });
-  }, [router]);
-
   // Auto-name callback wiring: update the in-memory selected session so the
   // chat header / top bar stays in sync without a full reload, then bump
   // refreshKey so SessionSidebar re-reads the .jsonl and reflects the name.
@@ -1098,7 +1087,6 @@ export function AppShell() {
               newSessionCwd={effectiveNewSessionCwd}
               onAgentEnd={handleAgentEnd}
               onSessionCreated={handleSessionCreated}
-              onSessionForked={handleSessionForked}
               modelsRefreshKey={modelsRefreshKey}
               chatInputRef={chatInputRef}
               scrollToEntryId={pendingScrollEntryId}

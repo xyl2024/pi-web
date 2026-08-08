@@ -149,18 +149,6 @@ export function appendAgentTodoEntry(
   }
 }
 
-/**
- * Copy a session's agent-todo file to a new session id (fork). If the
- * source has no file, this is a no-op — the child will start empty.
- */
-export function copyAgentTodoFile(fromSessionId: string, toSessionId: string): void {
-  const src = agentTodoPath(fromSessionId);
-  if (!fs.existsSync(src)) return;
-  ensureDir();
-  const dst = agentTodoPath(toSessionId);
-  fs.copyFileSync(src, dst);
-}
-
 /** Delete a session's agent-todo file. Idempotent. */
 export function deleteAgentTodoFile(sessionId: string): void {
   const filePath = agentTodoPath(sessionId);

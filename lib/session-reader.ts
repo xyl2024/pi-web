@@ -169,7 +169,7 @@ export function buildSessionContext(entries: SessionEntry[], leafId?: string | n
   const piCtx = piBuildSessionContext(piEntries, leafId, byId as unknown as Map<string, PiSessionEntry>);
 
   // Build entryIds: parallel array to messages[], mapping each message back to its entry id.
-  // Needed for fork and navigate_tree calls from the UI.
+  // Needed for navigate_tree calls from the UI.
   let targetLeaf: SessionEntry | undefined;
   if (leafId === null) {
     return { messages: [], entryIds: [], thinkingLevel: piCtx.thinkingLevel, model: piCtx.model };

@@ -30,8 +30,6 @@ interface Props {
   toolResults?: Map<string, ToolResultMessage>;
   modelNames?: Record<string, string>;
   entryId?: string;
-  onFork?: (entryId: string) => void;
-  forking?: boolean;
   onNavigate?: (entryId: string) => void;
   prevAssistantEntryId?: string;
   onEditContent?: (content: string) => void;
@@ -83,13 +81,13 @@ function highlightKeywords(text: string, keywords?: string[], isSearchMatch?: bo
   return parts.length > 0 ? parts : text;
 }
 
-export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, keywords, highlightEntryId, isSearchMatch, afterContent }: Props) {
+export function MessageView({ message, isStreaming, toolResults, modelNames, entryId, onNavigate, prevAssistantEntryId, onEditContent, showTimestamp, keywords, highlightEntryId, isSearchMatch, afterContent }: Props) {
   const isFocused = !!(highlightEntryId && entryId === highlightEntryId);
 
   if (message.role === "user") {
     return (
       <div className={isFocused ? "search-flash" : undefined}>
-        <UserMessageView message={message as UserMessage} entryId={entryId} onFork={onFork} forking={forking} onNavigate={onNavigate} prevAssistantEntryId={prevAssistantEntryId} onEditContent={onEditContent} keywords={keywords} isSearchMatch={isSearchMatch} />
+        <UserMessageView message={message as UserMessage} onNavigate={onNavigate} prevAssistantEntryId={prevAssistantEntryId} onEditContent={onEditContent} keywords={keywords} isSearchMatch={isSearchMatch} />
       </div>
     );
   }
@@ -106,11 +104,8 @@ export function MessageView({ message, isStreaming, toolResults, modelNames, ent
   return null;
 }
 
-function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAssistantEntryId, onEditContent, keywords, isSearchMatch }: {
+function UserMessageView({ message, onNavigate, prevAssistantEntryId, onEditContent, keywords, isSearchMatch }: {
   message: UserMessage;
-  entryId?: string;
-  onFork?: (entryId: string) => void;
-  forking?: boolean;
   onNavigate?: (entryId: string) => void;
   prevAssistantEntryId?: string;
   onEditContent?: (content: string) => void;
@@ -151,9 +146,8 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
       : message.content.filter((b): b is ImageContent => b.type === "image");
 
   const time = formatTime(message.timestamp);
-  const canFork = !!entryId && !!onFork;
   const canNavigate = !!prevAssistantEntryId && !!onNavigate;
-  const hasMetadata = !!time || canFork || canNavigate || !!content;
+  const hasMetadata = !!time || canNavigate || !!content;
 
   const copyContent = () => {
     copyText(content).then(() => {
@@ -306,63 +300,32 @@ function UserMessageView({ message, entryId, onFork, forking, onNavigate, prevAs
               </Tooltip>
             </div>
           )}
-          {(canFork || canNavigate) && (
+          {canNavigate && (
             <div style={{ display: "flex", gap: 3 }}>
-              {canNavigate && (
-                <Tooltip content={t("Edit from here title")}>
-                  <button
-                    onClick={() => { onNavigate!(prevAssistantEntryId!); onEditContent?.(content); }}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 4,
-                      padding: "3px 8px", height: 22,
-                      background: "none", border: "none",
-                      borderRadius: 5,
-                      color: "var(--text-dim)",
-                      cursor: "pointer",
-                      fontSize: 11, fontWeight: 400,
-                      whiteSpace: "nowrap",
-                      transition: "color 0.12s",
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; }}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="15 10 20 15 15 20" />
-                      <path d="M4 4v7a4 4 0 0 0 4 4h12" />
-                    </svg>
-                    {t("Edit from here")}
-                  </button>
-                </Tooltip>
-              )}
-              {canFork && (
-                <Tooltip content={forking ? t("Creating new session") : t("New session title")}>
-                  <button
-                    onClick={() => { onFork!(entryId!); }}
-                    disabled={forking}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 4,
-                      padding: "3px 8px", height: 22,
-                      background: "none", border: "none",
-                      borderRadius: 5,
-                      color: forking ? "var(--accent)" : "var(--text-dim)",
-                      cursor: forking ? "not-allowed" : "pointer",
-                      fontSize: 11, fontWeight: 400,
-                      whiteSpace: "nowrap",
-                      transition: "color 0.12s",
-                    }}
-                    onMouseEnter={(e) => { if (!forking) e.currentTarget.style.color = "var(--accent)"; }}
-                    onMouseLeave={(e) => { if (!forking) e.currentTarget.style.color = "var(--text-dim)"; }}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="6" y1="3" x2="6" y2="15" />
-                      <circle cx="18" cy="6" r="3" />
-                      <circle cx="6" cy="18" r="3" />
-                      <path d="M18 9a9 9 0 0 1-9 9" />
-                    </svg>
-                    {forking ? t("Creating...") : t("New session")}
-                  </button>
-                </Tooltip>
-              )}
+              <Tooltip content={t("Edit from here title")}>
+                <button
+                  onClick={() => { onNavigate!(prevAssistantEntryId!); onEditContent?.(content); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 4,
+                    padding: "3px 8px", height: 22,
+                    background: "none", border: "none",
+                    borderRadius: 5,
+                    color: "var(--text-dim)",
+                    cursor: "pointer",
+                    fontSize: 11, fontWeight: 400,
+                    whiteSpace: "nowrap",
+                    transition: "color 0.12s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 10 20 15 15 20" />
+                    <path d="M4 4v7a4 4 0 0 0 4 4h12" />
+                  </svg>
+                  {t("Edit from here")}
+                </button>
+              </Tooltip>
             </div>
           )}
           {time && <span style={{ fontSize: 10, color: "var(--text-dim)", marginLeft: "auto" }}>{time}</span>}

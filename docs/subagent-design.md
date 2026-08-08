@@ -53,8 +53,7 @@
 | 维度 | 现状 |
 |---|---|
 | 会话生命周期 | 一个 session 一个 `AgentSessionWrapper`，注册到 `globalThis.__piSessions`；10 分钟 idle 后 `destroy()`；并发启动用 `__piStartLocks` 串行化 |
-| HTTP 入口 | `POST /api/agent/new`（创建）；`POST /api/agent/[id]`（13 种命令：`prompt` / `fork` / `navigate_tree` / `set_model` / `set_tools` / `compact` 等）；`GET /api/agent/[id]/events`（SSE，30s 心跳） |
-| 已有"父子 session"概念 | `fork` 命令（`lib/rpc-manager.ts:244-286`）—— **父 wrapper 在 fork 后立刻销毁**，新 session 写 `parentSession` header，侧栏按 `parentSessionId` 显示树形 |
+| HTTP 入口 | `POST /api/agent/new`（创建）；`POST /api/agent/[id]`（12 种命令：`prompt` / `navigate_tree` / `set_model` / `set_tools` / `compact` 等）；`GET /api/agent/[id]/events`（SSE，30s 心跳） |
 | Frontend 状态 | `useAgentSession` 聚合 SSE 事件；UI 表面：`ChatWindow` / `ChatInput` / `SessionSidebar` / `TabBar` |
 | "工具正在跑"指示 | `agentPhase`：`{ kind: "waiting_model" }` / `{ kind: "running_tools", tools: [...] }`，在 ChatWindow 顶部 |
 | subagent 代码 | **无**。`lib/agent-todo-tool.ts:62` 有个 `owner: "Owning agent or sub-agent name."` 字段占位，但调用链未实现 |
@@ -68,7 +67,7 @@
 
 - 一个 `subagent` tool，LLM 可调用；支持 single / parallel / chain 三种模式
 - 每个 subagent 是同一 Node 进程内的一个新 `AgentSessionWrapper`
-- **父 wrapper 不销毁**（与 `fork` 不同）；subagent 跑完后，父 wrapper 拿到结果摘要作为 tool result
+- **父 wrapper 不销毁**；subagent 跑完后，父 wrapper 拿到结果摘要作为 tool result
 - Agent 定义从 `~/.pi-work/agents/*.md` 读（与上游 `~/.pi/agent/agents/*.md` 同构，可直接复用上游 scout/planner/reviewer/worker markdown）
 - 协议层先打通；前端实时进度面板留白到真有需求再做
 

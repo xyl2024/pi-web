@@ -169,7 +169,10 @@ export interface SessionInfo {
   modified: string;
   messageCount: number;
   firstMessage: string;
-  parentSessionId?: string; // set if this session was forked from another
+  parentSessionId?: string; // read-only historical metadata — was set on
+  // sessions created via the (now removed) fork feature. Preserved here so
+  // old `.jsonl` files keep loading; the sidebar no longer uses it to
+  // render any tree structure.
   // True while the agent is between agent_start and agent_end (or compacting).
   // Set by the read layer to false; the /api/sessions route enriches from the
   // wrapper registry.

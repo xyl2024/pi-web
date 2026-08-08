@@ -1,4 +1,4 @@
-import { createAgentSession, DefaultResourceLoader, SessionManager, isToolCallEventType } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, DefaultResourceLoader, isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import { cacheSessionPath, invalidateSessionListCache } from "./session-reader";
 import type { AgentSessionLike, ToolInfo } from "./pi-types";
 import { createLogger, elapsedMs } from "./logger";
@@ -12,7 +12,6 @@ import { readEnabledTodoTools } from "./todo-tools-config";
 import { buildShowFileTool } from "./show-file-tool";
 import { buildAgentTodoTool } from "./agent-todo-tool";
 import { readEnabledCustomTools } from "./custom-tools-config";
-import { copyAgentTodoFile } from "./agent-todo-store";
 import { matchDangerousPattern, getDangerousPatternTimeoutMs } from "./dangerous-patterns";
 
 const log = createLogger("rpc-manager");
@@ -250,51 +249,6 @@ export class AgentSessionWrapper {
         await this.inner.setModel(model);
         return { id: model.id, provider: model.provider };
       }
-
-      case "fork": {
-        const entryId = command.entryId as string;
-        const sessionManager = this.inner.sessionManager;
-        const currentSessionFile = this.inner.sessionFile;
-        const startedAt = Date.now();
-        log.info("fork requested", { sessionId: this.sessionId, entryId });
-
-        if (!sessionManager.isPersisted()) return { cancelled: true };
-        if (!currentSessionFile) throw new Error("Persisted session is missing a session file");
-
-        const entry = sessionManager.getEntry(entryId);
-        if (!entry) throw new Error("Invalid entry ID for forking");
-
-        const sessionDir = sessionManager.getSessionDir();
-        let newSessionFile: string;
-
-        if (!entry.parentId) {
-          // Fork before the first message: create an empty session linked to this one
-          const newManager = SessionManager.create(sessionManager.getCwd(), sessionDir);
-          newManager.newSession({ parentSession: currentSessionFile });
-          newSessionFile = newManager.getSessionFile() as string;
-        } else {
-          // Fork after some history: copy path up to (but not including) the fork point
-          const sourceManager = SessionManager.open(currentSessionFile, sessionDir);
-          const forkedPath = sourceManager.createBranchedSession(entry.parentId);
-          if (!forkedPath) throw new Error("Failed to create forked session");
-          newSessionFile = forkedPath;
-        }
-
-        const newSessionId = SessionManager.open(newSessionFile, sessionDir).getSessionId();
-        cacheSessionPath(newSessionId, newSessionFile);
-        // Inherit the parent's agent-todo plan so the fork starts with the
-        // same context the agent had before the branch point.
-        copyAgentTodoFile(this.sessionId, newSessionId);
-        log.info("fork completed", {
-          sessionId: this.sessionId,
-          newSessionId,
-          newSessionFile,
-          durationMs: elapsedMs(startedAt),
-        });
-        this.destroy();
-        return { cancelled: false, newSessionId };
-      }
-
       case "navigate_tree": {
         const result = await this.inner.navigateTree(command.targetId as string, {});
         log.info("navigate tree completed", {

@@ -13,7 +13,7 @@
 设计目标：
 
 - agent 可以 `create` / `update` / `list` / `get` / `delete` / `clear` 任务，action 集合与 rpiv-todo 完全对齐。
-- 状态**绑定到单个会话分支**（这是 agent 的工作记忆，不是跨会话的长期记录）。fork 复制父计划；reload 重新水合；compact 不影响（因为不再依赖 `.jsonl`）。
+- 状态**绑定到单个会话分支**（这是 agent 的工作记忆，不是跨会话的长期记录）。reload 重新水合；compact 不影响（因为不再依赖 `.jsonl`）。
 - 状态**独立持久化**到 `~/.pi-work/agent-todo/<sessionId>.jsonl`，追加写、保留每次变更的完整快照，方便追溯历史。文件可被 grep / `cat` / 备份工具直接读取。
 - UI 在一个流式 turn 内能感知到每一次变更，渲染**对话区域左侧空白处垂直居中的浮动面板**。
 - 不引入新的 DB、不引入新的 RPC 命令。
@@ -286,20 +286,14 @@ O(n)，仅在用户主动查看历史时调用。
 `details` 字段的 `stateAfter` 与文件末行一致，前端 SSE 拿到 state
 之后渲染，与"再读一遍文件"得到的值等价。
 
-### 5.5 fork、删除、reload
+### 5.5 删除、reload
 
 | 事件                       | 文件动作                                                                                              |
 | -------------------------- | ----------------------------------------------------------------------------------------------------- |
 | 首次 `agent_todo` 调用      | `mkdir ~/.pi-work/agent-todo` + `appendFileSync` 创建文件 + 写第一行                                     |
-| `AgentSession.fork()`      | 复制 `parent.jsonl` → `child.jsonl`（保持父计划起点，子分支独立演进）                                  |
 | 删 session（DELETE 路由）  | `unlink` 对应 `~/.pi-work/agent-todo/<id>.jsonl`                                                       |
 | Next.js /reload / 服务重启 | 不动；下次打开会话时从文件读                                                                             |
 | Compact                    | 不动；agent todo 不再依赖 session `.jsonl`                                                               |
-
-fork 复制的时机：在 `lib/rpc-manager.ts` 的 `send("fork")` 分支里，
-已知 `newSessionId`、原 `wrapper.destroy()` 之前，加一行
-`copyAgentTodoFile(oldSessionId, newSessionId)`。这与"父消息复制到
-子消息"的语义一致：起点相同，分支独立。
 
 ### 5.6 为什么不沿用之前的"分支回放"
 
@@ -329,7 +323,7 @@ fork 复制的时机：在 `lib/rpc-manager.ts` 的 `send("fork")` 分支里，
   并 `logger.warn`。history 读取遇到坏行时跳过该行并 warn，不
   整体失败。
 - **并发**：pi agent 在单个 turn 内串行调工具，多个 session 走不同
-  文件。`globalThis` 锁只在 fork 复制时短暂需要（一次性
+  文件。`globalThis` 锁只在并发启动新会话时短暂需要（一次性
   `fs.copyFileSync` 是原子的）。
 
 ---
@@ -584,8 +578,7 @@ app/api/agent/[id]/
 app/api/sessions/[id]/route.ts         +DELETE 时 unlink 对应 agent-todo 文件
 
 lib/rpc-manager.ts                     +buildAgentTodoTool() 加进 customTools，
-                                       +emit 辅助函数、+connect 时订阅、
-                                       +fork 路径上 copyAgentTodoFile
+                                       +emit 辅助函数、+connect 时订阅
 
 components/
   AgentTodoPanel.tsx                   对话区左侧垂直居中浮动面板
@@ -608,7 +601,6 @@ docs/agent-todo/
 | Session 创建                      | `customTools` 包含 `buildAgentTodoTool()`；工具立即可用。文件尚未创建。                                      |
 | `agent_todo` 首次调用             | `mkdir ~/.pi-work/agent-todo` + `appendFileSync` 创建文件 + 写第一行。                                         |
 | `agent_todo` 后续调用             | 读末行 → reducer → 追加新行 + fsync → emit 实时事件 → 返回 tool 结果。                                       |
-| `AgentSession.fork()`             | `copyAgentTodoFile(parentId, newId)`；子分支继承父计划，独立演进。                                          |
 | 删 session（DELETE 路由）         | `unlink ~/.pi-work/agent-todo/<id>.jsonl`。                                                                   |
 | 流式途中刷新页面                  | `GET /api/agent/[id]/agent-todo` 水合面板（读文件末行）；SSE 重连；实时事件继续。                            |
 | 打开不同 session                  | Provider 重新拉 endpoint、重新订阅 SSE。                                                                      |
@@ -633,19 +625,13 @@ docs/agent-todo/
 **CLAUDE.md "不可逆操作" 精神。** agent-todo 文件处于"用户可追但
 非不可替代"的位置（agent 重做会重新生成），但与 `todos.db` / 聊天
 记录同一目录。写操作走 `fs.appendFileSync` + `fsync`，不引入
-`cat > file` 这种截断惯用法；fork 复制走 `fs.copyFileSync`；删
-session 走 `fs.unlink` —— 全部走 Node 标准 API。手动 `cat > ~/.pi-work/agent-todo/...`
+`cat > file` 这种截断惯用法；删 session 走 `fs.unlink` —— 全部走
+Node 标准 API。手动 `cat > ~/.pi-work/agent-todo/...`
 是用户的责任，与本设计无关。
 
 **自定义事件是自定义的。** SSE 通道已经透传 `session.onEvent` 的所有
 东西；我们只是从工具 `execute` 里的旁路 emit 一个合成事件。除了
 listener 注册表之外不引入新的服务端基础设施。
-
-**fork 复制会写双份。** 父 session 的整份 agent-todo 文件在 fork 时
-被复制到子 session 文件。一个大 plan 会瞬间翻倍。这是与"父消息
-复制到子消息"对齐的代价，可接受。如果将来 agent todo 文件太大，
-可以改"lazy 复制：子 session 首次调用时发现父文件存在则 copyFileSync，
-否则视为新空" —— 不增加复杂度。
 
 **navigateTree 不影响 agent todo。** 用户在同一 session 内切分支
 （BranchNavigator / Continue 按钮）走 pi 的 `navigateTree`，session

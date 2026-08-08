@@ -177,7 +177,7 @@ export function useToolCallStats(messages: AgentMessage[]): UseToolCallStatsRetu
 
   useToolCallStatsRegister(stableDispatch);
 
-  // Recompute when messages change (session switch / fork)
+  // Recompute when messages change (session switch)
   const prevMessagesLenRef = useRef(messages.length);
   useEffect(() => {
     // Only recompute if the messages array changed identity AND length differs
