@@ -713,7 +713,10 @@ function ThinkingBlock({ block, keywords, isSearchMatch, isStreaming }: { block:
                 <polyline points="9 6 15 12 9 18" />
               </svg>
             </span>
-            <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <span
+              className={isStreaming && !expanded && block.thinking.trim().length > 0 ? "thinking-live--muted" : undefined}
+              style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+            >
               {thinkingPreview}
             </span>
           </div>

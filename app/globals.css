@@ -243,6 +243,36 @@ pre, code {
   color: var(--text-muted);
 }
 
+/* Light sweep for an in-progress thinking block (folded view only).
+   Same gradient-clip-on-glyph + horizontal-shift pattern as the agent-todo
+   live effect, with its own keyframes name so the two don't collide across
+   CSS sources. base = --text-muted so when the animation stops or the user
+   has prefers-reduced-motion, the letters fall back to the muted color they
+   already had instead of jumping to a new tone. */
+.thinking-live--muted {
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(100deg,
+    var(--text-muted) 0%, var(--text-muted) 44%,
+    color-mix(in srgb, var(--accent) 50%, #fff) 50%,
+    var(--text-muted) 56%, var(--text-muted) 100%);
+  animation: thinking-live-sweep 2.6s linear infinite;
+}
+@keyframes thinking-live-sweep {
+  from { background-position: 100% 0; }
+  to   { background-position: 0% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking-live--muted {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
 /* Process details summary row — hover brightens the text */
 .process-summary {
   color: var(--text-muted);
