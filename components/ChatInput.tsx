@@ -887,8 +887,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           </div>
         )}
 
-        {/* Main input — collapses away while the agent is streaming */}
-        <CollapsiblePanel open={!isStreaming}>
+        {/* Main input — stays visible while the agent is streaming (abort button handles cancel) */}
+        <CollapsiblePanel open={true}>
         <div
           style={{
             display: "flex",
