@@ -537,7 +537,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     agentPhase,
     isNew,
     messagesEndRef, scrollContainerRef,
-    lastUserMsgRef,
+    lastUserMsgRef, userJustSentRef,
     handleSend, handleAbort, handleNavigate, handleModelChange,
     handleToolPresetChange, handleThinkingLevelChange,
     userMessageHistory,
@@ -801,10 +801,21 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   // ── Auto-scroll to bottom during streaming ──
   const prevStreamingRef = useRef(false);
   useEffect(() => {
-    // Streaming just started → reset scroll tracking
+    // Streaming just started. isStreaming flickers false→true at *every*
+    // assistant-message boundary (between turns, including the one right
+    // after a tool call), so an unconditional reset would yank a user
+    // who's reading the previous response back to the bottom whenever a
+    // new message begins. Only re-engage sticky-bottom when the user
+    // actually asked for a response (userJustSentRef) or was already at
+    // the bottom (e.g. session resume / auto-retry with no handleSend).
     if (streamState.isStreaming && !prevStreamingRef.current) {
-      userScrolledUpRef.current = false;
-      setShowToBottom(false);
+      const el = scrollContainerRef.current;
+      const dist = el ? el.scrollHeight - el.scrollTop - el.clientHeight : 0;
+      if (userJustSentRef.current || dist < 100) {
+        userScrolledUpRef.current = false;
+        setShowToBottom(false);
+      }
+      userJustSentRef.current = false;
     }
     prevStreamingRef.current = streamState.isStreaming;
 

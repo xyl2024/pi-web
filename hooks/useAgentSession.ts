@@ -167,6 +167,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const pendingScrollToUserRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  // Set by handleSend right before dispatch({type:"start"}). The auto-scroll
+  // effect reads it on the next isStreaming false→true transition to tell
+  // "user explicitly asked for a response" apart from "isStreaming just
+  // flickered because the agent started a new assistant message after a tool
+  // call". The former should re-engage sticky-bottom; the latter must not.
+  const userJustSentRef = useRef(false);
   const loadingAgentsFilesRef = useRef<string | null>(null);
 
   const setNewSessionModel = opts.setNewSessionModel ?? setNewSessionModelState;
@@ -505,6 +511,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     setAgentPhase({ kind: "waiting_model" });
     dispatch({ type: "start" });
     pendingScrollToUserRef.current = true;
+    userJustSentRef.current = true;
 
     const piImages = images?.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType }));
 
@@ -767,7 +774,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     userMessageHistory,
     // Refs
     sessionIdRef, eventSourceRef, messagesEndRef, scrollContainerRef,
-    lastUserMsgRef, pendingScrollToUserRef, initialScrollDoneRef,
+    lastUserMsgRef, pendingScrollToUserRef, initialScrollDoneRef, userJustSentRef,
     // Actions
     handleSend, handleAbort, handleNavigate, handleModelChange,
     handleToolPresetChange, handleThinkingLevelChange, loadTools, loadAgentsFiles, setActiveLeafId, setData, setMessages,
