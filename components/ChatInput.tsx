@@ -8,6 +8,7 @@ import { ProviderIcon } from "./ProviderIcon";
 import { useConfirm } from "./ConfirmDialog";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 import { useToast } from "./Toast";
+import { CwdPicker } from "./CwdPicker";
 
 export interface AttachedImage {
   data: string;   // base64, no prefix
@@ -57,6 +58,12 @@ interface Props {
   slashResourceKey?: string;
   onSlashAction?: (action: string) => void;
   contextUsage?: { percent: number | null; contextWindow: number; tokens: number | null } | null;
+  /** Current cwd shown by the CwdPicker (new-session mode only). */
+  cwd?: string | null;
+  /** Fired when the CwdPicker picks a different cwd. */
+  onCwdChange?: (cwd: string) => void;
+  /** When true (no session selected), render the CwdPicker right of the model picker. */
+  showCwdPicker?: boolean;
   onNewSession?: () => void;
   onOpenReplay?: () => void;
   replayAvailable?: boolean;
@@ -302,6 +309,9 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   slashResources = [], slashResourceKey,
   onSlashAction,
   contextUsage,
+  cwd,
+  onCwdChange,
+  showCwdPicker,
   onNewSession,
   onOpenReplay,
   replayAvailable,
@@ -1367,6 +1377,17 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     );
                   })()}
                 </div>
+            )}
+
+            {/* CWD picker — only in the new-session flow (no session selected).
+                Sits right of the model picker; disabled while streaming. */}
+            {showCwdPicker && onCwdChange && (
+              <CwdPicker
+                cwd={cwd ?? null}
+                onCwdChange={onCwdChange}
+                disabled={isStreaming}
+                dropdownDirection="up"
+              />
             )}
           </div>
 

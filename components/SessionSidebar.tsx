@@ -17,8 +17,10 @@ interface Props {
   refreshKey?: number;
   onSessionDeleted?: (sessionId: string) => void;
   onNewSession?: (cwd?: string) => void;
+  // cwd of the active chat context (selected session or in-flight new
+  // session). The sidebar no longer renders an editable picker — this is
+  // only consumed by FileExplorer + the top "+" button (canNew check).
   selectedCwd?: string | null;
-  onCwdChange?: (cwd: string | null) => void;
   onOpenFile?: (filePath: string, fileName: string) => void;
   explorerRefreshKey?: number;
   onAtMention?: (filePath: string) => void;
@@ -35,15 +37,6 @@ interface Props {
   inboxUnread?: number;
   profileRefreshKey?: number;
 }
-
-function shortenCwd(cwd: string, homeDir?: string): string {
-  const path = (homeDir && cwd.startsWith(homeDir)) ? "~" + cwd.slice(homeDir.length) : cwd;
-  const sep = path.includes("/") ? "/" : "\\";
-  const parts = path.split(sep).filter(Boolean);
-  if (parts.length <= 5) return path;
-  return "…/" + parts.slice(-5).join(sep);
-}
-
 
 const SCRAMBLE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
 
@@ -139,7 +132,7 @@ const WORKSPACE_PAGE_SIZE = 5;
 const SESSION_PAGE_SIZE_GROUPED = 5;
 const EXPANDED_CWDS_KEY = "pi-work.expandedCwds";
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, onNewSession, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, favoriteIds = [], onToggleFavorite, onOpenModels, onOpenSkills, onOpenPrompts, onOpenScheduler, onOpenSettings, onOpenInbox, inboxUnread, profileRefreshKey }: Props) {
+export function SessionSidebar({ selectedSessionId, onSelectSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, onNewSession, selectedCwd: selectedCwdProp, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, favoriteIds = [], onToggleFavorite, onOpenModels, onOpenSkills, onOpenPrompts, onOpenScheduler, onOpenSettings, onOpenInbox, inboxUnread, profileRefreshKey }: Props) {
   const { t } = useI18n();
   const toast = useToast();
 
@@ -157,23 +150,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
   const [expandedCwds, setExpandedCwds] = useState<Record<string, boolean>>({});
   const cwdHeaderRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // Top picker state — single source of truth for "active cwd" inside this
-  // sidebar. Picker dropdown also still uses this for highlight + cursor.
-  const [selectedCwd, setSelectedCwd] = useState<string | null>(null);
-
-  const [homeDir, setHomeDir] = useState<string>("");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [customPathOpen, setCustomPathOpen] = useState(false);
-  const [customPathValue, setCustomPathValue] = useState("");
-  const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
-  const [createSpaceValue, setCreateSpaceValue] = useState("");
-  const [createSpaceError, setCreateSpaceError] = useState<string | null>(null);
-  const [creatingSpace, setCreatingSpace] = useState(false);
-  const [pinnedCwds, setPinnedCwds] = useState<string[]>([]);
   const [pinnedSessions, setPinnedSessions] = useState<string[]>([]);
-  const customPathInputRef = useRef<HTMLInputElement>(null);
-  const createSpaceInputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const [explorerOpen, setExplorerOpen] = useState(true);
   const [explorerKey, setExplorerKey] = useState(0);
   const [sessionRefreshDone, setSessionRefreshDone] = useState(false);
@@ -464,12 +441,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     if (explorerRefreshKey !== undefined) setExplorerKey((k) => k + 1);
   }, [explorerRefreshKey]);
 
-  useEffect(() => {
-    fetch("/api/home").then((r) => r.json()).then((d: { home?: string }) => {
-      if (d.home) setHomeDir(d.home);
-    }).catch(() => {});
-  }, []);
-
   // Fetch pinned sessions on mount (always-visible in main sidebar, not lazy-loaded)
   useEffect(() => {
     fetch("/api/pinned-sessions")
@@ -482,21 +453,12 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
 
   const restoredRef = useRef(false);
 
-  useEffect(() => {
-    onCwdChange?.(selectedCwd);
-  }, [selectedCwd, onCwdChange]);
-
-  // Sync internal picker state with selectedCwdProp (the cwd AppShell derives
-  // from selectedSession / newSessionCwd). Defined after scrollCwdIntoView
-  // so it can call it without a forward-declaration hack.
-
-  // Auto-select cwd and restore session from URL on first load.
+  // Auto-restore session from URL on first load.
   // In paged mode the initial-session restore is best-effort: if the target
   // session is on a page we haven't fetched yet, fetch it via the lite info
-  // endpoint and merge into the perCwdSessions list before resolving the cwd.
+  // endpoint and merge into the perCwdSessions list before resolving.
   useEffect(() => {
     if (loadingWorkspaces) return;
-    if (selectedCwd !== null) return;
 
     if (initialSessionId && !restoredRef.current) {
       restoredRef.current = true;
@@ -526,112 +488,14 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
                 },
               };
             });
-            setSelectedCwd(data.session.cwd);
             onSelectSession(data.session, true);
             return;
           }
         } catch { /* fall through */ }
         onInitialRestoreDone?.();
       })();
-      return;
     }
-
-    if (workspaces.length > 0) setSelectedCwd(workspaces[0].cwd);
-  }, [loadingWorkspaces, workspaces, selectedCwd, initialSessionId, onSelectSession, onInitialRestoreDone]);
-
-  const commitCustomPath = useCallback(() => {
-    const path = customPathValue.trim();
-    if (path) {
-      setSelectedCwd(path);
-    }
-    setCustomPathOpen(false);
-    setCustomPathValue("");
-    setCreateSpaceOpen(false);
-    setCreateSpaceValue("");
-    setCreateSpaceError(null);
-    setDropdownOpen(false);
-  }, [customPathValue]);
-
-  const commitCreateSpace = useCallback(async () => {
-    const dirName = createSpaceValue.trim();
-    if (!dirName || creatingSpace) return;
-    setCreatingSpace(true);
-    setCreateSpaceError(null);
-    try {
-      const res = await fetch("/api/create-space", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dir_name: dirName }),
-      });
-      const data = await res.json() as { cwd?: string; error?: string };
-      if (!res.ok || !data.cwd) {
-        setCreateSpaceError(data.error ?? `HTTP ${res.status}`);
-        toast.show({ kind: "error", message: data.error ?? `HTTP ${res.status}` });
-        return;
-      }
-      setSelectedCwd(data.cwd);
-      setCreateSpaceOpen(false);
-      setCreateSpaceValue("");
-      setCreateSpaceError(null);
-      setCustomPathOpen(false);
-      setCustomPathValue("");
-      setDropdownOpen(false);
-      setExplorerKey((k) => k + 1);
-      toast.show({ kind: "success", message: t("Space created") });
-    } catch (e) {
-      setCreateSpaceError(String(e));
-      toast.show({ kind: "error", message: String(e) });
-    } finally {
-      setCreatingSpace(false);
-    }
-  }, [createSpaceValue, creatingSpace, t, toast]);
-
-  const handleDefaultCwd = useCallback(async () => {
-    try {
-      const res = await fetch("/api/default-cwd", { method: "POST" });
-      const data = await res.json() as { cwd?: string; error?: string };
-      if (data.cwd) {
-        setSelectedCwd(data.cwd);
-        setDropdownOpen(false);
-        setCustomPathOpen(false);
-        setCustomPathValue("");
-        setCreateSpaceOpen(false);
-        setCreateSpaceValue("");
-        setCreateSpaceError(null);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // Fetch pinned CWDs when dropdown opens
-  useEffect(() => {
-    if (!dropdownOpen) return;
-    fetch("/api/pinned-cwds")
-      .then((r) => r.json())
-      .then((d: { cwds?: string[] }) => {
-        if (Array.isArray(d.cwds)) setPinnedCwds(d.cwds);
-      })
-      .catch(() => {});
-  }, [dropdownOpen]);
-
-  const togglePin = useCallback(async (cwd: string) => {
-    const next = pinnedCwds.includes(cwd)
-      ? pinnedCwds.filter((p) => p !== cwd)
-      : [...pinnedCwds, cwd];
-    setPinnedCwds(next);
-    try {
-      await fetch("/api/pinned-cwds", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cwds: next }),
-      });
-    } catch {
-      // revert on failure
-      setPinnedCwds(pinnedCwds);
-      toast.show({ kind: "error", message: t("Failed to update pin") });
-    }
-  }, [pinnedCwds, t, toast]);
+  }, [loadingWorkspaces, initialSessionId, onSelectSession, onInitialRestoreDone]);
 
   const toggleSessionPin = useCallback(async (sessionId: string) => {
     const next = pinnedSessions.includes(sessionId)
@@ -651,45 +515,10 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     }
   }, [pinnedSessions, t, toast]);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-        setCustomPathOpen(false);
-        setCustomPathValue("");
-        setCreateSpaceOpen(false);
-        setCreateSpaceValue("");
-        setCreateSpaceError(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  // Picker dropdown's recent-cwds list comes from the workspaces state
-  // (sorted by lastUsed desc) so it stays in sync with the multi-cwd view.
-  const pinnedCwdSet = new Set(pinnedCwds);
-  const unpinnedRecentCwds = workspaces
-    .filter((w) => !pinnedCwdSet.has(w.cwd))
-    .map((w) => w.cwd);
-
-  // Order workspaces: active cwd first, then by lastUsed desc.
-  const orderedWorkspaces = selectedCwd
-    ? [
-        ...workspaces.filter((w) => w.cwd === selectedCwd),
-        ...workspaces.filter((w) => w.cwd !== selectedCwd),
-      ]
-    : workspaces;
-
-  // Scroll the list to the cwd header on the next paint. Used by the
-  // selectedCwdProp → selectedCwd sync effect below so that picker-driven
-  // cwd switches bring the relevant group into view.
-  const scrollCwdIntoView = useCallback((cwd: string) => {
-    requestAnimationFrame(() => {
-      cwdHeaderRefs.current[cwd]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    });
-  }, []);
+  // Workspaces come pre-sorted by lastUsed desc from /api/workspaces;
+  // no client-side reorder needed since the picker that previously
+  // elevated the active cwd is gone.
+  const orderedWorkspaces = workspaces;
 
   const toggleExpandCwd = useCallback((cwd: string) => {
     setExpandedCwds((prev) => {
@@ -714,28 +543,16 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
 
   // Refresh both the workspace metadata (lastUsed may shift) and the
   // current cwd's session page (name may change) after a rename.
-  // Sync internal picker state with selectedCwdProp (the cwd AppShell derives
-  // from selectedSession / newSessionCwd). Without this, clicking a session
-  // in another cwd would leave the picker visually pinned to the old cwd
-  // even though the Explorer + chat panel already switched. Also scrolls
-  // the list to the activated cwd header so the user sees context.
-  useEffect(() => {
-    if (!selectedCwdProp || selectedCwdProp === selectedCwd) return;
-    setSelectedCwd(selectedCwdProp);
-    setExpandedCwds((prev) => ({ ...prev, [selectedCwdProp]: true }));
-    scrollCwdIntoView(selectedCwdProp);
-  }, [selectedCwdProp, selectedCwd, scrollCwdIntoView]);
-
   const handleSessionRenamed = useCallback(() => {
     void fetchWorkspaces(null, "reset");
-    if (selectedCwd) void fetchCwdSessions(selectedCwd, null, "reset");
-  }, [fetchWorkspaces, fetchCwdSessions, selectedCwd]);
+    if (selectedCwdProp) void fetchCwdSessions(selectedCwdProp, null, "reset");
+  }, [fetchWorkspaces, fetchCwdSessions, selectedCwdProp]);
 
   const handleSessionDeleted = useCallback((sessionId: string) => {
     onSessionDeleted?.(sessionId);
     void fetchWorkspaces(null, "reset");
-    if (selectedCwd) void fetchCwdSessions(selectedCwd, null, "reset");
-  }, [onSessionDeleted, fetchWorkspaces, fetchCwdSessions, selectedCwd]);
+    if (selectedCwdProp) void fetchCwdSessions(selectedCwdProp, null, "reset");
+  }, [onSessionDeleted, fetchWorkspaces, fetchCwdSessions, selectedCwdProp]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -753,8 +570,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             {onNewSession && (() => {
-              const cwdForNew = selectedCwdProp ?? selectedCwd;
-              const canNew = !!cwdForNew;
+              const canNew = !!selectedCwdProp;
               return (
                 <Tooltip content={t("New session")}>
                   <button
@@ -866,400 +682,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
             )}
           </div>
         </div>
-
-        {/* CWD picker */}
-        <div ref={dropdownRef} style={{ position: "relative" }}>
-          <button
-            onClick={() => setDropdownOpen((v) => !v)}
-            style={{
-              width: "100%",
-              display: "flex",
-              alignItems: "center",
-              padding: "6px 10px",
-              background: selectedCwd ? "var(--bg-hover)" : "rgba(37,99,235,0.06)",
-              border: selectedCwd ? "1px solid var(--border)" : "1px solid rgba(37,99,235,0.4)",
-              borderRadius: 7,
-              cursor: "pointer",
-              fontSize: 12,
-              color: "var(--text)",
-              textAlign: "left",
-              transition: "border-color 0.15s, background 0.15s",
-            }}
-          >
-            <span
-              style={{
-                flex: 1,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                fontFamily: "var(--font-mono)",
-                fontSize: 11,
-                color: selectedCwd ? "var(--text)" : "var(--text-dim)",
-              }}
-            >
-              {selectedCwd ? shortenCwd(selectedCwd, homeDir) : (initialSessionId && !restoredRef.current ? "" : t("Select project..."))}
-            </span>
-          </button>
-
-          {dropdownOpen && (
-            <div
-              style={{
-                position: "absolute",
-                top: "calc(100% + 4px)",
-                left: 0,
-                right: 0,
-                zIndex: 100,
-                background: "var(--bg)",
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                boxShadow: "0 6px 20px rgba(0,0,0,0.10)",
-                overflow: "hidden",
-              }}
-            >
-              <div style={{ maxHeight: 320, overflowY: "auto" }}>
-                {/* Pinned section */}
-                {pinnedCwds.length > 0 && (
-                  <>
-                    <div style={{ padding: "6px 10px 3px", fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                      {t("Pinned")}
-                    </div>
-                    {pinnedCwds.map((cwd) => (
-                      <Tooltip key={`pinned-${cwd}`} content={cwd}>
-                      <button
-                        onClick={() => {
-                          setSelectedCwd(cwd);
-                          setCustomPathOpen(false);
-                          setCustomPathValue("");
-                          setCreateSpaceOpen(false);
-                          setCreateSpaceValue("");
-                          setCreateSpaceError(null);
-                          setDropdownOpen(false);
-                        }}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 7,
-                          width: "100%",
-                          padding: "8px 10px",
-                          background: cwd === selectedCwd ? "var(--bg-selected)" : "none",
-                          border: "none",
-                          borderBottom: "1px solid var(--border)",
-                          color: cwd === selectedCwd ? "var(--text)" : "var(--text-muted)",
-                          cursor: "pointer",
-                          textAlign: "left",
-                          fontSize: 11,
-                          fontFamily: "var(--font-mono)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        <Tooltip content="Unpin">
-                        <span
-                          onClick={(e) => { e.stopPropagation(); togglePin(cwd); }}
-                          style={{ display: "flex", alignItems: "center", flexShrink: 0, cursor: "pointer", padding: 2 }}
-                        >
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="var(--accent)" stroke="none">
-                            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2Z" />
-                          </svg>
-                        </span>
-                        </Tooltip>
-                        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortenCwd(cwd, homeDir)}</span>
-                      </button>
-                      </Tooltip>
-                    ))}
-                  </>
-                )}
-
-                {/* Recent section */}
-                {unpinnedRecentCwds.length > 0 && (
-                  <>
-                    <div style={{ padding: pinnedCwds.length > 0 ? "4px 10px 3px" : "6px 10px 3px", fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                      {t("Recent")}
-                    </div>
-                    {unpinnedRecentCwds.map((cwd) => (
-                      <Tooltip key={`recent-${cwd}`} content={cwd}>
-                      <button
-                        onClick={() => {
-                          setSelectedCwd(cwd);
-                          setCustomPathOpen(false);
-                          setCustomPathValue("");
-                          setCreateSpaceOpen(false);
-                          setCreateSpaceValue("");
-                          setCreateSpaceError(null);
-                          setDropdownOpen(false);
-                        }}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 7,
-                          width: "100%",
-                          padding: "8px 10px",
-                          background: cwd === selectedCwd ? "var(--bg-selected)" : "none",
-                          border: "none",
-                          borderBottom: "1px solid var(--border)",
-                          color: cwd === selectedCwd ? "var(--text)" : "var(--text-muted)",
-                          cursor: "pointer",
-                          textAlign: "left",
-                          fontSize: 11,
-                          fontFamily: "var(--font-mono)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        <Tooltip content="Pin">
-                        <span
-                          onClick={(e) => { e.stopPropagation(); togglePin(cwd); }}
-                          style={{ display: "flex", alignItems: "center", flexShrink: 0, cursor: "pointer", padding: 2, opacity: 0.45 }}
-                        >
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2Z" />
-                          </svg>
-                        </span>
-                        </Tooltip>
-                        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortenCwd(cwd, homeDir)}</span>
-                      </button>
-                      </Tooltip>
-                    ))}
-                  </>
-                )}
-              </div>
-
-              {/* Default cwd shortcut */}
-              {!customPathOpen && !createSpaceOpen && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDefaultCwd(); }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 7,
-                    width: "100%",
-                    padding: "8px 10px",
-                    background: "none",
-                    border: "none",
-                    borderTop: (pinnedCwds.length > 0 || unpinnedRecentCwds.length > 0) ? "1px solid var(--border)" : "none",
-                    color: "var(--text-muted)",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    fontSize: 11,
-                  }}
-                >
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                    <path d="M1 3A1 1 0 0 1 2 2H4L5 3.5H8.5a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 1 8V3Z" />
-                  </svg>
-                  <span>{t("Use default directory")}</span>
-                </button>
-              )}
-
-              {/* Create space entry */}
-              {!customPathOpen && !createSpaceOpen ? (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCreateSpaceOpen(true);
-                    setCreateSpaceError(null);
-                    setTimeout(() => createSpaceInputRef.current?.focus(), 0);
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 7,
-                    width: "100%",
-                    padding: "8px 10px",
-                    background: "none",
-                    border: "none",
-                    color: "var(--text-muted)",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    fontSize: 11,
-                  }}
-                >
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                    <path d="M1 3A1 1 0 0 1 2 2H4L5 3.5H8.5a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 1 8V3Z" />
-                    <line x1="5" y1="4.3" x2="5" y2="7.3" />
-                    <line x1="3.5" y1="5.8" x2="6.5" y2="5.8" />
-                  </svg>
-                  <span>{t("Create space...")}</span>
-                </button>
-              ) : createSpaceOpen ? (
-                <div style={{ padding: "6px 8px" }}>
-                  <input
-                    ref={createSpaceInputRef}
-                    value={createSpaceValue}
-                    onChange={(e) => {
-                      setCreateSpaceValue(e.target.value);
-                      setCreateSpaceError(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") void commitCreateSpace();
-                      if (e.key === "Escape") {
-                        setCreateSpaceOpen(false);
-                        setCreateSpaceValue("");
-                        setCreateSpaceError(null);
-                      }
-                    }}
-                    placeholder={t("dir name")}
-                    disabled={creatingSpace}
-                    style={{
-                      width: "100%",
-                      fontSize: 11,
-                      fontFamily: "var(--font-mono)",
-                      padding: "5px 8px",
-                      border: "1px solid var(--accent)",
-                      borderRadius: 5,
-                      outline: "none",
-                      background: "var(--bg)",
-                      color: "var(--text)",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                  {createSpaceError && (
-                    <div style={{ marginTop: 5, color: "#f87171", fontSize: 11, lineHeight: 1.35 }}>
-                      {createSpaceError}
-                    </div>
-                  )}
-                  <div style={{ display: "flex", gap: 5, marginTop: 5 }}>
-                    <button
-                      onClick={() => { void commitCreateSpace(); }}
-                      disabled={creatingSpace || !createSpaceValue.trim()}
-                      style={{
-                        flex: 1,
-                        padding: "4px 0",
-                        background: "var(--accent)",
-                        border: "none",
-                        borderRadius: 5,
-                        color: "#fff",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        cursor: creatingSpace || !createSpaceValue.trim() ? "default" : "pointer",
-                        opacity: creatingSpace || !createSpaceValue.trim() ? 0.6 : 1,
-                      }}
-                    >
-                      {creatingSpace ? t("Creating...") : t("Create")}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setCreateSpaceOpen(false);
-                        setCreateSpaceValue("");
-                        setCreateSpaceError(null);
-                      }}
-                      disabled={creatingSpace}
-                      style={{
-                        flex: 1,
-                        padding: "4px 0",
-                        background: "var(--bg-hover)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 5,
-                        color: "var(--text-muted)",
-                        fontSize: 11,
-                        cursor: creatingSpace ? "default" : "pointer",
-                        opacity: creatingSpace ? 0.6 : 1,
-                      }}
-                    >
-                      {t("Cancel")}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              {/* Custom path entry */}
-              {!customPathOpen && !createSpaceOpen ? (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCustomPathOpen(true);
-                    setCreateSpaceOpen(false);
-                    setCreateSpaceValue("");
-                    setCreateSpaceError(null);
-                    setTimeout(() => customPathInputRef.current?.focus(), 0);
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 7,
-                    width: "100%",
-                    padding: "8px 10px",
-                    background: "none",
-                    border: "none",
-                    color: "var(--text-muted)",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    fontSize: 11,
-                  }}
-                >
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" style={{ flexShrink: 0 }}>
-                    <line x1="5" y1="1" x2="5" y2="9" />
-                    <line x1="1" y1="5" x2="9" y2="5" />
-                  </svg>
-                  <span>{t("Custom path...")}</span>
-                </button>
-              ) : customPathOpen ? (
-                <div style={{ padding: "6px 8px" }}>
-                  <input
-                    ref={customPathInputRef}
-                    value={customPathValue}
-                    onChange={(e) => setCustomPathValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitCustomPath();
-                      if (e.key === "Escape") {
-                        setCustomPathOpen(false);
-                        setCustomPathValue("");
-                      }
-                    }}
-                    placeholder="/path/to/project"
-                    style={{
-                      width: "100%",
-                      fontSize: 11,
-                      fontFamily: "var(--font-mono)",
-                      padding: "5px 8px",
-                      border: "1px solid var(--accent)",
-                      borderRadius: 5,
-                      outline: "none",
-                      background: "var(--bg)",
-                      color: "var(--text)",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                  <div style={{ display: "flex", gap: 5, marginTop: 5 }}>
-                    <button
-                      onClick={commitCustomPath}
-                      style={{
-                        flex: 1,
-                        padding: "4px 0",
-                        background: "var(--accent)",
-                        border: "none",
-                        borderRadius: 5,
-                        color: "#fff",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {t("Open")}
-                    </button>
-                    <button
-                      onClick={() => { setCustomPathOpen(false); setCustomPathValue(""); }}
-                      style={{
-                        flex: 1,
-                        padding: "4px 0",
-                        background: "var(--bg-hover)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 5,
-                        color: "var(--text-muted)",
-                        fontSize: 11,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {t("Cancel")}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          )}
         </div>
-      </div>
 
       {/* Multi-cwd list: each CwdGroup renders its own pinned + recent
           sessions. The component owns the scroll container internally. */}
@@ -1288,7 +711,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
       />
 
       {/* File Explorer section */}
-      {(selectedCwdProp || selectedCwd) && (
+      {selectedCwdProp && (
         <div
           style={{
             borderTop: "1px solid var(--border)",
@@ -1361,7 +784,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
           {explorerOpen && (
             <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
               <FileExplorer
-                cwd={selectedCwdProp ?? selectedCwd!}
+                cwd={selectedCwdProp!}
                 onOpenFile={onOpenFile ?? (() => {})}
                 refreshKey={explorerKey}
                 onAtMention={onAtMention}

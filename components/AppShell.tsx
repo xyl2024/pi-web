@@ -260,32 +260,25 @@ export function AppShell() {
   }, []);
 
   const [initialSessionId] = useState<string | null>(() => searchParams.get("session"));
-  const [activeCwd, setActiveCwd] = useState<string | null>(null);
   // True once the initial ?session= URL param has been resolved (or confirmed absent)
   const [initialSessionRestored, setInitialSessionRestored] = useState<boolean>(() => !searchParams.get("session"));
-  // Suppresses sessionKey bump in handleCwdChange during the initial URL restore
-  const suppressCwdBumpRef = useRef(false);
 
-  const handleCwdChange = useCallback((cwd: string | null) => {
-    setActiveCwd(cwd);
-    // Skip if cwd is null (initial mount) or during the initial URL restore.
-    if (!cwd || suppressCwdBumpRef.current) return;
-    // Close any session that belongs to a different cwd — it no longer
-    // matches the selected project directory.
-    setSelectedSession((prev) => {
-      if (prev && prev.cwd !== cwd) return null;
-      return prev;
-    });
-    setNewSessionCwd((prev) => {
-      if (prev && prev !== cwd) return null;
-      return prev;
-    });
+  // cwd picked in the new-session page (ChatInput's CwdPicker, only visible
+  // when no session is selected). Same reset as handleNewSession — any typed
+  // text / attached images for the previous cwd are discarded on switch.
+  const handleCwdPicked = useCallback((cwd: string) => {
+    if (!cwd) return;
+    // Same cwd as the in-flight new session — no-op so re-clicking the
+    // current row doesn't wipe typed text / attached images.
+    if (cwd === newSessionCwd) return;
+    setSelectedSession(null);
+    setNewSessionCwd(cwd);
     setSessionKey((k) => k + 1);
     resetSessionUi();
     setTools([]);
     setActiveTopPanel(null);
     router.replace("/", { scroll: false });
-  }, [router]);
+  }, [router, newSessionCwd]);
 
   const handleSelectSession = useCallback((session: SessionInfo, isRestore = false) => {
     setNewSessionCwd(null);
@@ -294,12 +287,6 @@ export function AppShell() {
     resetSessionUi();
     setTools([]);
     setInitialSessionRestored(true);
-    if (isRestore) {
-      // Suppress the redundant sessionKey bump that would come from the
-      // onCwdChange effect firing after setSelectedCwd in the sidebar
-      suppressCwdBumpRef.current = true;
-      setTimeout(() => { suppressCwdBumpRef.current = false; }, 0);
-    }
     // Skip router.replace when restoring from URL — the param is already correct
     // and calling replace in production Next.js triggers a Suspense remount loop
     if (!isRestore) {
@@ -337,15 +324,15 @@ export function AppShell() {
   // Called when /new slash command is triggered. Pass a `cwdOverride` to
   // pick a non-active cwd (e.g. the per-cwd "+" button in the sidebar)
   // — otherwise we reuse the currently selected session's cwd, falling
-  // back to the sidebar's active picker cwd.
+  // back to the in-flight new-session cwd.
   const handleSlashNew = useCallback((cwdOverride?: string) => {
-    const cwd = cwdOverride ?? selectedSession?.cwd ?? activeCwd;
+    const cwd = cwdOverride ?? selectedSession?.cwd ?? newSessionCwd;
     if (!cwd) return;
     const tempId = typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
       : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
     handleNewSession(tempId, cwd);
-  }, [selectedSession?.cwd, activeCwd, handleNewSession]);
+  }, [selectedSession?.cwd, newSessionCwd, handleNewSession]);
 
   // Called by ChatWindow when a new session gets its real id from pi
   const handleSessionCreated = useCallback((session: SessionInfo) => {
@@ -690,8 +677,10 @@ export function AppShell() {
     handleCloseFileTab(`file:${filePath}`);
   }, [handleCloseFileTab]);
 
-  // Show chat area if a session is selected, or if we have a cwd to start a new session in
-  const effectiveNewSessionCwd = newSessionCwd ?? (selectedSession === null && activeCwd ? activeCwd : null);
+  // Show chat area if a session is selected, or if we have a cwd to start a new session in.
+  // (The old sidebar picker could supply a cwd even with no session selected; that picker is
+  // gone, so the in-flight new-session cwd is the only source now.)
+  const effectiveNewSessionCwd = newSessionCwd;
   const showChat = selectedSession !== null || effectiveNewSessionCwd !== null;
   // While restoring initial session from URL, don't show the placeholder
   const showPlaceholder = initialSessionRestored && !showChat;
@@ -738,14 +727,14 @@ export function AppShell() {
     toggleFocus,
     agentControls,
     hasSession: selectedSession !== null || newSessionCwd !== null,
-    hasCwd: !!(activeCwd ?? selectedSession?.cwd ?? newSessionCwd),
+    hasCwd: !!(selectedSession?.cwd ?? newSessionCwd),
   }), [
     theme.setPreset, setLocale, handleSlashNew,
     handleOpenTodoTab, handleOpenFavoritesTab, handleOpenCanvasTab,
     handleOpenTranslateTab, handleOpenToolCallsTab, handleOpenJsonTab,
     handleOpenTokensTab, handleOpenGitDiffTab,
     toggleFocus, agentControls,
-    selectedSession, newSessionCwd, activeCwd,
+    selectedSession, newSessionCwd,
   ]);
 
   const commands = useMemo<Command[]>(
@@ -763,10 +752,6 @@ export function AppShell() {
       onSessionDeleted={handleSessionDeleted}
       onNewSession={handleSlashNew}
       selectedCwd={selectedSession?.cwd ?? newSessionCwd ?? null}
-      // handleSlashNew accepts an optional cwd — passing the picker active
-      // cwd from here keeps the top-bar "+" identical to before, while
-      // MultiCwdList can pass a specific cwd through the same callback.
-      onCwdChange={handleCwdChange}
       onOpenFile={handleOpenFile}
       explorerRefreshKey={explorerRefreshKey}
       onAtMention={handleAtMention}
@@ -1098,15 +1083,13 @@ export function AppShell() {
               scrollToEntryId={pendingScrollEntryId}
               onScrollComplete={() => setPendingScrollEntryId(null)}
               onNewSessionRequest={handleSlashNew}
+              cwd={effectiveNewSessionCwd}
+              onCwdChange={handleCwdPicked}
+              showCwdPicker={selectedSession === null}
               onRenameCompleted={handleSessionRenameCompleted}
               onSessionNameChange={handleSessionNameChange}
             />
           ) : showPlaceholder ? (
-            activeCwd ? (
-              <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 15 }}>
-                {t("Select a session from the sidebar")}
-              </div>
-            ) : (
               <div style={{ position: "absolute", top: 12, left: 12, display: "flex", alignItems: "flex-start", gap: 8, userSelect: "none", pointerEvents: "none" }}>
                 <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7, flexShrink: 0 }}>
                   <line x1="20" y1="12" x2="4" y2="12" /><polyline points="10 6 4 12 10 18" />
@@ -1114,12 +1097,11 @@ export function AppShell() {
                 <div>
                   <div style={{ fontSize: 18, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>{t("Get Started")}</div>
                   <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.8 }}>
-                    <span style={{ color: "var(--text-dim)", marginRight: 6 }}>1.</span>{t("Select a project directory from the sidebar")}<br />
+                    <span style={{ color: "var(--text-dim)", marginRight: 6 }}>1.</span>{t("Click + on a project in the sidebar to start a new session")}<br />
                     <span style={{ color: "var(--text-dim)", marginRight: 6 }}>2.</span>{t("Add models via the Models button at the bottom")}
                   </div>
                 </div>
               </div>
-            )
           ) : null}
         </div>
       </div>
@@ -1167,7 +1149,7 @@ export function AppShell() {
           ) : activeFileTab?.kind === "json" ? (
             <JsonPanel />
           ) : activeFileTab?.kind === "file" ? (
-            <FileViewer filePath={activeFileTab.filePath} cwd={activeCwd ?? undefined} />
+            <FileViewer filePath={activeFileTab.filePath} cwd={selectedSession?.cwd ?? newSessionCwd ?? undefined} />
           ) : activeFileTab?.kind === "canvas" ? (
             <CanvasPanel />
           ) : activeFileTab?.kind === "rss" ? (
@@ -1175,7 +1157,7 @@ export function AppShell() {
           ) : activeFileTab?.kind === "tokens" ? (
             <TokensPanel onSelectSession={handleSelectSession} />
           ) : activeFileTab?.kind === "gitDiff" ? (
-            <GitDiffPanel cwd={activeCwd ?? selectedSession?.cwd ?? newSessionCwd ?? null} />
+            <GitDiffPanel cwd={selectedSession?.cwd ?? newSessionCwd ?? null} />
           ) : (
             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
               {t("No file open")}
@@ -1353,20 +1335,20 @@ export function AppShell() {
         )}
         {/* Open git diff panel */}
         {isButtonVisible(rightSideBarConfig, "gitDiff") && (
-        <Tooltip content={(activeCwd ?? selectedSession?.cwd ?? newSessionCwd) ? t("Open git diff") : t("Open a session first")} side="left">
+        <Tooltip content={(selectedSession?.cwd ?? newSessionCwd) ? t("Open git diff") : t("Open a session first")} side="left">
           <button
             onClick={() => handleToggleRightPanelTab(GIT_DIFF_TAB_ID, handleOpenGitDiffTab)}
-            disabled={!(activeCwd ?? selectedSession?.cwd ?? newSessionCwd)}
+            disabled={!(selectedSession?.cwd ?? newSessionCwd)}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, padding: 0,
               background: "transparent", border: "none", borderBottom: "1px solid var(--border)",
               color: activeRightPanelKind === "gitDiff" ? "var(--accent)" : "var(--text-muted)",
-              cursor: (activeCwd ?? selectedSession?.cwd ?? newSessionCwd) ? "pointer" : "not-allowed",
-              opacity: (activeCwd ?? selectedSession?.cwd ?? newSessionCwd) ? 1 : 0.4,
+              cursor: (selectedSession?.cwd ?? newSessionCwd) ? "pointer" : "not-allowed",
+              opacity: (selectedSession?.cwd ?? newSessionCwd) ? 1 : 0.4,
               transition: "color 0.12s",
             }}
-            onMouseEnter={(e) => { if (activeCwd ?? selectedSession?.cwd ?? newSessionCwd) e.currentTarget.style.color = "var(--accent)"; }}
+            onMouseEnter={(e) => { if (selectedSession?.cwd ?? newSessionCwd) e.currentTarget.style.color = "var(--accent)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.color = activeRightPanelKind === "gitDiff" ? "var(--accent)" : "var(--text-muted)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1490,11 +1472,11 @@ export function AppShell() {
       </div>
     </div>
     {modelsConfigOpen && <ModelsConfig onClose={() => { setModelsConfigOpen(false); setModelsRefreshKey((k) => k + 1); }} />}
-    {skillsConfigOpen && (activeCwd ?? selectedSession?.cwd ?? newSessionCwd) && (
-      <SkillsConfig cwd={(activeCwd ?? selectedSession?.cwd ?? newSessionCwd)!} onClose={() => setSkillsConfigOpen(false)} />
+    {skillsConfigOpen && (selectedSession?.cwd ?? newSessionCwd) && (
+      <SkillsConfig cwd={(selectedSession?.cwd ?? newSessionCwd)!} onClose={() => setSkillsConfigOpen(false)} />
     )}
-    {promptsConfigOpen && (activeCwd ?? selectedSession?.cwd ?? newSessionCwd) && (
-      <PromptsConfig cwd={(activeCwd ?? selectedSession?.cwd ?? newSessionCwd)!} onClose={() => setPromptsConfigOpen(false)} />
+    {promptsConfigOpen && (selectedSession?.cwd ?? newSessionCwd) && (
+      <PromptsConfig cwd={(selectedSession?.cwd ?? newSessionCwd)!} onClose={() => setPromptsConfigOpen(false)} />
     )}
     {settingsConfigOpen && <SettingsModal onClose={() => setSettingsConfigOpen(false)} onProfileSaved={() => setProfileRefreshKey((k) => k + 1)} />}
     {schedulerOpen && (
@@ -1513,7 +1495,7 @@ export function AppShell() {
     <CommandPalette
       open={paletteOpen}
       onClose={() => setPaletteOpen(false)}
-      cwd={activeCwd ?? selectedSession?.cwd ?? newSessionCwd ?? null}
+      cwd={selectedSession?.cwd ?? newSessionCwd ?? null}
       onSelectSession={handleSelectSearchResult}
       commands={commands}
       t={t}

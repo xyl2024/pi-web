@@ -45,6 +45,12 @@ interface Props {
   /** Called after the scroll-to-entry navigation completes */
   onScrollComplete?: () => void;
   onNewSessionRequest?: () => void;
+  /** Current cwd of the chat context — shown by ChatInput's CwdPicker. */
+  cwd?: string | null;
+  /** Fired when the CwdPicker picks a different cwd (new-session mode only). */
+  onCwdChange?: (cwd: string) => void;
+  /** When true (new-session mode, no session selected), render the CwdPicker. */
+  showCwdPicker?: boolean;
   /** Fired after the auto-name PATCH succeeds — used to refresh the sidebar. */
   onRenameCompleted?: () => void;
   /** Fired as soon as the user confirms a rename — keeps in-memory state in sync. */
@@ -475,7 +481,7 @@ function ProcessDetailsGroup({
   );
 }
 
-function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest, onRenameCompleted, onSessionNameChange }: Props) {
+function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest, cwd, onCwdChange, showCwdPicker, onRenameCompleted, onSessionNameChange }: Props) {
   const { t, locale } = useI18n();
   const toast = useToast();
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
@@ -950,6 +956,9 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       onRenameCompleted={onRenameCompleted ?? (() => {})}
       onSessionNameChange={onSessionNameChange}
       userMessageHistory={userMessageHistory}
+      cwd={cwd ?? null}
+      onCwdChange={onCwdChange ?? (() => {})}
+      showCwdPicker={!!showCwdPicker}
     />
   );
 
