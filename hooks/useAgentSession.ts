@@ -107,10 +107,18 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const statsEmitRef = useRef(statsEmit);
   statsEmitRef.current = statsEmit;
 
-  const isNew = session === null && newSessionCwd !== null;
+  // "New session" = no session selected yet. Deliberately not gated on
+  // newSessionCwd: the very first entry lands on the new-session page before
+  // any cwd is picked (AppShell pre-fills the most recent one), so isNew must
+  // be true from the start or the welcome screen / model picker would never
+  // render. handleSend guards its own creation path with `newSessionCwd`.
+  const isNew = session === null;
 
   const [data, setData] = useState<SessionData | null>(null);
-  const [loading, setLoading] = useState(!isNew);
+  // Only existing sessions load from disk — the new-session page (no session
+  // yet, cwd possibly still being picked) must never sit in the loading
+  // state, otherwise first entry would spin forever on "Loading session...".
+  const [loading, setLoading] = useState(session !== null);
   const [error, setError] = useState<string | null>(null);
   const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AgentMessage[]>([]);
@@ -468,6 +476,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const handleSend = useCallback(async (message: string, images?: AttachedImage[]) => {
     if (!message.trim() && !images?.length) return;
     if (agentRunning) return;
+    // New-session page with no cwd picked yet — can't create a session.
+    if (isNew && !newSessionCwd) {
+      toast.show({ kind: "error", message: t("Select a project first") });
+      return;
+    }
 
     const imageBlocks = images?.map((img) => ({ type: "image" as const, source: { type: "base64" as const, media_type: img.mimeType, data: img.data } }));
     const userMsg: AgentMessage = {

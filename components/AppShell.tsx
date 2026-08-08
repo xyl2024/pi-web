@@ -280,6 +280,25 @@ export function AppShell() {
     router.replace("/", { scroll: false });
   }, [router, newSessionCwd]);
 
+  // First entry (no session in URL, nothing selected): land directly on the
+  // new-session page with the most recently used cwd pre-picked, so typing
+  // works immediately without a placeholder detour. If there are no projects
+  // yet the CwdPicker shows "Select project..." and the user creates one.
+  useEffect(() => {
+    if (!initialSessionRestored) return;
+    if (selectedSession !== null || newSessionCwd !== null) return;
+    let cancelled = false;
+    fetch("/api/workspaces?limit=1")
+      .then((r) => r.json())
+      .then((d: { workspaces?: { cwd: string }[] }) => {
+        if (cancelled) return;
+        const first = d.workspaces?.[0]?.cwd;
+        if (first) setNewSessionCwd(first);
+      })
+      .catch(() => { /* best-effort */ });
+    return () => { cancelled = true; };
+  }, [initialSessionRestored, selectedSession, newSessionCwd]);
+
   const handleSelectSession = useCallback((session: SessionInfo, isRestore = false) => {
     setNewSessionCwd(null);
     setSelectedSession(session);
@@ -677,13 +696,11 @@ export function AppShell() {
     handleCloseFileTab(`file:${filePath}`);
   }, [handleCloseFileTab]);
 
-  // Show chat area if a session is selected, or if we have a cwd to start a new session in.
-  // (The old sidebar picker could supply a cwd even with no session selected; that picker is
-  // gone, so the in-flight new-session cwd is the only source now.)
+  // Show chat area once the initial URL restore is done (or unnecessary) —
+  // even with no session/cwd, we land straight on the new-session page
+  // instead of a placeholder.
   const effectiveNewSessionCwd = newSessionCwd;
-  const showChat = selectedSession !== null || effectiveNewSessionCwd !== null;
-  // While restoring initial session from URL, don't show the placeholder
-  const showPlaceholder = initialSessionRestored && !showChat;
+  const showChat = initialSessionRestored || selectedSession !== null || effectiveNewSessionCwd !== null;
 
   const activeFileTab = fileTabs.find((t) => t.id === activeFileTabId) ?? null;
   const activeRightPanelKind = rightPanelState === "closed" ? null : activeFileTab?.kind ?? null;
@@ -1089,19 +1106,6 @@ export function AppShell() {
               onRenameCompleted={handleSessionRenameCompleted}
               onSessionNameChange={handleSessionNameChange}
             />
-          ) : showPlaceholder ? (
-              <div style={{ position: "absolute", top: 12, left: 12, display: "flex", alignItems: "flex-start", gap: 8, userSelect: "none", pointerEvents: "none" }}>
-                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7, flexShrink: 0 }}>
-                  <line x1="20" y1="12" x2="4" y2="12" /><polyline points="10 6 4 12 10 18" />
-                </svg>
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>{t("Get Started")}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.8 }}>
-                    <span style={{ color: "var(--text-dim)", marginRight: 6 }}>1.</span>{t("Click + on a project in the sidebar to start a new session")}<br />
-                    <span style={{ color: "var(--text-dim)", marginRight: 6 }}>2.</span>{t("Add models via the Models button at the bottom")}
-                  </div>
-                </div>
-              </div>
           ) : null}
         </div>
       </div>
