@@ -7,12 +7,17 @@ import { promisify } from "util";
 import { readFileSync, statSync } from "fs";
 import path from "path";
 import { createLogger } from "@/lib/logger";
-import type { GitDiffFile, GitFileStatus } from "@/lib/git-diff-types";
+import type { GitDiffFile, GitFileStatus, GitStatusResponse } from "@/lib/git-diff-types";
 
 declare global {
   // Short-lived cache for getRepoRoot — same `globalThis` pattern as
   // __piAllowedRootsCache, so it survives Next.js hot reload.
   var __piRepoRootCache: Map<string, { root: string | null; expiresAt: number }> | undefined;
+  // Short-lived cache for the full getRepoStatus response, keyed by cwd.
+  // Collapses the burst of polls from the FileExplorer's 3s polling loop
+  // (and any concurrent subscriber) into one `git status` invocation per
+  // 2s window per cwd.
+  var __piRepoStatusCache: Map<string, { value: Awaited<ReturnType<typeof getRepoStatus>>; expiresAt: number }> | undefined;
 }
 
 const execFileAsync = promisify(execFile);
@@ -22,6 +27,11 @@ const log = createLogger("git-diff");
 const GIT_TIMEOUT_MS = 10_000;
 /** TTL for the getRepoRoot cache; same 5s window as getAllowedRoots. */
 const REPO_ROOT_TTL_MS = 5_000;
+/** TTL for the full getRepoStatus response cache. Sits between the
+ *  FileExplorer's 3s poll interval and the cost of `git status` on big
+ *  repos — long enough to dedupe concurrent polls, short enough that
+ *  status is never more than 2s stale when read from cache. */
+const REPO_STATUS_TTL_MS = 2_000;
 
 /** Cap on a single file's diff output; anything larger is truncated and
  *  flagged so the panel can show a warning instead of a frozen UI. */
@@ -155,15 +165,37 @@ function countUntrackedLines(repoRoot: string, filePath: string): { add: number;
 }
 
 /** Full change overview for a repo: repo root, branch, and the per-file
- *  list with combined staged+unstaged status and +N/-M stats. */
-export async function getRepoStatus(cwd: string): Promise<{
-  repoRoot: string | null;
-  branch: string | null;
-  files: GitDiffFile[];
-}> {
+ *  list with combined staged+unstaged status and +N/-M stats.
+ *
+ *  `cwd` is the *session* cwd, which can sit anywhere inside the repo.
+ *  Files that don't sit under cwd's subtree are filtered out, and the
+ *  remainder have their `path` rewritten to be relative to cwd (so the
+ *  FileExplorer — which keys by cwd-rooted paths — can match without
+ *  doing path math itself). `cwdRelToRepo` is the prefix we stripped, in
+ *  case any consumer needs it (the GitDiffPanel ignores it; the
+ *  git-status-store uses it as a no-op signal). */
+export async function getRepoStatus(cwd: string): Promise<GitStatusResponse> {
+  const now = Date.now();
+  const cache = globalThis.__piRepoStatusCache;
+  if (cache) {
+    const hit = cache.get(cwd);
+    if (hit && hit.expiresAt > now) return hit.value;
+  }
+
+  const value = await computeRepoStatus(cwd);
+
+  if (!cache) globalThis.__piRepoStatusCache = new Map();
+  globalThis.__piRepoStatusCache!.set(cwd, { value, expiresAt: now + REPO_STATUS_TTL_MS });
+  return value;
+}
+
+/** Underlying computation for `getRepoStatus` — pulled out so the cache
+ *  wrapper stays one-line and so callers that genuinely need a fresh read
+ *  (none today, but useful for tests) can bypass the cache. */
+async function computeRepoStatus(cwd: string): Promise<GitStatusResponse> {
   const repoRoot = await getRepoRoot(cwd);
   if (!repoRoot) {
-    return { repoRoot: null, branch: null, files: [] };
+    return { repoRoot: null, cwdRelToRepo: null, branch: null, files: [] };
   }
 
   // `git status --untracked-files=no` skips the (expensive) untracked scan,
@@ -191,8 +223,24 @@ export async function getRepoStatus(cwd: string): Promise<{
 
   const unstagedStats = unstagedNumstat ? parseNumstatZ(unstagedNumstat.stdout) : new Map();
   const stagedStats = stagedNumstat ? parseNumstatZ(stagedNumstat.stdout) : new Map();
+
+  // `cwdRelToRepo` is the prefix we'll strip from each repo-rooted path
+  // so the FileExplorer (keyed at cwd) doesn't have to redo the math.
+  // `path.relative` returns `../foo` when cwd is outside the repo, which
+  // we want to surface as `cwdRelToRepo: null` so the FileExplorer
+  // doesn't accidentally treat out-of-tree paths as in-tree.
+  const cwdRel = path.relative(repoRoot, cwd);
+  const cwdIsInRepo = !cwdRel.startsWith("..") && !path.isAbsolute(cwdRel);
+  const cwdRelToRepo = cwdIsInRepo ? (cwdRel === "." ? "" : cwdRel) : null;
+  const stripPrefix = cwdRelToRepo === "" ? "" : cwdRelToRepo + "/";
+
   const files: GitDiffFile[] = [];
   for (const rec of records) {
+    // Drop entries that sit outside cwd's subtree — the FileExplorer
+    // can't render them anyway, and shipping them across the wire would
+    // force the client to do the same prefix-strip dance.
+    if (cwdRelToRepo === null || !rec.path.startsWith(stripPrefix)) continue;
+
     // Untracked files don't appear in numstat; count lines directly.
     let add = 0, del = 0;
     if (rec.status === "??") {
@@ -205,7 +253,7 @@ export async function getRepoStatus(cwd: string): Promise<{
       del = (u?.del ?? 0) + (s?.del ?? 0);
     }
     files.push({
-      path: rec.path,
+      path: rec.path.slice(stripPrefix.length),
       status: rec.status,
       hasStaged: rec.hasStaged,
       hasUnstaged: rec.hasUnstaged,
@@ -222,7 +270,7 @@ export async function getRepoStatus(cwd: string): Promise<{
     return r !== 0 ? r : a.path.localeCompare(b.path);
   });
 
-  return { repoRoot, branch, files };
+  return { repoRoot, cwdRelToRepo, branch, files };
 }
 
 /** True when filePath is tracked by git (exists in the index). Distinguishes

@@ -30,6 +30,20 @@ export interface GitDiffFile {
 export interface GitStatusResponse {
   /** Absolute path of the repo root, or null when cwd is not a git repo. */
   repoRoot: string | null;
+  /**
+   * Path of `cwd` relative to `repoRoot`, e.g. `services/auth` when cwd
+   * is `/repo/services/auth` and repoRoot is `/repo`. Empty string when
+   * cwd === repoRoot; null when not in a repo or when cwd is *outside*
+   * repoRoot (we still resolve the repo above cwd's parent and use that
+   * prefix, but we surface null so the client doesn't accidentally treat
+   * out-of-tree paths as in-tree).
+   *
+   * Every entry in `files` is now relative to `cwd` (not repoRoot) — the
+   * server strips the `cwdRelToRepo + "/"` prefix when present, so the
+   * FileExplorer (rooted at cwd) can match by basename / direct lookup
+   * without re-doing path math. Entries outside cwd's subtree are dropped.
+   */
+  cwdRelToRepo: string | null;
   branch: string | null;
   files: GitDiffFile[];
 }

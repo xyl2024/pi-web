@@ -34,6 +34,14 @@
   --assistant-bg: #ffffff;
   --tool-bg: #fefefe;
   --bg-subtle: rgba(0,0,0,0.03);
+
+  /* Git status (FileExplorer badges + GitDiffPanel) */
+  --git-status-added: #16a34a;
+  --git-status-modified: #d97706;
+  --git-status-deleted: #ef4444;
+  --git-status-untracked: #2da44e;
+  --git-status-renamed: #3b82f6;
+  --git-status-conflict: #cf222e;
 }
 
 /* ── Preset: midnight (dark) ───────────────────────────────── */
@@ -52,6 +60,13 @@
   --assistant-bg: #1a1a1a;
   --tool-bg: #1f2937;
   --bg-subtle: rgba(255,255,255,0.04);
+
+  --git-status-added: #7ee787;
+  --git-status-modified: #e3b341;
+  --git-status-deleted: #ff7b72;
+  --git-status-untracked: #73c991;
+  --git-status-renamed: #79c0ff;
+  --git-status-conflict: #ff6e6e;
 }
 
 /* ── Preset: synthwave ─────────────────────────────────────── */
@@ -70,6 +85,13 @@
   --assistant-bg: #1a1625;
   --tool-bg: #251e35;
   --bg-subtle: rgba(255,110,199,0.08);
+
+  --git-status-added: #6ee7b7;
+  --git-status-modified: #fbbf24;
+  --git-status-deleted: #ff6ec7;
+  --git-status-untracked: #67e8f9;
+  --git-status-renamed: #c4b5fd;
+  --git-status-conflict: #ff5577;
 }
 
 /* ── Preset: forest ────────────────────────────────────────── */
@@ -88,6 +110,13 @@
   --assistant-bg: #f4f1e8;
   --tool-bg: #e0dbd0;
   --bg-subtle: rgba(46,125,50,0.06);
+
+  --git-status-added: #2e7d32;
+  --git-status-modified: #c2410c;
+  --git-status-deleted: #b91c1c;
+  --git-status-untracked: #4d7c0f;
+  --git-status-renamed: #1e40af;
+  --git-status-conflict: #991b1b;
 }
 
 /* ── Preset: sepia ─────────────────────────────────────────── */
@@ -106,6 +135,13 @@
   --assistant-bg: #f7f0e3;
   --tool-bg: #ece0ce;
   --bg-subtle: rgba(139,69,19,0.07);
+
+  --git-status-added: #4d7c0f;
+  --git-status-modified: #b45309;
+  --git-status-deleted: #991b1b;
+  --git-status-untracked: #65764b;
+  --git-status-renamed: #1e40af;
+  --git-status-conflict: #7c2d12;
 }
 
 /* Theme toggle: circular wipe via View Transitions API.

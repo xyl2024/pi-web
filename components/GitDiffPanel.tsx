@@ -15,13 +15,13 @@ const STATUS_LABEL: Record<GitDiffFile["status"], string> = {
 };
 
 const STATUS_COLOR: Record<GitDiffFile["status"], string> = {
-  "A": "#16a34a",
-  "M": "#d97706",
-  "D": "#ef4444",
-  "R": "#3b82f6",
-  "C": "#3b82f6",
-  "T": "#3b82f6",
-  "U": "#ef4444",
+  "A": "var(--git-status-added)",
+  "M": "var(--git-status-modified)",
+  "D": "var(--git-status-deleted)",
+  "R": "var(--git-status-renamed)",
+  "C": "var(--git-status-renamed)",
+  "T": "var(--git-status-renamed)",
+  "U": "var(--git-status-conflict)",
   "??": "var(--text-dim)",
 };
 

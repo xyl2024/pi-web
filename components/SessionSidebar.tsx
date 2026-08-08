@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import type { SessionInfo, Workspace, WorkspacesResponse } from "@/lib/types";
 import { FileExplorer } from "./FileExplorer";
+import { notifyMutated } from "@/lib/git-status-store";
 import { ProfileBlock } from "./ProfileBlock";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
@@ -164,7 +165,12 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     setExplorerRefreshDone(true);
     if (explorerRefreshTimerRef.current) clearTimeout(explorerRefreshTimerRef.current);
     explorerRefreshTimerRef.current = setTimeout(() => setExplorerRefreshDone(false), 2000);
-  }, []);
+    // Also poke the git status store so any new/modified file surfaces
+    // its badge immediately rather than waiting up to 3s for the next
+    // scheduled poll. No-op when the active cwd isn't being tracked
+    // (e.g. user switched away, or cwd is not a git repo).
+    if (selectedCwdProp) notifyMutated(selectedCwdProp);
+  }, [selectedCwdProp]);
 
   // Persist expand state to localStorage. Stored as a flat object
   // { [cwd]: boolean } — last-writer-wins on the cwd key.

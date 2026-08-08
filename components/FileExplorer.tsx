@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { getFileIcon, FolderIcon } from "./FileIcons";
 import { encodeFilePathForApi, getRelativeFilePath, joinFilePath } from "@/lib/file-paths";
 import { useI18n } from "@/hooks/useI18n";
@@ -9,6 +9,9 @@ import { useToast } from "./Toast";
 import { useConfirm } from "./ConfirmDialog";
 import { useContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { validateFileName } from "@/lib/file-name";
+import { FileGitBadge, gitStatusColor } from "./FileGitBadge";
+import { useGitStatusStore, aggregateFolderStatuses, startTracking, stopTracking } from "@/lib/git-status-store";
+import type { GitDiffFile, GitFileStatus } from "@/lib/git-diff-types";
 
 interface FileEntry {
   name: string;
@@ -50,6 +53,66 @@ async function fetchEntries(dirPath: string): Promise<FileNode[]> {
   }));
 }
 
+// ── Git status helpers ─────────────────────────────────────────────────────
+
+/** Stable empty array used as the fallback when the store has no entry for
+ *  the current cwd yet. Module-scoped so the reference is identical across
+ *  renders — critical for keeping the `useMemo` deps stable. */
+const EMPTY_GIT_FILES: GitDiffFile[] = [];
+
+/** Stable empty aggregate map (no status means "no badge"); same rationale
+ *  as EMPTY_GIT_FILES. */
+const EMPTY_GIT_AGGREGATE: Map<string, GitFileStatus> = new Map();
+
+/** Stable empty file-by-path map; same rationale as EMPTY_GIT_FILES. */
+const EMPTY_GIT_FILES_BY_PATH: Map<string, GitDiffFile> = new Map();
+
+/** Tooltip status line for a single file. Matches the format we agreed on
+ *  in the design grill — status letter + parenthetical stage hint + stats.
+ *  Examples:
+ *    "M (worktree + staged) · +12 -3"
+ *    "A (staged) · +45"
+ *    "Untracked · +5"
+ *  Returns undefined when the file has no git status (caller falls back to
+ *  the default full-path tooltip). */
+function fileTooltip(file: GitDiffFile, t: (k: string) => string): string {
+  const stats = file.status === "??"
+    ? (file.additions > 0 ? ` · +${file.additions}` : "")
+    : (file.additions || file.deletions)
+      ? ` · +${file.additions} -${file.deletions}`
+      : "";
+  const stage = stageHint(file, t);
+  const head = statusHead(file.status, t);
+  return stage ? `${head} (${stage})${stats}` : `${head}${stats}`;
+}
+
+/** Tooltip status line for a folder. Just calls statusHead — defined as
+ *  a separate function for symmetry with fileTooltip; could grow a file
+ *  count later if the worst-status header turns out to be insufficient. */
+function folderTooltip(status: GitFileStatus, t: (k: string) => string): string {
+  return statusHead(status, t);
+}
+
+function statusHead(status: GitFileStatus, t: (k: string) => string): string {
+  switch (status) {
+    case "A": return t("Added");
+    case "M": return t("Modified");
+    case "D": return t("Deleted");
+    case "R": return t("Renamed");
+    case "C": return t("Git status copied");
+    case "T": return t("Type changed");
+    case "U": return t("Conflict");
+    case "??": return t("Untracked");
+  }
+}
+
+function stageHint(file: GitDiffFile, t: (k: string) => string): string {
+  if (file.hasStaged && file.hasUnstaged) return `${t("Staged")} + ${t("Unstaged")}`;
+  if (file.hasStaged) return t("Staged");
+  if (file.hasUnstaged) return t("Unstaged");
+  return "";
+}
+
 function TreeNode({
   node,
   depth,
@@ -61,6 +124,8 @@ function TreeNode({
   refreshKey,
   onFileMutated,
   onFileDeleted,
+  gitFilesByPath,
+  gitAggregate,
 }: {
   node: FileNode;
   depth: number;
@@ -72,6 +137,16 @@ function TreeNode({
   refreshKey?: number;
   onFileMutated?: () => void;
   onFileDeleted?: (filePath: string) => void;
+  /** Map of cwd-relative file path → GitDiffFile. Built once at the
+   *  FileExplorer level from the store snapshot. Children of every
+   *  TreeNode in the recursive chain read from the same reference, so
+   *  per-node lookup is O(1) and there's no recomputation as the user
+   *  expands/collapses subtrees. */
+  gitFilesByPath: Map<string, GitDiffFile>;
+  /** Map of cwd-relative directory path → worst recursive status. Pre-
+   *  computed once per fetch via `aggregateFolderStatuses`. The empty
+   *  string key corresponds to cwd itself. */
+  gitAggregate: Map<string, GitFileStatus>;
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -86,6 +161,22 @@ function TreeNode({
   const [renameValue, setRenameValue] = useState(node.name);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [flashHighlight, setFlashHighlight] = useState(false);
+
+  // Resolve this node's git status. File lookups hit `gitFilesByPath`
+  // (O(1)); folder lookups hit `gitAggregate` (O(1)). Either can be
+  // missing if the file/dir isn't part of any change set.
+  const relPath = getRelativeFilePath(node.fullPath, cwd);
+  const gitFile = !node.isDir ? gitFilesByPath.get(relPath) : undefined;
+  const gitStatus: GitFileStatus | undefined = node.isDir
+    ? gitAggregate.get(relPath)
+    : gitFile?.status;
+  const gitTooltip = gitStatus
+    ? (node.isDir
+        ? folderTooltip(gitStatus, t)
+        : gitFile
+          ? fileTooltip(gitFile, t)
+          : folderTooltip(gitStatus, t))
+    : undefined;
 
   const loadChildren = useCallback(async (force = false) => {
     if (loaded && !force) return;
@@ -301,21 +392,30 @@ function TreeNode({
             )}
           </span>
         ) : (
-          <Tooltip content={node.fullPath}>
+          <Tooltip content={
+            gitTooltip
+              ? <div>
+                  <div style={{ opacity: 0.7 }}>{node.fullPath}</div>
+                  <div>{gitTooltip}</div>
+                </div>
+              : node.fullPath
+          }>
             <span
               style={{
                 fontSize: 12,
-                color: "var(--text)",
+                color: gitStatus ? gitStatusColor(gitStatus) : "var(--text)",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
                 flex: 1,
+                minWidth: 0,
               }}
             >
               {node.name}
             </span>
           </Tooltip>
         )}
+        {gitStatus && <FileGitBadge status={gitStatus} />}
         {loading && (
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2" strokeLinecap="round">
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4" />
@@ -373,6 +473,8 @@ function TreeNode({
               refreshKey={refreshKey}
               onFileMutated={onFileMutated}
               onFileDeleted={onFileDeleted}
+              gitFilesByPath={gitFilesByPath}
+              gitAggregate={gitAggregate}
             />
           ))}
           {children.length === 0 && loaded && (
@@ -394,6 +496,27 @@ export function FileExplorer({ cwd, onOpenFile, refreshKey, onAtMention, onFileM
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const prevCwdRef = useRef<string | null>(null);
 
+  // Subscribe to the git status store. Re-renders when entriesByCwd /
+  // generationByCwd change for *any* cwd; the useMemo below filters to
+  // the active cwd so we only recompute on real changes. `gitFiles` is
+  // always a fresh array reference on every fetch (NextResponse.json
+  // round-trips through JSON), so the useMemo dep alone is enough.
+  const gitStore = useGitStatusStore();
+  const gitEntry = gitStore.entriesByCwd.get(cwd);
+  const gitFiles: GitDiffFile[] = gitEntry?.files ?? EMPTY_GIT_FILES;
+
+  const gitFilesByPath = useMemo(() => {
+    if (gitFiles === EMPTY_GIT_FILES) return EMPTY_GIT_FILES_BY_PATH;
+    const m = new Map<string, GitDiffFile>();
+    for (const f of gitFiles) m.set(f.path, f);
+    return m;
+  }, [gitFiles]);
+
+  const gitAggregate = useMemo(
+    () => (gitFiles === EMPTY_GIT_FILES ? EMPTY_GIT_AGGREGATE : aggregateFolderStatuses(gitFiles)),
+    [gitFiles],
+  );
+
   const handleToggleExpanded = useCallback((fullPath: string, open: boolean) => {
     setExpandedPaths((prev) => {
       const next = new Set(prev);
@@ -401,6 +524,15 @@ export function FileExplorer({ cwd, onOpenFile, refreshKey, onAtMention, onFileM
       return next;
     });
   }, []);
+
+  // Polling lifecycle. Mount → start tracking cwd; unmount or cwd
+  // change → stop. The store keeps entries cached across session
+  // switches, so re-entering a previously-seen cwd paints badges
+  // immediately on the next render.
+  useEffect(() => {
+    startTracking(cwd);
+    return () => stopTracking();
+  }, [cwd]);
 
   useEffect(() => {
     const cwdChanged = prevCwdRef.current !== cwd;
@@ -451,6 +583,8 @@ export function FileExplorer({ cwd, onOpenFile, refreshKey, onAtMention, onFileM
             refreshKey={refreshKey}
             onFileMutated={onFileMutated}
             onFileDeleted={onFileDeleted}
+            gitFilesByPath={gitFilesByPath}
+            gitAggregate={gitAggregate}
           />
         ))}
         {roots.length === 0 && (
