@@ -266,7 +266,11 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
         ...prev,
         [cwd]: {
           ...base,
-          sessions: mode === "reset" ? [] : base.sessions,
+          // Silent refresh: keep the current rows on reset (data still
+          // shows while the request is in flight, no flash of the
+          // "Loading sessions..." placeholder). The list is only replaced
+          // once the fresh page arrives below.
+          sessions: base.sessions,
           loading: mode === "reset",
           loadingMore: mode === "append",
           loadError: null,
@@ -331,7 +335,8 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
       const next: Record<string, CwdSessionsState> = {};
       for (const [cwd, state] of Object.entries(prev)) {
         if (state.sessions.length > 0 || state.loading) {
-          next[cwd] = { ...state, sessions: [], cursor: null, hasMore: false };
+          // Silent refresh: keep rows, just rewind to page 1 and refetch.
+          next[cwd] = { ...state, cursor: null, hasMore: false };
           void fetchCwdSessions(cwd, null, "reset");
         } else {
           next[cwd] = state;
