@@ -903,7 +903,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             position: "relative",
           } as React.CSSProperties}
         >
-          {!value && !isFocused && !isStreaming && (
+          {!value && !isFocused && (
             <span
               aria-hidden
               style={{
@@ -953,11 +953,9 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             placeholder={
               isFocused
                 ? ""
-                : isStreaming
-                  ? t("Agent is running...")
-                  : !value
-                    ? ""
-                    : t("Message...")
+                : !value
+                  ? ""
+                  : t("Message...")
             }
             rows={1}
             style={{

@@ -45,7 +45,6 @@ export const ZH_TRANSLATIONS = {
   "Waiting for model...": "正在等待模型...",
   "Thinking...": "正在思考...",
   "Retrying": "正在重试",
-  "Agent is running...": "Agent 正在运行...",
   "Message...": "输入消息...",
   "Send": "发送",
   "Stop": "停止",
