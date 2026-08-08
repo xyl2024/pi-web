@@ -11,86 +11,146 @@ export interface PerToolStat {
   count: number;
   successCount: number;
   errorCount: number;
-  totalDurationMs: number;
 }
 
-export interface WaterfallEntry {
+export type BashExitStatus =
+  | { kind: "ok"; code: number }
+  | { kind: "nonzero"; code: number }
+  | { kind: "timeout" }
+  | { kind: "aborted" }
+  | { kind: "unknown" };
+
+export interface BashRecord {
   toolCallId: string;
+  command: string;
+  isError: boolean;
+  exit: BashExitStatus;
+  /** First text block of the result, truncated to ~1KB. Empty string when not yet ended. */
+  resultText: string;
+  /** toolName is always "bash"; kept for symmetry / future-proofing. */
   toolName: string;
-  startTime: number;    // Date.now() when start event received
-  endTime?: number;     // Date.now() when end event received
-  isError?: boolean;
+  timestamp: number;
 }
 
 export interface ToolCallStatsSnapshot {
   toolStats: Map<string, PerToolStat>;
-  waterfall: WaterfallEntry[];
+  bashRecords: BashRecord[];
   totalCount: number;
   runningCount: number;
+}
+
+// ── Bash helpers ──
+
+const EXIT_CODE_RE = /Command exited with code (-?\d+)/;
+const TIMEOUT_RE = /Command timed out after (\d+) seconds/;
+const ABORTED_RE = /Command aborted\b/;
+
+/** Parse a `BashExitStatus` from the first text block of a bash tool result.
+ *  pi's bash tool throws an Error whose message contains the exit code on
+ *  non-zero exit, the timeout on timeout, or "aborted" on signal. */
+function parseBashExit(resultText: string | undefined, isError: boolean): BashExitStatus {
+  if (!isError) return { kind: "ok", code: 0 };
+  if (!resultText) return { kind: "unknown" };
+  const m = resultText.match(EXIT_CODE_RE);
+  if (m && m[1] !== undefined) {
+    const n = Number.parseInt(m[1], 10);
+    return { kind: "nonzero", code: Number.isFinite(n) ? n : 0 };
+  }
+  if (TIMEOUT_RE.test(resultText)) return { kind: "timeout" };
+  if (ABORTED_RE.test(resultText)) return { kind: "aborted" };
+  return { kind: "unknown" };
+}
+
+function extractBashCommand(args: Record<string, unknown> | undefined): string {
+  if (!args) return "";
+  const cmd = args["command"];
+  return typeof cmd === "string" ? cmd : "";
 }
 
 // ── Reducer ──
 
 interface StatsState {
   toolStats: Map<string, PerToolStat>;
-  waterfall: WaterfallEntry[];
-  running: Map<string, WaterfallEntry>; // toolCallId -> in-flight entry
+  bashRecords: BashRecord[];
+  running: Map<string, { toolName: string; args?: Record<string, unknown> }>;
 }
 
 type StatsAction =
-  | { type: "tool_start"; toolCallId: string; toolName: string; timestamp: number }
-  | { type: "tool_end"; toolCallId: string; isError: boolean; timestamp: number }
-  | { type: "reset"; toolStats: Map<string, PerToolStat>; waterfall: WaterfallEntry[] };
+  | {
+      type: "tool_start";
+      toolCallId: string;
+      toolName: string;
+      timestamp: number;
+      args?: Record<string, unknown>;
+    }
+  | {
+      type: "tool_end";
+      toolCallId: string;
+      isError: boolean;
+      timestamp: number;
+      resultText?: string;
+    }
+  | { type: "reset"; toolStats: Map<string, PerToolStat>; bashRecords: BashRecord[] };
 
 function statsReducer(state: StatsState, action: StatsAction): StatsState {
   switch (action.type) {
     case "tool_start": {
-      const entry: WaterfallEntry = {
-        toolCallId: action.toolCallId,
-        toolName: action.toolName,
-        startTime: action.timestamp,
-      };
-      const nextWaterfall = [...state.waterfall, entry];
-      const nextRunning = new Map(state.running);
-      nextRunning.set(action.toolCallId, entry);
       const nextStats = new Map(state.toolStats);
       const prev = nextStats.get(action.toolName);
       nextStats.set(action.toolName, {
         count: (prev?.count ?? 0) + 1,
         successCount: prev?.successCount ?? 0,
         errorCount: prev?.errorCount ?? 0,
-        totalDurationMs: prev?.totalDurationMs ?? 0,
       });
-      return { toolStats: nextStats, waterfall: nextWaterfall, running: nextRunning };
+      const nextRunning = new Map(state.running);
+      nextRunning.set(action.toolCallId, { toolName: action.toolName, args: action.args });
+
+      let nextBash = state.bashRecords;
+      if (action.toolName === "bash") {
+        const command = extractBashCommand(action.args);
+        const record: BashRecord = {
+          toolCallId: action.toolCallId,
+          command,
+          isError: false,
+          exit: { kind: "unknown" },
+          resultText: "",
+          toolName: "bash",
+          timestamp: action.timestamp,
+        };
+        nextBash = [...state.bashRecords, record];
+      }
+      return { toolStats: nextStats, bashRecords: nextBash, running: nextRunning };
     }
     case "tool_end": {
       const runningEntry = state.running.get(action.toolCallId);
       if (!runningEntry) return state;
-      const durationMs = action.timestamp - runningEntry.startTime;
-      // Update waterfall entry
-      const nextWaterfall = state.waterfall.map((e) =>
-        e.toolCallId === action.toolCallId
-          ? { ...e, endTime: action.timestamp, isError: action.isError }
-          : e
-      );
-      // Update tool stats
+      const isError = action.isError;
       const nextStats = new Map(state.toolStats);
-      const toolName = runningEntry.toolName;
-      const prev = nextStats.get(toolName);
+      const prev = nextStats.get(runningEntry.toolName);
       if (prev) {
-        nextStats.set(toolName, {
+        nextStats.set(runningEntry.toolName, {
           ...prev,
-          successCount: prev.successCount + (action.isError ? 0 : 1),
-          errorCount: prev.errorCount + (action.isError ? 1 : 0),
-          totalDurationMs: prev.totalDurationMs + durationMs,
+          successCount: prev.successCount + (isError ? 0 : 1),
+          errorCount: prev.errorCount + (isError ? 1 : 0),
         });
       }
       const nextRunning = new Map(state.running);
       nextRunning.delete(action.toolCallId);
-      return { toolStats: nextStats, waterfall: nextWaterfall, running: nextRunning };
+
+      let nextBash = state.bashRecords;
+      if (runningEntry.toolName === "bash") {
+        const resultText = action.resultText ?? "";
+        const exit = parseBashExit(resultText, isError);
+        nextBash = state.bashRecords.map((r) =>
+          r.toolCallId === action.toolCallId
+            ? { ...r, isError, exit, resultText }
+            : r,
+        );
+      }
+      return { toolStats: nextStats, bashRecords: nextBash, running: nextRunning };
     }
     case "reset":
-      return { toolStats: action.toolStats, waterfall: action.waterfall, running: new Map() };
+      return { toolStats: action.toolStats, bashRecords: action.bashRecords, running: new Map() };
     default:
       return state;
   }
@@ -98,10 +158,14 @@ function statsReducer(state: StatsState, action: StatsAction): StatsState {
 
 // ── Build initial stats from messages ──
 
-function buildStatsFromMessages(messages: AgentMessage[]): { toolStats: Map<string, PerToolStat>; waterfall: WaterfallEntry[] } {
+interface BuiltStats {
+  toolStats: Map<string, PerToolStat>;
+  bashRecords: BashRecord[];
+}
+
+function buildStatsFromMessages(messages: AgentMessage[]): BuiltStats {
   const toolStats = new Map<string, PerToolStat>();
-  const waterfall: WaterfallEntry[] = [];
-  // Index tool results by toolCallId
+  const bashRecords: BashRecord[] = [];
   const resultsById = new Map<string, ToolResultMessage>();
   for (const msg of messages) {
     if (msg.role === "toolResult") {
@@ -117,30 +181,45 @@ function buildStatsFromMessages(messages: AgentMessage[]): { toolStats: Map<stri
     for (const block of assistantMsg.content) {
       if (block.type !== "toolCall") continue;
       const tc = block as ToolCallContent;
+      const toolName = tc.toolName;
       const result = resultsById.get(tc.toolCallId);
-      const endTs = result?.timestamp;
-      const durationMs = (endTs && assistantTs) ? endTs - assistantTs : 0;
+      const hasResult = !!result;
       const isError = result?.isError ?? false;
 
-      waterfall.push({
-        toolCallId: tc.toolCallId,
-        toolName: tc.toolName,
-        startTime: assistantTs,
-        endTime: endTs,
-        isError: endTs ? isError : undefined,
+      const prev = toolStats.get(toolName);
+      toolStats.set(toolName, {
+        count: (prev?.count ?? 0) + 1,
+        successCount: (prev?.successCount ?? 0) + (hasResult ? (isError ? 0 : 1) : 0),
+        errorCount: (prev?.errorCount ?? 0) + (hasResult ? (isError ? 1 : 0) : 0),
       });
 
-      const prev = toolStats.get(tc.toolName);
-      toolStats.set(tc.toolName, {
-        count: (prev?.count ?? 0) + 1,
-        successCount: (prev?.successCount ?? 0) + (endTs ? (isError ? 0 : 1) : 0),
-        errorCount: (prev?.errorCount ?? 0) + (endTs ? (isError ? 1 : 0) : 0),
-        totalDurationMs: (prev?.totalDurationMs ?? 0) + durationMs,
-      });
+      if (toolName === "bash") {
+        const command = extractBashCommand(tc.input);
+        let resultText = "";
+        let exit: BashExitStatus = { kind: "unknown" };
+        if (result) {
+          const firstText = result.content.find((c) => c.type === "text");
+          if (firstText && firstText.type === "text") {
+            resultText = firstText.text.length > 1024
+              ? firstText.text.slice(0, 1024) + "…"
+              : firstText.text;
+          }
+          exit = parseBashExit(resultText, isError);
+        }
+        bashRecords.push({
+          toolCallId: tc.toolCallId,
+          command,
+          isError,
+          exit,
+          resultText,
+          toolName: "bash",
+          timestamp: assistantTs,
+        });
+      }
     }
   }
 
-  return { toolStats, waterfall };
+  return { toolStats, bashRecords };
 }
 
 // ── Hook ──
@@ -154,7 +233,7 @@ export interface UseToolCallStatsReturn {
 export function useToolCallStats(messages: AgentMessage[]): UseToolCallStatsReturn {
   const [state, dispatch] = useReducer(statsReducer, null, () => {
     const init = buildStatsFromMessages(messages);
-    return { toolStats: init.toolStats, waterfall: init.waterfall, running: new Map() };
+    return { toolStats: init.toolStats, bashRecords: init.bashRecords, running: new Map() };
   });
 
   const [isDrawerOpen, setDrawerOpen] = useState(false);
@@ -164,13 +243,25 @@ export function useToolCallStats(messages: AgentMessage[]): UseToolCallStatsRetu
   const stableDispatch = useCallback((event: ToolCallStatsEvent) => {
     switch (event.type) {
       case "tool_start":
-        dispatch({ type: "tool_start", toolCallId: event.toolCallId, toolName: event.toolName, timestamp: event.timestamp });
+        dispatch({
+          type: "tool_start",
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          timestamp: event.timestamp,
+          args: event.args,
+        });
         break;
       case "tool_end":
-        dispatch({ type: "tool_end", toolCallId: event.toolCallId, isError: event.isError, timestamp: event.timestamp });
+        dispatch({
+          type: "tool_end",
+          toolCallId: event.toolCallId,
+          isError: event.isError,
+          timestamp: event.timestamp,
+          resultText: event.resultText,
+        });
         break;
       case "reset":
-        dispatch({ type: "reset", toolStats: new Map(), waterfall: [] });
+        dispatch({ type: "reset", toolStats: new Map(), bashRecords: [] });
         break;
     }
   }, []);
@@ -185,10 +276,7 @@ export function useToolCallStats(messages: AgentMessage[]): UseToolCallStatsRetu
     if (messages.length !== prevMessagesLenRef.current) {
       prevMessagesLenRef.current = messages.length;
       const init = buildStatsFromMessages(messages);
-      const kept = new Map<string, WaterfallEntry>();
-      // Preserve any running entries that haven't finished yet
-      state.running.forEach((entry) => kept.set(entry.toolCallId, entry));
-      dispatch({ type: "reset", toolStats: init.toolStats, waterfall: init.waterfall });
+      dispatch({ type: "reset", toolStats: init.toolStats, bashRecords: init.bashRecords });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length]);
@@ -196,8 +284,10 @@ export function useToolCallStats(messages: AgentMessage[]): UseToolCallStatsRetu
   // Derive snapshot
   const snapshot: ToolCallStatsSnapshot = {
     toolStats: state.toolStats,
-    waterfall: state.waterfall,
-    totalCount: state.waterfall.length,
+    bashRecords: state.bashRecords,
+    totalCount: state.toolStats.size > 0
+      ? Array.from(state.toolStats.values()).reduce((s, v) => s + v.count, 0)
+      : state.bashRecords.length,
     runningCount: state.running.size,
   };
 

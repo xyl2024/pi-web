@@ -396,7 +396,16 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       case "tool_execution_start": {
         const id = event.toolCallId as string;
         const name = event.toolName as string;
-        statsEmitRef.current?.({ type: "tool_start", toolCallId: id, toolName: name, timestamp: Date.now() });
+        const args = event.args;
+        statsEmitRef.current?.({
+          type: "tool_start",
+          toolCallId: id,
+          toolName: name,
+          timestamp: Date.now(),
+          args: args && typeof args === "object" && !Array.isArray(args)
+            ? (args as Record<string, unknown>)
+            : undefined,
+        });
         setAgentPhase((prev) => {
           const tools = prev?.kind === "running_tools" ? [...prev.tools] : [];
           if (!tools.some((t) => t.id === id)) tools.push({ id, name });
@@ -406,7 +415,25 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
       case "tool_execution_end": {
         const id = event.toolCallId as string;
-        statsEmitRef.current?.({ type: "tool_end", toolCallId: id, isError: false, timestamp: Date.now() });
+        const isError = event.isError === true;
+        const result = event.result as { content?: Array<{ type?: string; text?: string }>; details?: unknown } | undefined;
+        let resultText: string | undefined;
+        if (result && Array.isArray(result.content)) {
+          const firstText = result.content.find((c) => c?.type === "text" && typeof c.text === "string");
+          if (firstText && typeof firstText.text === "string") {
+            resultText = firstText.text.length > 1024
+              ? firstText.text.slice(0, 1024) + "…"
+              : firstText.text;
+          }
+        }
+        statsEmitRef.current?.({
+          type: "tool_end",
+          toolCallId: id,
+          isError,
+          timestamp: Date.now(),
+          resultText,
+          resultDetails: result?.details,
+        });
         setAgentPhase((prev) => {
           if (prev?.kind !== "running_tools") return prev;
           const tools = prev.tools.filter((t) => t.id !== id);

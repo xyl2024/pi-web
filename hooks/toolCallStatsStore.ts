@@ -22,7 +22,7 @@ export interface ToolCallStatsView {
 
 const EMPTY_SNAPSHOT: ToolCallStatsSnapshot = {
   toolStats: new Map(),
-  waterfall: [],
+  bashRecords: [],
   totalCount: 0,
   runningCount: 0,
 };

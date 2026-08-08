@@ -9,6 +9,8 @@ export interface ToolCallStartEvent {
   toolCallId: string;
   toolName: string;
   timestamp: number;
+  /** Raw tool arguments (e.g. `{ command: "git status" }` for bash). */
+  args?: Record<string, unknown>;
 }
 
 export interface ToolCallEndEvent {
@@ -16,6 +18,12 @@ export interface ToolCallEndEvent {
   toolCallId: string;
   isError: boolean;
   timestamp: number;
+  /** First text block of the tool result, truncated to ~1KB. Used to extract
+   *  exit codes for bash ("Command exited with code N") and to show error
+   *  context in the bash command list. */
+  resultText?: string;
+  /** Tool-specific details payload (bash truncation info, etc.). */
+  resultDetails?: unknown;
 }
 
 export interface ToolCallStatsReset {
