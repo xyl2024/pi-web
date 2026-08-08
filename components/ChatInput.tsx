@@ -41,10 +41,6 @@ interface Props {
   modelNames?: Record<string, string>;
   modelList?: { id: string; name: string; provider: string }[];
   onModelChange?: (provider: string, modelId: string) => void;
-  onCompact?: () => void;
-  onAbortCompaction?: () => void;
-  isCompacting?: boolean;
-  compactError?: string | null;
   toolPreset?: "none" | "full";
   onToolPresetChange?: (preset: "none" | "full") => void;
   thinkingLevel?: "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -303,7 +299,7 @@ function findDirectSlashResource(message: string, resources: SlashResource[]): {
 
 export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   onSend, onAbort, isStreaming, model, modelNames, modelList, onModelChange,
-  onCompact, onAbortCompaction, isCompacting, compactError, toolPreset, onToolPresetChange,
+  toolPreset, onToolPresetChange,
   thinkingLevel, onThinkingLevelChange, availableThinkingLevels, thinkingLevelMap,
   retryInfo,
   slashResources = [], slashResourceKey,
@@ -1444,7 +1440,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           {/* spacer */}
           <div style={{ flex: 1 }} />
 
-          {/* RIGHT: thinking + tools preset + compact (idle) | Stop (streaming) */}
+          {/* RIGHT: thinking + tools preset | Stop (streaming) */}
           <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }}>
             {onOpenReplay && replayAvailable && (
               <IconHoverButton
@@ -1591,37 +1587,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     })}
                   </div>
                 )}
-              </div>
-            )}
-
-            {!isStreaming && onCompact && (
-              <div style={{ position: "relative" }}>
-                {compactError && (
-                  <div style={{
-                    position: "absolute", bottom: "calc(100% + 6px)", right: 0,
-                    background: "#1f2937", color: "#f87171",
-                    fontSize: 11, padding: "4px 8px", borderRadius: 5,
-                    whiteSpace: "nowrap", pointerEvents: "none",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.2)", zIndex: 50,
-                  }}>
-                    {compactError}
-                  </div>
-                )}
-                <IconHoverButton
-                  onClick={isCompacting ? onAbortCompaction! : onCompact!}
-                  disabled={isStreaming && !isCompacting}
-                  variant={isCompacting ? "danger" : "default"}
-                  label={isCompacting ? t("Stop") : t("Compact")}
-                  title={isCompacting ? t("Stop compaction") : t("Compact context")}
-                  icon={isCompacting ? (
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="2" y="2" width="6" height="6" rx="1" fill="currentColor" /></svg>
-                  ) : (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" />
-                      <line x1="10" y1="14" x2="3" y2="21" /><line x1="21" y1="3" x2="14" y2="10" />
-                    </svg>
-                  )}
-                />
               </div>
             )}
 

@@ -200,8 +200,6 @@ export function buildSessionContext(entries: SessionEntry[], leafId?: string | n
 
   const entryIds: string[] = [];
   if (compactionId) {
-    // The first message in piCtx.messages is the synthetic compaction summary — map to compaction entry id
-    entryIds.push(compactionId);
     const compactionIdx = path.findIndex((e) => e.id === compactionId);
     const firstKeptIdx = firstKeptEntryId
       ? path.findIndex((e, i) => i < compactionIdx && e.id === firstKeptEntryId)
@@ -219,18 +217,13 @@ export function buildSessionContext(entries: SessionEntry[], leafId?: string | n
     }
   }
 
-  // pi injects compaction summary as {role:"compactionSummary", summary, tokensBefore}.
-  // Convert to {role:"user"} so MessageView can render it the same as before.
-  const messages = (piCtx.messages as AssistantMessage[]).map((msg) => {
+  // pi injects the compaction summary as {role:"compactionSummary", summary, tokensBefore}.
+  // Drop it — compaction history is no longer surfaced in the UI; the kept
+  // pre-compaction messages follow directly after the last kept message.
+  const messages = (piCtx.messages as AssistantMessage[]).flatMap((msg) => {
     const raw = msg as unknown as Record<string, unknown>;
-    if (raw.role === "compactionSummary") {
-      return {
-        role: "user" as const,
-        content: `*The conversation history before this point was compacted into the following summary:*\n\n${raw.summary ?? ""}`,
-        timestamp: raw.timestamp as number | undefined,
-      };
-    }
-    return normalizeToolCalls(msg);
+    if (raw.role === "compactionSummary") return [];
+    return [normalizeToolCalls(msg)];
   });
 
   return {

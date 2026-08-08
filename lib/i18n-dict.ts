@@ -54,10 +54,6 @@ export const ZH_TRANSLATIONS = {
   "↑↓ switch, ←→ page": "↑↓切换，←→翻页",
   "Change thinking level": "切换推理强度",
   "Change tool preset": "切换工具预设",
-  "Stop compaction": "停止压缩",
-  "Compact context": "压缩上下文",
-  "Compacting...": "正在压缩...",
-  "Compact": "压缩",
   "Export": "导出",
   "Export session": "导出会话",
   "Exporting...": "导出中...",
@@ -862,7 +858,6 @@ export const ZH_TRANSLATIONS = {
   "This article no longer exists, returning to article list": "该文章已不存在，已回到文章列表",
 
   // Command palette — titles for ⌘K commands (commands.tsx)
-  "Compact session": "压缩会话",
   "Theme: Default": "主题：默认",
   "Theme: Midnight": "主题：夜晚",
   "Theme: Synthwave": "主题：霓虹",
@@ -917,7 +912,6 @@ export const ZH_TRANSLATIONS = {
   "Previous page": "上一页",
   "Next page": "下一页",
   "Failed to load token audit": "加载 Token 用量失败",
-  "Compaction": "压缩",
   "Scheduled": "定时任务",
   "Group by": "分组",
   "Flat list": "全部",

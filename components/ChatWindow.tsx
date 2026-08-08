@@ -119,10 +119,10 @@ const NEW_SESSION_PRESETS = [
 
 // ── Per-turn process folding ──
 //
-// A "turn" runs from one anchor (user message or compaction summary) up to
-// the next anchor. The non-final assistant messages in a turn — thinking,
-// tool calls, intermediate text — are wrapped in a ProcessDetailsGroup so
-// users can collapse them and focus on the final answer.
+// A "turn" runs from one anchor (user message) up to the next anchor. The
+// non-final assistant messages in a turn — thinking, tool calls, intermediate
+// text — are wrapped in a ProcessDetailsGroup so users can collapse them and
+// focus on the final answer.
 //
 // While the agent is still running on the current turn (agentRunning is true
 // and the anchor is the last user message), the process is rendered inline
@@ -133,11 +133,7 @@ const NEW_SESSION_PRESETS = [
 // rendered separately below.
 
 function isGroupAnchor(msg: AgentMessage): boolean {
-  if (msg.role === "user") return true;
-  // session-reader.ts synthesises a "compactionSummary" message at the start
-  // of a post-compaction turn. Treat it as a turn anchor so the pre-compaction
-  // process history stays attached to its own turn.
-  return (msg as { role?: string }).role === "compactionSummary";
+  return msg.role === "user";
 }
 
 function hasFinalAssistantAnswer(msg: AgentMessage): boolean {
@@ -494,13 +490,12 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     loading, error, messages, entryIds, streamState,
     agentRunning, modelNames, modelList, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
     retryInfo, contextUsage,
-    isCompacting, compactError, displayModel: displayModelValue,
+    displayModel: displayModelValue,
     agentPhase,
     isNew,
     messagesEndRef, scrollContainerRef,
     lastUserMsgRef,
     handleSend, handleAbort, handleNavigate, handleModelChange,
-    handleCompact, handleAbortCompaction,
     handleToolPresetChange, handleThinkingLevelChange,
     userMessageHistory,
     activeLeafId, currentSessionId,
@@ -547,22 +542,19 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   // The ⌘K command palette in AppShell reads these via useAgentControls().
   // Each entry is a stable callback owned by useAgentSession — including
   // them in the dep list would churn the ref every render, so we register
-  // once on mount and update isStreaming/isCompacting imperatively.
+  // once on mount and update isStreaming imperatively.
   useEffect(() => {
     setAgentControls({
       switchModel: handleModelChange,
       switchThinkingLevel: handleThinkingLevelChange,
       switchToolPreset: handleToolPresetChange,
-      compact: handleCompact,
       abortStreaming: handleAbort,
-      abortCompaction: handleAbortCompaction,
       isStreaming: agentRunning,
-      isCompacting,
     });
     return () => setAgentControls(null);
     // Handlers come from useAgentSession (stable useCallback refs); only
     // re-register when the bits that drive `when()` predicates change.
-  }, [agentRunning, isCompacting]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [agentRunning]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Export the current session as a single-file HTML download. Mirrors the
   // fetch → blob → object-URL → <a download> pattern in hooks/useTodos.tsx
@@ -800,7 +792,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const renderMessages = replayActive ? messages.slice(0, replayIndex) : messages;
   const renderEntryIds = replayActive ? entryIds.slice(0, replayIndex) : entryIds;
 
-  // Last user message / last turn anchor (user OR compactionSummary) — used by
+  // Last user message / last turn anchor — used by
   // the turn renderer and the streaming gallery below.
   let lastUserIdx = -1;
   for (let i = renderMessages.length - 1; i >= 0; i--) {
@@ -930,10 +922,6 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       modelNames={modelNames}
       modelList={modelList}
       onModelChange={handleModelChange}
-      onCompact={session || isNew ? handleCompact : undefined}
-      onAbortCompaction={handleAbortCompaction}
-      isCompacting={isCompacting}
-      compactError={compactError}
       toolPreset={toolPreset}
       onToolPresetChange={session || isNew ? handleToolPresetChange : undefined}
       thinkingLevel={thinkingLevel}
@@ -1107,7 +1095,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                   toolResultsMap.set(msg.toolCallId, msg);
                 }
               }
-              // Last turn anchor (user OR compactionSummary) — computed in the
+              // Last turn anchor — computed in the
               // component body so the streaming gallery below shares it.
               let refIdx = 0;
 
@@ -1180,7 +1168,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
               };
 
               // Group consecutive non-anchor messages into a foldable process
-              // group. Each turn runs from an anchor (user / compactionSummary)
+              // group. Each turn runs from an anchor (user message)
               // to the next anchor; intermediate assistant messages + the
               // process portion of the final assistant are collapsed by default.
               const rendered: React.ReactNode[] = [];
@@ -1205,7 +1193,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
                   continue;
                 }
 
-                // Anchor message (user / compactionSummary)
+                // Anchor message (user)
                 rendered.push(renderOne(userIdx));
 
                 // Intermediate assistant messages in the turn

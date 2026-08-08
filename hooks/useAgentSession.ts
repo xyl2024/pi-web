@@ -138,8 +138,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [agentsFiles, setAgentsFiles] = useState<AgentsFile[]>([]);
   const [currentModelOverride, setCurrentModelOverride] = useState<{ provider: string; modelId: string } | null>(null);
   const [pendingModel, setPendingModel] = useState<{ provider: string; modelId: string } | null>(null);
-  const [isCompacting, setIsCompacting] = useState(false);
-  const [compactError, setCompactError] = useState<string | null>(null);
   const [agentPhase, setAgentPhase] = useState<AgentPhase>(null);
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -230,7 +228,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         return null;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const d = await res.json() as SessionData & { agentState?: { running: boolean; state?: { isStreaming?: boolean; isCompacting?: boolean; contextUsage?: { percent: number | null; contextWindow: number; tokens: number | null } | null; systemPrompt?: string; thinkingLevel?: string } } };
+      const d = await res.json() as SessionData & { agentState?: { running: boolean; state?: { isStreaming?: boolean; contextUsage?: { percent: number | null; contextWindow: number; tokens: number | null } | null; systemPrompt?: string; thinkingLevel?: string } } };
       setData(d);
       setActiveLeafId(d.leafId);
       setMessages(d.context.messages);
@@ -455,16 +453,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         });
         break;
       }
-      case "auto_compaction_start":
-      case "compaction_start":
-        setIsCompacting(true);
-        setCompactError(null);
-        break;
-      case "auto_compaction_end":
+      // Compaction is kernel-driven now (manual trigger was removed); keep
+      // refreshing so the UI tracks the file after an auto-compaction, and
+      // surface failures that used to show next to the compact button.
       case "compaction_end":
-        setIsCompacting(false);
+      case "auto_compaction_end":
         if (event.errorMessage) {
-          setCompactError(event.errorMessage as string);
+          toast.show({ kind: "error", message: event.errorMessage as string });
         } else if (!event.aborted) {
           if (sessionIdRef.current) loadSession(sessionIdRef.current);
         }
@@ -595,32 +590,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
   }, [isNew, setNewSessionModel, t, toast]);
 
-  const handleCompact = useCallback(async () => {
-    const sid = sessionIdRef.current;
-    if (!sid || isCompacting) return;
-    setIsCompacting(true);
-    setCompactError(null);
-    try {
-      await sendAgentCommand(sid, { type: "compact" });
-      await loadSession(sid, true);
-    } catch (e) {
-      setCompactError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setIsCompacting(false);
-    }
-  }, [isCompacting, loadSession]);
-
-  const handleAbortCompaction = useCallback(async () => {
-    const sid = sessionIdRef.current;
-    if (!sid) return;
-    try {
-      await sendAgentCommand(sid, { type: "abort_compaction" });
-    } catch (e) {
-      console.error("Failed to abort compaction:", e);
-      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to stop agent") });
-    }
-  }, [t, toast]);
-
   const handleThinkingLevelChange = useCallback(async (level: ThinkingLevelOption) => {
     setThinkingLevel(level);
     if (level === "auto") return; // "auto" leaves pi's current setting untouched
@@ -676,7 +645,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           }
         }
         if (agentState?.state) {
-          if (agentState.state.isCompacting !== undefined) setIsCompacting(agentState.state.isCompacting);
           if (agentState.state.contextUsage !== undefined) setContextUsage(agentState.state.contextUsage ?? null);
           if (agentState.state.systemPrompt !== undefined) setSystemPrompt(agentState.state.systemPrompt ?? null);
           if (agentState.state.thinkingLevel !== undefined) setThinkingLevel((agentState.state.thinkingLevel as ThinkingLevelOption) ?? "auto");
@@ -759,13 +727,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }).catch(() => {});
   }, [isNew, modelsRefreshKey, setNewSessionModel]);
 
-  // Compact error auto-dismiss
-  useEffect(() => {
-    if (!compactError) return;
-    const t = setTimeout(() => setCompactError(null), 3000);
-    return () => clearTimeout(t);
-  }, [compactError]);
-
   // Publish the remaining session-level state to the store. The shallow-equal
   // guard inside setSessionUiState prevents re-rendering AppShell's top bar
   // when an IIFE-derived value (sessionStats) gets a new object identity but
@@ -779,7 +740,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     data, loading, error, activeLeafId, messages, entryIds, streamState,
     agentRunning, modelNames, modelList, modelThinkingLevels, modelThinkingLevelMaps, newSessionModel, toolPreset, thinkingLevel,
     retryInfo, contextUsage, systemPrompt,
-    isCompacting, compactError, currentModel, displayModel, sessionStats,
+    currentModel, displayModel, sessionStats,
     agentPhase,
     isNew,
     agentsFiles,
@@ -790,7 +751,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     lastUserMsgRef, pendingScrollToUserRef, initialScrollDoneRef,
     // Actions
     handleSend, handleAbort, handleNavigate, handleModelChange,
-    handleCompact, handleAbortCompaction,
     handleToolPresetChange, handleThinkingLevelChange, loadTools, loadAgentsFiles, setActiveLeafId, setData, setMessages,
     dispatch, setAgentRunning,
     // Subscriptions

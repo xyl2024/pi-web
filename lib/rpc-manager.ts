@@ -229,7 +229,6 @@ export class AgentSessionWrapper {
           sessionId: this.inner.sessionId,
           sessionFile: this.inner.sessionFile ?? "",
           isStreaming: this.inner.isStreaming,
-          isCompacting: this.inner.isCompacting,
           model: model ? { id: model.id, provider: model.provider } : undefined,
           messageCount: 0,
           pendingMessageCount: 0,
@@ -271,29 +270,6 @@ export class AgentSessionWrapper {
         return null;
       }
 
-      case "compact": {
-        const startedAt = Date.now();
-        log.info("compaction requested", { sessionId: this.sessionId });
-        // pi's compact() does not guard against empty messagesToSummarize — use findCutPoint
-        // to pre-check and throw a clean error instead of generating a useless empty summary.
-        const { findCutPoint, DEFAULT_COMPACTION_SETTINGS } = await import("@earendil-works/pi-coding-agent");
-        const pathEntries = this.inner.sessionManager.getBranch() as Array<{ type: string }>;
-        const settings = { ...DEFAULT_COMPACTION_SETTINGS, ...this.inner.settingsManager.getCompactionSettings() };
-        let prevCompactionIndex = -1;
-        for (let i = pathEntries.length - 1; i >= 0; i--) {
-          if (pathEntries[i].type === "compaction") { prevCompactionIndex = i; break; }
-        }
-        const boundaryStart = prevCompactionIndex + 1;
-        const cutPoint = findCutPoint(pathEntries as never, boundaryStart, pathEntries.length, settings.keepRecentTokens);
-        const historyEnd = cutPoint.isSplitTurn ? cutPoint.turnStartIndex : cutPoint.firstKeptEntryIndex;
-        if (historyEnd <= boundaryStart) {
-          throw new Error("Conversation too short to compact");
-        }
-        const result = await this.inner.compact(command.customInstructions as string | undefined);
-        log.info("compaction completed", { sessionId: this.sessionId, durationMs: elapsedMs(startedAt) });
-        return result;
-      }
-
       case "steer": {
         const steerImages = command.images as Array<{ type: "image"; data: string; mimeType: string }> | undefined;
         await this.inner.steer(command.message as string, steerImages?.length ? steerImages : undefined);
@@ -331,11 +307,6 @@ export class AgentSessionWrapper {
         const decision = command.decision as PermissionDecision;
         const resolved = this.resolvePermission(toolCallId, decision);
         return { resolved };
-      }
-
-      case "abort_compaction": {
-        this.inner.abortCompaction();
-        return null;
       }
 
       default:

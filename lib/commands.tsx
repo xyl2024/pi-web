@@ -17,11 +17,8 @@ export interface AgentControls {
   switchModel: (provider: string, modelId: string) => void | Promise<void>;
   switchThinkingLevel: (level: ThinkingLevelOption) => void | Promise<void>;
   switchToolPreset: (preset: ToolPresetOption) => void | Promise<void>;
-  compact: () => void | Promise<void>;
   abortStreaming: () => void | Promise<void>;
-  abortCompaction: () => void | Promise<void>;
   isStreaming: boolean;
-  isCompacting: boolean;
 }
 
 // ── Icons ────────────────────────────────────────────────────────────────
@@ -46,7 +43,6 @@ const I = (children: ReactNode) => (
 
 const PlusIcon = () => I(<><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></>);
 const StopIcon = () => I(<rect x="6" y="6" width="12" height="12" rx="1" />);
-const CompressIcon = () => I(<><polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" /><line x1="14" y1="10" x2="21" y2="3" /><line x1="3" y1="21" x2="10" y2="14" /></>);
 const SunIcon = () => I(<><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="5" /><line x1="12" y1="19" x2="12" y2="22" /><line x1="4.22" y1="4.22" x2="6.34" y2="6.34" /><line x1="17.66" y1="17.66" x2="19.78" y2="19.78" /><line x1="2" y1="12" x2="5" y2="12" /><line x1="19" y1="12" x2="22" y2="12" /><line x1="4.22" y1="19.78" x2="6.34" y2="17.66" /><line x1="17.66" y1="6.34" x2="19.78" y2="4.22" /></>);
 const MoonIcon = () => I(<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />);
 const TreeIcon = () => I(<><path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" /></>);
@@ -182,16 +178,6 @@ export function buildCommands(ctx: CommandContext, opts: BuildOptions): Command[
   });
 
   cmds.push({
-    id: "session.compact",
-    title: t("Compact session"),
-    group: "Session",
-    keywords: ["compact", "context", "summarize", "压缩", "上下文"],
-    icon: <CompressIcon />,
-    when: (c) => c.hasSession && !!c.agentControls && !c.agentControls.isStreaming && !c.agentControls.isCompacting,
-    run: () => ctx.agentControls?.compact(),
-  });
-
-  cmds.push({
     id: "session.abort_streaming",
     title: t("Stop agent"),
     group: "Session",
@@ -199,16 +185,6 @@ export function buildCommands(ctx: CommandContext, opts: BuildOptions): Command[
     icon: <StopIcon />,
     when: (c) => !!c.agentControls?.isStreaming,
     run: () => ctx.agentControls?.abortStreaming(),
-  });
-
-  cmds.push({
-    id: "session.abort_compaction",
-    title: t("Stop compaction"),
-    group: "Session",
-    keywords: ["stop", "abort", "cancel", "compaction", "停止", "压缩"],
-    icon: <StopIcon />,
-    when: (c) => !!c.agentControls?.isCompacting,
-    run: () => ctx.agentControls?.abortCompaction(),
   });
 
   // ── Theme (5) ──

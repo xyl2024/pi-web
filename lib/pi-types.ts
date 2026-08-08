@@ -26,7 +26,6 @@ export interface AgentSessionLike {
   readonly sessionId: string;
   readonly sessionFile: string | undefined;
   readonly isStreaming: boolean;
-  readonly isCompacting: boolean;
   readonly model: ModelLike | undefined;
   readonly modelRuntime: Pick<ModelRuntime, "getModel" | "getModels">;
   readonly sessionManager: SessionManager;
@@ -39,12 +38,10 @@ export interface AgentSessionLike {
   setModel(model: ModelLike): Promise<void>;
   navigateTree(targetId: string, options?: { summarize?: boolean }): Promise<NavigateTreeResult>;
   setThinkingLevel(level: string): void;
-  compact(customInstructions?: string): Promise<unknown>;
   steer(text: string, images?: Array<{ type: "image"; data: string; mimeType: string }>): Promise<void>;
   followUp(text: string, images?: Array<{ type: "image"; data: string; mimeType: string }>): Promise<void>;
   getAllTools(): ToolInfo[];
   getActiveToolNames(): string[];
   setActiveToolsByName(names: string[]): void;
-  abortCompaction(): void;
   getContextUsage(): ContextUsage | undefined;
 }
