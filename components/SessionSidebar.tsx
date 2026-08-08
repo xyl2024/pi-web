@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { createPortal } from "react-dom";
-import type { SessionInfo } from "@/lib/types";
+import type { SessionInfo, Workspace, WorkspacesResponse } from "@/lib/types";
 import { FileExplorer } from "./FileExplorer";
 import { ProfileBlock } from "./ProfileBlock";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "./Toast";
 import { Tooltip } from "./Tooltip";
+import { MultiCwdList, type CwdSessionsState } from "./MultiCwdList";
 
 interface Props {
   selectedSessionId: string | null;
@@ -135,22 +135,32 @@ function PiAgentTitle() {
   );
 }
 
-const PAGE_SIZE = 50;
+const WORKSPACE_PAGE_SIZE = 5;
+const SESSION_PAGE_SIZE_GROUPED = 5;
+const EXPANDED_CWDS_KEY = "pi-work.expandedCwds";
 
 export function SessionSidebar({ selectedSessionId, onSelectSession, initialSessionId, onInitialRestoreDone, refreshKey, onSessionDeleted, onNewSession, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onAtMention, onOpenSearch, onFileDeleted, favoriteIds = [], onToggleFavorite, onOpenModels, onOpenSkills, onOpenPrompts, onOpenScheduler, onOpenSettings, onOpenInbox, inboxUnread, profileRefreshKey }: Props) {
   const { t } = useI18n();
   const toast = useToast();
 
-  // Paginated session list (replaces the old "load all then hold" design).
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
-  const [recentCwds, setRecentCwds] = useState<string[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Multi-cwd view: workspaces list (top-level, cwd-keyed) + per-cwd
+  // session loaders (lazy, paged 3 at a time).
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [nextWorkspaceCursor, setNextWorkspaceCursor] = useState<string | null>(null);
+  const [hasMoreWorkspaces, setHasMoreWorkspaces] = useState(false);
+  const [loadingWorkspaces, setLoadingWorkspaces] = useState(true);
+  const [loadingMoreWorkspaces, setLoadingMoreWorkspaces] = useState(false);
+  const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null);
+  const [perCwdSessions, setPerCwdSessions] = useState<Record<string, CwdSessionsState>>({});
+  // Expand state for non-active cwds; the active cwd defaults to expanded
+  // when present. Persisted to localStorage.
+  const [expandedCwds, setExpandedCwds] = useState<Record<string, boolean>>({});
+  const cwdHeaderRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  // Top picker state — single source of truth for "active cwd" inside this
+  // sidebar. Picker dropdown also still uses this for highlight + cursor.
   const [selectedCwd, setSelectedCwd] = useState<string | null>(null);
+
   const [homeDir, setHomeDir] = useState<string>("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [customPathOpen, setCustomPathOpen] = useState(false);
@@ -170,9 +180,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
   const [explorerRefreshDone, setExplorerRefreshDone] = useState(false);
   const sessionRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const explorerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const loadListAbortRef = useRef<AbortController | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const workspaceAbortRef = useRef<AbortController | null>(null);
 
   const triggerExplorerRefresh = useCallback(() => {
     setExplorerKey((k) => k + 1);
@@ -181,46 +189,63 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     explorerRefreshTimerRef.current = setTimeout(() => setExplorerRefreshDone(false), 2000);
   }, []);
 
-  // Fetch a single page. Pass `mode: "reset"` to start over (cursor=null,
-  // replace list), `mode: "append"` to extend the loaded list with the
-  // page that follows `cursor` (or the start if cursor is null — first
-  // page after a reset+refresh). Aborts any in-flight request so the
-  // previous page's response can't land after a cwd switch / refresh.
-  const fetchPage = useCallback(async (
+  // Persist expand state to localStorage. Stored as a flat object
+  // { [cwd]: boolean } — last-writer-wins on the cwd key.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(EXPANDED_CWDS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const cleaned: Record<string, boolean> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === "boolean") cleaned[k] = v;
+      }
+      setExpandedCwds(cleaned);
+    } catch {
+      // ignore corrupted entries
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(EXPANDED_CWDS_KEY, JSON.stringify(expandedCwds));
+    } catch {
+      // ignore (private mode / quota)
+    }
+  }, [expandedCwds]);
+
+  // Fetch one page of workspaces. Pass `mode: "reset"` to start over
+  // (cursor=null, replace list), `mode: "append"` to extend. Aborts any
+  // in-flight request so the previous page's response can't land after a
+  // refresh.
+  const fetchWorkspaces = useCallback(async (
     cursor: string | null,
     mode: "reset" | "append",
   ) => {
-    loadListAbortRef.current?.abort();
+    workspaceAbortRef.current?.abort();
     const controller = new AbortController();
-    loadListAbortRef.current = controller;
-    if (mode === "reset") setLoading(true);
-    else setLoadingMore(true);
-    setLoadError(null);
+    workspaceAbortRef.current = controller;
+    if (mode === "reset") setLoadingWorkspaces(true);
+    else setLoadingMoreWorkspaces(true);
+    setWorkspaceLoadError(null);
     try {
       const params = new URLSearchParams();
-      params.set("limit", String(PAGE_SIZE));
+      params.set("limit", String(WORKSPACE_PAGE_SIZE));
       if (cursor) params.set("cursor", cursor);
-      if (selectedCwd) params.set("cwd", selectedCwd);
-      const res = await fetch(`/api/sessions?${params.toString()}`, { signal: controller.signal });
+      const res = await fetch(`/api/workspaces?${params.toString()}`, { signal: controller.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as {
-        sessions: SessionInfo[];
-        recentCwds: string[];
-        nextCursor: string | null;
-      };
+      const data = (await res.json()) as WorkspacesResponse;
       if (controller.signal.aborted) return;
       if (mode === "reset") {
-        setSessions(data.sessions);
+        setWorkspaces(data.workspaces);
       } else {
-        setSessions((prev) => {
-          const seen = new Set(prev.map((s) => s.id));
-          const incoming = data.sessions.filter((s) => !seen.has(s.id));
+        setWorkspaces((prev) => {
+          const seen = new Set(prev.map((w) => w.cwd));
+          const incoming = data.workspaces.filter((w) => !seen.has(w.cwd));
           return incoming.length === 0 ? prev : [...prev, ...incoming];
         });
       }
-      setRecentCwds(data.recentCwds);
-      setNextCursor(data.nextCursor);
-      setHasMore(data.nextCursor !== null);
+      setNextWorkspaceCursor(data.nextCursor);
+      setHasMoreWorkspaces(data.nextCursor !== null);
       if (mode === "reset") {
         setSessionRefreshDone(true);
         if (sessionRefreshTimerRef.current) clearTimeout(sessionRefreshTimerRef.current);
@@ -229,39 +254,148 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     } catch (e) {
       if (controller.signal.aborted) return;
       const msg = e instanceof Error ? e.message : String(e);
-      setLoadError(msg);
+      setWorkspaceLoadError(msg);
       if (mode === "reset") {
         toast.show({ kind: "error", message: msg });
       }
     } finally {
       if (!controller.signal.aborted) {
-        if (mode === "reset") setLoading(false);
-        else setLoadingMore(false);
+        if (mode === "reset") setLoadingWorkspaces(false);
+        else setLoadingMoreWorkspaces(false);
       }
     }
-  }, [selectedCwd, toast]);
+  }, [toast]);
 
-  // Initial / refresh / cwd-change: reset to page 1.
-  useEffect(() => {
-    void fetchPage(null, "reset");
-  }, [fetchPage, refreshKey]);
+  // Per-cwd session loader. Used both for the lazy first-page fetch
+  // (mode: "reset") and the "Load more" button (mode: "append"). Reads
+  // `pinnedSessions`/`expandedCwds` from state; merged into the existing
+  // entry for the cwd.
+  const fetchCwdSessions = useCallback(async (
+    cwd: string,
+    cursor: string | null,
+    mode: "reset" | "append",
+  ) => {
+    setPerCwdSessions((prev) => {
+      const existing = prev[cwd];
+      const base: CwdSessionsState = existing ?? {
+        sessions: [],
+        cursor: null,
+        hasMore: false,
+        loading: false,
+        loadingMore: false,
+        loadError: null,
+      };
+      return {
+        ...prev,
+        [cwd]: {
+          ...base,
+          sessions: mode === "reset" ? [] : base.sessions,
+          loading: mode === "reset",
+          loadingMore: mode === "append",
+          loadError: null,
+        },
+      };
+    });
 
-  // Back-compat alias for inline rename/delete handlers that pre-date pagination.
-  // They treat a successful mutation as "the sidebar should reflect the new
-  // state", which maps cleanly to "go back to page 1 and show a green check".
+    try {
+      const params = new URLSearchParams();
+      params.set("cwd", cwd);
+      params.set("limit", String(SESSION_PAGE_SIZE_GROUPED));
+      if (cursor) params.set("cursor", cursor);
+      const res = await fetch(`/api/sessions?${params.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { sessions: SessionInfo[]; nextCursor: string | null };
+      setPerCwdSessions((prev) => {
+        const existing = prev[cwd];
+        const base: CwdSessionsState = existing ?? {
+          sessions: [],
+          cursor: null,
+          hasMore: false,
+          loading: false,
+          loadingMore: false,
+          loadError: null,
+        };
+        const nextSessions = mode === "reset"
+          ? data.sessions
+          : (() => {
+              const seen = new Set(base.sessions.map((s) => s.id));
+              const incoming = data.sessions.filter((s) => !seen.has(s.id));
+              return incoming.length === 0 ? base.sessions : [...base.sessions, ...incoming];
+            })();
+        return {
+          ...prev,
+          [cwd]: {
+            ...base,
+            sessions: nextSessions,
+            cursor: data.nextCursor,
+            hasMore: data.nextCursor !== null,
+            loading: false,
+            loadingMore: false,
+          },
+        };
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setPerCwdSessions((prev) => {
+        const existing = prev[cwd];
+        if (!existing) return prev;
+        return {
+          ...prev,
+          [cwd]: { ...existing, loading: false, loadingMore: false, loadError: msg },
+        };
+      });
+    }
+  }, []);
+
+  // Refresh button handler — reload workspaces + each expanded cwd's first page.
+  const refreshAll = useCallback(() => {
+    void fetchWorkspaces(null, "reset");
+    setPerCwdSessions((prev) => {
+      const next: Record<string, CwdSessionsState> = {};
+      for (const [cwd, state] of Object.entries(prev)) {
+        if (state.sessions.length > 0 || state.loading) {
+          next[cwd] = { ...state, sessions: [], cursor: null, hasMore: false };
+          void fetchCwdSessions(cwd, null, "reset");
+        } else {
+          next[cwd] = state;
+        }
+      }
+      return next;
+    });
+  }, [fetchWorkspaces, fetchCwdSessions]);
+
+  // Back-compat alias used by inline rename/delete handlers that pre-date
+  // the multi-cwd view: "the sidebar should reflect the new state" still
+  // means "go back to page 1 and show a green check".
   const loadSessions = useCallback(() => {
-    void fetchPage(null, "reset");
-  }, [fetchPage]);
+    refreshAll();
+  }, [refreshAll]);
+
+  // Initial / refresh / cwd-change: reset to page 1 of workspaces.
+  useEffect(() => {
+    void fetchWorkspaces(null, "reset");
+  }, [fetchWorkspaces, refreshKey]);
+
+  // Auto-load: any cwd that enters the workspaces list AND is currently
+  // expanded (default true) needs its first session page fetched. Tracking
+  // via a ref avoids re-firing on every perCwdSessions tick — the effect
+  // only does real work the first time a cwd appears or its expanded state
+  // flips from false → true.
+  const initializedCwdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const ws of workspaces) {
+      if (initializedCwdsRef.current.has(ws.cwd)) continue;
+      initializedCwdsRef.current.add(ws.cwd);
+      const expanded = expandedCwds[ws.cwd] ?? true;
+      if (!expanded) continue;
+      const state = perCwdSessions[ws.cwd];
+      if (state && (state.sessions.length > 0 || state.loading)) continue;
+      void fetchCwdSessions(ws.cwd, null, "reset");
+    }
+  }, [workspaces, expandedCwds, perCwdSessions, fetchCwdSessions]);
 
   // Poll /api/sessions/running every 3s for the `running` flag on each row.
-  // This endpoint only walks the in-memory AgentSessionWrapper registry — no
-  // disk reads, so it's safe to poll at high frequency even with thousands
-  // of session files. We only merge that single field into the loaded pages
-  // — name/modified/etc. are owned by fetchPage() so polling preserves
-  // scroll position, expanded parents, and hover state. Sessions that have
-  // not been paginated in won't show a spinner until the user scrolls to
-  // them (intentional — see design notes). Pauses while the tab is hidden;
-  // resumes on visibilitychange.
+  // Merges into perCwdSessions — preserves scroll position + expand state.
   useEffect(() => {
     const POLL_INTERVAL_MS = 3000;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -274,9 +408,28 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
         const data = (await res.json()) as { sessions: { id: string; running: boolean }[] };
         if (cancelled) return;
         const byRunning = new Map(data.sessions.map((s) => [s.id, s.running] as const));
-        setSessions((prev) => prev.map((s) =>
-          byRunning.has(s.id) ? { ...s, running: byRunning.get(s.id)! } : s
-        ));
+        if (byRunning.size === 0) return;
+        setPerCwdSessions((prev) => {
+          let changed = false;
+          const next: Record<string, CwdSessionsState> = {};
+          for (const [cwd, state] of Object.entries(prev)) {
+            let rowChanged = false;
+            const rows = state.sessions.map((s) => {
+              if (byRunning.has(s.id) && s.running !== byRunning.get(s.id)) {
+                rowChanged = true;
+                return { ...s, running: byRunning.get(s.id)! };
+              }
+              return s;
+            });
+            if (rowChanged) {
+              changed = true;
+              next[cwd] = { ...state, sessions: rows };
+            } else {
+              next[cwd] = state;
+            }
+          }
+          return changed ? next : prev;
+        });
       } catch {
         // best-effort
       }
@@ -307,28 +460,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     };
   }, []);
 
-  // Infinite scroll: IntersectionObserver attached to the bottom sentinel
-  // fetches the next page when it scrolls into view inside the list's own
-  // overflow:auto scroller. Re-attaches whenever hasMore / nextCursor /
-  // loading flags change so the closure stays current. `loadingMore` and
-  // `loadError` prevent double-fires.
-  useEffect(() => {
-    const node = sentinelRef.current;
-    const root = listScrollRef.current;
-    if (!node || !root || !hasMore || loadError) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (!entry?.isIntersecting) return;
-        if (loadingMore || loading) return;
-        if (nextCursor) void fetchPage(nextCursor, "append");
-      },
-      { root, rootMargin: "120px 0px" }
-    );
-    obs.observe(node);
-    return () => obs.disconnect();
-  }, [hasMore, nextCursor, loadingMore, loading, loadError, fetchPage]);
-
   useEffect(() => {
     if (explorerRefreshKey !== undefined) setExplorerKey((k) => k + 1);
   }, [explorerRefreshKey]);
@@ -355,29 +486,46 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     onCwdChange?.(selectedCwd);
   }, [selectedCwd, onCwdChange]);
 
+  // Sync internal picker state with selectedCwdProp (the cwd AppShell derives
+  // from selectedSession / newSessionCwd). Defined after scrollCwdIntoView
+  // so it can call it without a forward-declaration hack.
+
   // Auto-select cwd and restore session from URL on first load.
   // In paged mode the initial-session restore is best-effort: if the target
   // session is on a page we haven't fetched yet, fetch it via the lite info
-  // endpoint and merge into the local list before resolving the cwd.
+  // endpoint and merge into the perCwdSessions list before resolving the cwd.
   useEffect(() => {
-    if (sessions.length === 0 && !initialSessionId) return;
+    if (loadingWorkspaces) return;
     if (selectedCwd !== null) return;
 
     if (initialSessionId && !restoredRef.current) {
       restoredRef.current = true;
-      const target = sessions.find((s) => s.id === initialSessionId);
-      if (target) {
-        setSelectedCwd(target.cwd);
-        onSelectSession(target, true);
-        return;
-      }
-      // Not on a loaded page — one-shot lite lookup.
       void (async () => {
         try {
           const res = await fetch(`/api/sessions/${encodeURIComponent(initialSessionId)}/info`);
           if (res.ok) {
             const data = (await res.json()) as { session: SessionInfo };
-            setSessions((prev) => prev.find((s) => s.id === data.session.id) ? prev : [data.session, ...prev]);
+            // Merge into perCwdSessions so MultiCwdList can render the row.
+            setPerCwdSessions((prev) => {
+              const existing = prev[data.session.cwd];
+              const base: CwdSessionsState = existing ?? {
+                sessions: [],
+                cursor: null,
+                hasMore: false,
+                loading: false,
+                loadingMore: false,
+                loadError: null,
+              };
+              const already = base.sessions.some((s) => s.id === data.session.id);
+              if (already) return prev;
+              return {
+                ...prev,
+                [data.session.cwd]: {
+                  ...base,
+                  sessions: [data.session, ...base.sessions],
+                },
+              };
+            });
             setSelectedCwd(data.session.cwd);
             onSelectSession(data.session, true);
             return;
@@ -388,8 +536,8 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
       return;
     }
 
-    if (recentCwds.length > 0) setSelectedCwd(recentCwds[0]);
-  }, [sessions, recentCwds, selectedCwd, initialSessionId, onSelectSession, onInitialRestoreDone]);
+    if (workspaces.length > 0) setSelectedCwd(workspaces[0].cwd);
+  }, [loadingWorkspaces, workspaces, selectedCwd, initialSessionId, onSelectSession, onInitialRestoreDone]);
 
   const commitCustomPath = useCallback(() => {
     const path = customPathValue.trim();
@@ -519,29 +667,75 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const recentCwdsList = recentCwds;
-  const pinnedSet = new Set(pinnedCwds);
-  const unpinnedRecentCwds = recentCwdsList.filter((c) => !pinnedSet.has(c));
-  const filteredSessions = selectedCwd
-    ? sessions.filter((s) => s.cwd === selectedCwd)
-    : sessions;
+  // Picker dropdown's recent-cwds list comes from the workspaces state
+  // (sorted by lastUsed desc) so it stays in sync with the multi-cwd view.
+  const pinnedCwdSet = new Set(pinnedCwds);
+  const unpinnedRecentCwds = workspaces
+    .filter((w) => !pinnedCwdSet.has(w.cwd))
+    .map((w) => w.cwd);
 
-  // Pinned sessions in the current workspace, preserving insertion order.
-  // find() returns undefined for stale ids (deleted sessions) or pins from other cwds — filtered out.
-  const pinnedSessionSet = new Set(pinnedSessions);
-  const pinnedSessionRows = selectedCwd
-    ? pinnedSessions
-        .map((id) => sessions.find((s) => s.id === id && s.cwd === selectedCwd))
-        .filter((s): s is SessionInfo => s !== undefined)
-    : [];
+  // Order workspaces: active cwd first, then by lastUsed desc.
+  const orderedWorkspaces = selectedCwd
+    ? [
+        ...workspaces.filter((w) => w.cwd === selectedCwd),
+        ...workspaces.filter((w) => w.cwd !== selectedCwd),
+      ]
+    : workspaces;
 
-  // Flat list of non-pinned sessions, sorted by modified desc. The (removed)
-  // (formerly a tree keyed on parentSessionId; now a flat list)
-  // everything is now a peer row.
-  const sortedSessions = filteredSessions
-    .filter((s) => !pinnedSessionSet.has(s.id))
-    .slice()
-    .sort((a, b) => b.modified.localeCompare(a.modified));
+  // Scroll the list to the cwd header on the next paint. Used by the
+  // selectedCwdProp → selectedCwd sync effect below so that picker-driven
+  // cwd switches bring the relevant group into view.
+  const scrollCwdIntoView = useCallback((cwd: string) => {
+    requestAnimationFrame(() => {
+      cwdHeaderRefs.current[cwd]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+  }, []);
+
+  const toggleExpandCwd = useCallback((cwd: string) => {
+    setExpandedCwds((prev) => {
+      // Every cwd defaults to expanded; if absent in state, treat current
+      // as true then flip.
+      const current = prev[cwd] ?? true;
+      return { ...prev, [cwd]: !current };
+    });
+  }, []);
+
+  const handleToggleExpand = useCallback((cwd: string) => {
+    toggleExpandCwd(cwd);
+    // Session loading is handled by the auto-load useEffect above, which
+    // fires whenever expandedCwds changes. No need to trigger here.
+  }, [toggleExpandCwd]);
+
+  const loadMoreCwdSessions = useCallback((cwd: string) => {
+    const state = perCwdSessions[cwd];
+    if (!state?.cursor) return;
+    void fetchCwdSessions(cwd, state.cursor, "append");
+  }, [perCwdSessions, fetchCwdSessions]);
+
+  // Refresh both the workspace metadata (lastUsed may shift) and the
+  // current cwd's session page (name may change) after a rename.
+  // Sync internal picker state with selectedCwdProp (the cwd AppShell derives
+  // from selectedSession / newSessionCwd). Without this, clicking a session
+  // in another cwd would leave the picker visually pinned to the old cwd
+  // even though the Explorer + chat panel already switched. Also scrolls
+  // the list to the activated cwd header so the user sees context.
+  useEffect(() => {
+    if (!selectedCwdProp || selectedCwdProp === selectedCwd) return;
+    setSelectedCwd(selectedCwdProp);
+    setExpandedCwds((prev) => ({ ...prev, [selectedCwdProp]: true }));
+    scrollCwdIntoView(selectedCwdProp);
+  }, [selectedCwdProp, selectedCwd, scrollCwdIntoView]);
+
+  const handleSessionRenamed = useCallback(() => {
+    void fetchWorkspaces(null, "reset");
+    if (selectedCwd) void fetchCwdSessions(selectedCwd, null, "reset");
+  }, [fetchWorkspaces, fetchCwdSessions, selectedCwd]);
+
+  const handleSessionDeleted = useCallback((sessionId: string) => {
+    onSessionDeleted?.(sessionId);
+    void fetchWorkspaces(null, "reset");
+    if (selectedCwd) void fetchCwdSessions(selectedCwd, null, "reset");
+  }, [onSessionDeleted, fetchWorkspaces, fetchCwdSessions, selectedCwd]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -1067,94 +1261,30 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
         </div>
       </div>
 
-      {/* Session list — flex column with 6px gap so each session card "breathes"
-          like a real card. 4px vertical + 8px horizontal padding insulates the
-          first/last row from the container edges. */}
-      <div ref={listScrollRef} style={{ flex: explorerOpen && (selectedCwdProp || selectedCwd) ? "1 1 0" : "1 1 auto", overflowY: "auto", padding: "4px 8px", minHeight: 80, display: "flex", flexDirection: "column", gap: 6 }}>
-        {loadError && !loading && (
-          <div style={{ padding: "12px 8px 6px", color: "#f87171", fontSize: 12 }}>
-            {loadError}
-          </div>
-        )}
-        {!loading && !loadError && sessions.length === 0 && (
-          <div style={{ padding: "16px 8px 6px", color: "var(--text-muted)", fontSize: 12 }}>
-            {t("No sessions found")}
-          </div>
-        )}
-        {pinnedSessionRows.length > 0 && (
-          <>
-            <div style={{ padding: "12px 8px 6px", fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>
-              {t("Pinned sessions")}
-            </div>
-            {pinnedSessionRows.map((s) => (
-              <SessionItem
-                key={`pinned-${s.id}`}
-                session={s}
-                isSelected={s.id === selectedSessionId}
-                onClick={() => onSelectSession(s)}
-                onRenamed={loadSessions}
-                onDeleted={(id) => { onSessionDeleted?.(id); loadSessions(); }}
-                isPinned
-                onTogglePin={() => toggleSessionPin(s.id)}
-                isFavorited={favoriteIds.includes(s.id)}
-                onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(s.id) : undefined}
-              />
-            ))}
-          </>
-        )}
-        {sortedSessions.map((s) => (
-          <SessionItem
-            key={s.id}
-            session={s}
-            isSelected={s.id === selectedSessionId}
-            onClick={() => onSelectSession(s)}
-            onRenamed={loadSessions}
-            onDeleted={(id) => {
-              onSessionDeleted?.(id);
-              loadSessions();
-            }}
-            isPinned={pinnedSessionSet.has(s.id)}
-            onTogglePin={() => toggleSessionPin(s.id)}
-            isFavorited={favoriteIds.includes(s.id)}
-            onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(s.id) : undefined}
-          />
-        ))}
-
-        {/* Pagination footer: end-of-list marker, in-flight spinner, or
-            load-more retry button on a failed page fetch. */}
-        {!loading && sessions.length > 0 && !hasMore && (
-          <div style={{ padding: "12px 8px 6px", color: "var(--text-muted)", fontSize: 11, textAlign: "center" }}>
-            {t("End of sessions")}
-          </div>
-        )}
-        {loadingMore && (
-          <div style={{ padding: "12px 8px 6px", color: "var(--text-muted)", fontSize: 11, textAlign: "center" }}>
-            {t("Loading more...")}
-          </div>
-        )}
-        {loadError && !loading && !loadingMore && (
-          <div style={{ padding: "12px 8px 6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-            <span style={{ color: "#f87171", fontSize: 11 }}>{loadError}</span>
-            <button
-              onClick={() => { setLoadError(null); void fetchPage(nextCursor, "append"); }}
-              style={{
-                fontSize: 11,
-                padding: "3px 8px",
-                border: "1px solid var(--border)",
-                borderRadius: 5,
-                background: "var(--bg-hover)",
-                color: "var(--text)",
-                cursor: "pointer",
-              }}
-            >
-              {t("Retry")}
-            </button>
-          </div>
-        )}
-        {/* IntersectionObserver sentinel — kept always rendered so the
-            observer stays attached across page-append renders. */}
-        {hasMore && <div ref={sentinelRef} style={{ height: 1 }} aria-hidden="true" />}
-      </div>
+      {/* Multi-cwd list: each CwdGroup renders its own pinned + recent
+          sessions. The component owns the scroll container internally. */}
+      <MultiCwdList
+        workspaces={orderedWorkspaces}
+        loadingWorkspaces={loadingWorkspaces}
+        loadingMoreWorkspaces={loadingMoreWorkspaces}
+        hasMoreWorkspaces={hasMoreWorkspaces}
+        workspaceLoadError={workspaceLoadError}
+        expandedCwds={expandedCwds}
+        perCwdSessions={perCwdSessions}
+        pinnedSessions={pinnedSessions}
+        favoriteIds={favoriteIds}
+        selectedSessionId={selectedSessionId}
+        
+        onCwdHeaderRef={(cwd, el) => { cwdHeaderRefs.current[cwd] = el; }}
+        onToggleExpand={handleToggleExpand}
+        onSelectSession={onSelectSession}
+        onLoadMoreWorkspaces={() => { void fetchWorkspaces(nextWorkspaceCursor, "append"); }}
+        onLoadMoreCwdSessions={loadMoreCwdSessions}
+        onTogglePin={toggleSessionPin}
+        onToggleFavorite={onToggleFavorite}
+        onSessionRenamed={handleSessionRenamed}
+        onSessionDeleted={handleSessionDeleted}
+      />
 
       {/* File Explorer section */}
       {(selectedCwdProp || selectedCwd) && (
@@ -1258,539 +1388,3 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
   );
 }
 
-function SessionItem({
-  session,
-  isSelected,
-  onClick,
-  onRenamed,
-  onDeleted,
-  isPinned = false,
-  onTogglePin,
-  isFavorited = false,
-  onToggleFavorite,
-}: {
-  session: SessionInfo;
-  isSelected: boolean;
-  onClick: () => void;
-  onRenamed?: () => void;
-  onDeleted?: (id: string) => void;
-  isPinned?: boolean;
-  onTogglePin?: () => void;
-  isFavorited?: boolean;
-  onToggleFavorite?: () => void;
-}) {
-  const { t } = useI18n();
-  const toast = useToast();
-  const [hovered, setHovered] = useState(false);
-  const [triggerHovered, setTriggerHovered] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [renaming, setRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState("");
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const cancelMenuClose = useCallback(() => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-  }, []);
-
-  const scheduleMenuClose = useCallback(() => {
-    cancelMenuClose();
-    closeTimerRef.current = setTimeout(() => setMenuOpen(false), 140);
-  }, [cancelMenuClose]);
-
-  const openMenu = useCallback(() => {
-    cancelMenuClose();
-    if (!triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    setMenuPos({ top: rect.top, left: rect.right + 6 });
-    setMenuOpen(true);
-  }, [cancelMenuClose]);
-
-  // Drive the pop-in transition: when `menuOpen` flips to true, the portal
-  // mounts in its pre-state (opacity 0, scale 0.96); the next animation
-  // frame flips `menuVisible` to trigger the transition. Without rAF the
-  // two setStates commit in the same batch and the transition never fires.
-  useEffect(() => {
-    if (!menuOpen) {
-      setMenuVisible(false);
-      return;
-    }
-    const id = requestAnimationFrame(() => setMenuVisible(true));
-    return () => cancelAnimationFrame(id);
-  }, [menuOpen]);
-
-  const handleMenuItem = useCallback((fn?: () => void) => {
-    cancelMenuClose();
-    setMenuOpen(false);
-    fn?.();
-  }, [cancelMenuClose]);
-
-  // Close on outside mousedown / ESC / scroll / resize while open
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onMouseDown = (e: MouseEvent) => {
-      const target = e.target as Node | null;
-      if (!target) return;
-      if (menuRef.current?.contains(target)) return;
-      if (triggerRef.current?.contains(target)) return;
-      cancelMenuClose();
-      setMenuOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        cancelMenuClose();
-        setMenuOpen(false);
-      }
-    };
-    const onScroll = () => {
-      cancelMenuClose();
-      setMenuOpen(false);
-    };
-    const onResize = () => {
-      cancelMenuClose();
-      setMenuOpen(false);
-    };
-    window.addEventListener("mousedown", onMouseDown, true);
-    window.addEventListener("keydown", onKey, true);
-    window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", onResize);
-    return () => {
-      window.removeEventListener("mousedown", onMouseDown, true);
-      window.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", onResize);
-    };
-  }, [menuOpen, cancelMenuClose]);
-
-  useEffect(() => () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current); }, []);
-
-  const title = session.name || session.firstMessage.slice(0, 50) || session.id.slice(0, 12);
-
-  const beginRename = useCallback(() => {
-    setRenameValue(session.name ?? "");
-    setRenaming(true);
-    setTimeout(() => inputRef.current?.select(), 0);
-  }, [session.name]);
-
-  const commitRename = useCallback(async () => {
-    const name = renameValue.trim();
-    setRenaming(false);
-    if (name === (session.name ?? "")) return;
-    try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      onRenamed?.();
-      toast.show({ kind: "success", message: t("Session renamed") });
-    } catch (e) {
-      toast.show({ kind: "error", message: e instanceof Error && e.message ? e.message : t("Failed to rename session") });
-    }
-  }, [renameValue, session.id, session.name, onRenamed, t, toast]);
-
-  const handleDeleteClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setConfirmDelete(true);
-  }, []);
-
-  const handleDeleteConfirm = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setConfirmDelete(false);
-    setDeleting(true);
-    try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      onDeleted?.(session.id);
-      toast.show({ kind: "success", message: t("Session deleted") });
-    } catch (err) {
-      setDeleting(false);
-      toast.show({ kind: "error", message: err instanceof Error && err.message ? err.message : t("Failed to delete session") });
-    }
-  }, [session.id, onDeleted, t, toast]);
-
-  const handleDeleteCancel = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setConfirmDelete(false);
-  }, []);
-
-  // Fixed-height outer wrapper — content swaps in place so the list never reflows
-  // 36px matches Notion/Linear session rows: 13px title + 8px top/bottom padding
-  // + ~1px border per side. Border 1px on every state (transparent in default)
-  // so hover/selected don't cause layout shift. 8px corners + 6px gap (from
-  // the list container) make this look like a real card, not a list row.
-  const ITEM_HEIGHT = 36;
-
-  // Border is a 1px ring instead of the old 2px left bar so the rounded
-  // corner doesn't fight with a hard rectangular accent strip.
-  // color-mix keeps the selected ring on-theme (forest green, synthwave pink, etc.).
-  const itemBorder = confirmDelete
-    ? "1px solid rgba(239,68,68,0.4)"
-    : isSelected
-      ? "1px solid color-mix(in srgb, var(--accent) 40%, transparent)"
-      : hovered
-        ? "1px solid var(--border)"
-        : "1px solid transparent";
-
-  // Shadow only appears on hover/selected so 50+ rows don't all cast a shadow
-  // at rest. The 0.12 vs 0.08 opacity gives selected a "stronger lift" without
-  // recoloring for non-blue accent themes.
-  const itemShadow = confirmDelete
-    ? "none"
-    : isSelected
-      ? "0 1px 3px rgba(0,0,0,0.12)"
-      : hovered
-        ? "0 1px 2px rgba(0,0,0,0.08)"
-        : "none";
-
-  return (
-    <div
-      onClick={confirmDelete || renaming ? undefined : onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => { setHovered(false); }}
-      style={{
-        height: ITEM_HEIGHT,
-        // The list container is a flex column with overflow-y: auto, so this
-        // row is a flex item. Default flex-shrink:1 makes 50+ rows share the
-        // available height (each collapses to ~2px, e.g. /tmp with 395
-        // sessions). flex-shrink:0 keeps every row at ITEM_HEIGHT and lets
-        // the container scroll.
-        flexShrink: 0,
-        display: "flex",
-        alignItems: "center",
-        paddingLeft: 8,
-        paddingRight: 8,
-        cursor: confirmDelete || renaming ? "default" : "pointer",
-        background: confirmDelete
-          ? "rgba(239,68,68,0.06)"
-          : isSelected ? "var(--bg-selected)" : hovered ? "var(--bg-hover)" : "transparent",
-        border: itemBorder,
-        borderRadius: 8,
-        boxShadow: itemShadow,
-        transition: "background 0.1s, box-shadow 0.15s, border-color 0.15s",
-        opacity: deleting ? 0.5 : 1,
-        gap: 6,
-        overflow: "hidden",
-      }}
-    >
-      {confirmDelete ? (
-        /* ── Delete confirmation: same height, two flat buttons ── */
-        <>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {t("Delete")} <span style={{ fontWeight: 600 }}>&ldquo;{title.slice(0, 22)}{title.length > 22 ? "…" : ""}&rdquo;</span>?
-          </div>
-          <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
-            <button
-              onClick={handleDeleteConfirm}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
-                height: 28, padding: "0 10px",
-                background: "#ef4444", border: "none",
-                borderRadius: 6, color: "#fff",
-                cursor: "pointer", fontSize: 11, fontWeight: 600,
-                whiteSpace: "nowrap",
-              }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                <path d="M10 11v6M14 11v6" />
-                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-              </svg>
-              {t("Delete")}
-            </button>
-            <button
-              onClick={handleDeleteCancel}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                height: 28, padding: "0 10px",
-                background: "var(--bg)", border: "1px solid var(--border)",
-                borderRadius: 6, color: "var(--text-muted)",
-                cursor: "pointer", fontSize: 11, fontWeight: 500,
-                whiteSpace: "nowrap",
-              }}
-            >
-              {t("Cancel")}
-            </button>
-          </div>
-        </>
-      ) : renaming ? (
-        /* ── Rename: input fills the same row ── */
-        <input
-          ref={inputRef}
-          value={renameValue}
-          onChange={(e) => setRenameValue(e.target.value)}
-          onBlur={commitRename}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commitRename();
-            if (e.key === "Escape") setRenaming(false);
-          }}
-          autoFocus
-          style={{
-            flex: 1,
-            fontSize: 12,
-            padding: "4px 8px",
-            border: "1px solid var(--accent)",
-            borderRadius: 5,
-            outline: "none",
-            background: "var(--bg)",
-            color: "var(--text)",
-            height: 28,
-          }}
-        />
-      ) : (
-        /* ── Normal view ── */
-        <>
-          {/* (The previous fork indicator was removed together with the fork feature.) */}
-          {/* Static pinned indicator — visible without hover so users can see pinned state at a glance */}
-          {isPinned && (
-            <span aria-hidden style={{ display: "flex", alignItems: "center", flexShrink: 0 }} title={t("Pinned sessions")}>
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="var(--accent)" stroke="none">
-                <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2Z" />
-              </svg>
-            </span>
-          )}
-          {/* Static favorited indicator — visible without hover */}
-          {isFavorited && (
-            <span aria-hidden style={{ display: "flex", alignItems: "center", flexShrink: 0 }} title={t("Favorites")}>
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="var(--accent)" stroke="none">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-              </svg>
-            </span>
-          )}
-          {/* Running indicator — pulses while the agent is between agent_start and agent_end */}
-          {session.running && (
-            <span
-              aria-label={t("running")}
-              title={t("running")}
-              style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
-            >
-              <span
-                className="animate-[pulse_1.5s_infinite]"
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: "var(--accent)",
-                }}
-              />
-            </span>
-          )}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <Tooltip content={title}>
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: isSelected ? 600 : 400,
-                lineHeight: 1.4,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                color: "var(--text)",
-              }}
-            >
-              {title}
-            </div>
-            </Tooltip>
-            {/* Time + message-count subline removed in the sidebar-2.0 pass:
-                it pushed the row to 54px and made the list feel dense. The
-                full modified ISO is still available in the title tooltip via
-                the session header elsewhere. */}
-          </div>
-
-          {/* "..." trigger — shown on row hover; toggles the action menu on click (no hover-open) */}
-          {(hovered || triggerHovered || menuOpen) && (
-            <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-              <button
-                ref={triggerRef}
-                aria-label={t("More actions")}
-                onClick={(e) => { e.stopPropagation(); if (menuOpen) { cancelMenuClose(); setMenuOpen(false); } else { openMenu(); } }}
-                onMouseEnter={() => { setTriggerHovered(true); cancelMenuClose(); }}
-                onMouseLeave={() => { setTriggerHovered(false); if (menuOpen) scheduleMenuClose(); }}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 24, height: 24, padding: 0,
-                  background: menuOpen ? "var(--bg-selected)" : "none",
-                  border: menuOpen ? "1px solid color-mix(in srgb, var(--accent) 35%, transparent)" : "1px solid transparent",
-                  borderRadius: 6,
-                  color: menuOpen ? "var(--accent)" : "var(--text-muted)",
-                  cursor: "pointer", flexShrink: 0,
-                  transition: "background 0.12s, color 0.12s, border-color 0.12s",
-                }}
-                onMouseOver={(e) => {
-                  if (menuOpen) return;
-                  e.currentTarget.style.background = "var(--bg-hover)";
-                  e.currentTarget.style.color = "var(--text)";
-                }}
-                onMouseOut={(e) => {
-                  if (menuOpen) return;
-                  e.currentTarget.style.background = "none";
-                  e.currentTarget.style.color = "var(--text-muted)";
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{ opacity: menuOpen ? 1 : 0.85 }}>
-                  <circle cx="5" cy="12" r="2" />
-                  <circle cx="12" cy="12" r="2" />
-                  <circle cx="19" cy="12" r="2" />
-                </svg>
-              </button>
-            </div>
-          )}
-        </>
-      )}
-      {menuOpen && menuPos && createPortal(
-        <div
-          ref={menuRef}
-          onMouseEnter={cancelMenuClose}
-          onMouseLeave={scheduleMenuClose}
-          role="menu"
-          style={{
-            position: "fixed",
-            top: menuPos.top,
-            left: menuPos.left,
-            zIndex: 9999,
-            minWidth: 168,
-            background: "var(--bg-panel)",
-            border: "1px solid var(--border)",
-            borderRadius: 8,
-            boxShadow: "0 6px 20px rgba(0,0,0,0.32)",
-            padding: 4,
-            display: "flex",
-            flexDirection: "column",
-            gap: 1,
-            fontSize: 12,
-            color: "var(--text)",
-            transformOrigin: "left top",
-            opacity: menuVisible ? 1 : 0,
-            transform: menuVisible
-              ? "translateY(0) scale(1)"
-              : "translateY(-6px) scale(0.96)",
-            transition:
-              "opacity 140ms ease-out, transform 160ms cubic-bezier(0.22, 1, 0.36, 1)",
-            pointerEvents: menuVisible ? "auto" : "none",
-          }}
-        >
-          {onTogglePin && (
-            <MenuRow
-              index={0}
-              icon={<PinIcon filled={isPinned} />}
-              label={isPinned ? t("Unpin session") : t("Pin session")}
-              onClick={() => handleMenuItem(onTogglePin)}
-            />
-          )}
-          {onToggleFavorite && (
-            <MenuRow
-              index={onTogglePin ? 1 : 0}
-              icon={<StarIcon filled={isFavorited} />}
-              label={isFavorited ? t("Unfavorite session") : t("Favorite session")}
-              onClick={() => handleMenuItem(onToggleFavorite)}
-            />
-          )}
-          <MenuRow
-            index={(onTogglePin ? 1 : 0) + (onToggleFavorite ? 1 : 0)}
-            icon={<PencilIcon />}
-            label={t("Rename")}
-            onClick={() => handleMenuItem(beginRename)}
-          />
-          <MenuRow
-            index={(onTogglePin ? 1 : 0) + (onToggleFavorite ? 1 : 0) + 1}
-            icon={<TrashIcon />}
-            label={t("Delete")}
-            destructive
-            onClick={() => handleMenuItem(() => handleDeleteClick({ stopPropagation: () => {} } as React.MouseEvent))}
-          />
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-}
-
-function MenuRow({
-  icon,
-  label,
-  destructive,
-  onClick,
-  index = 0,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  destructive?: boolean;
-  onClick: () => void;
-  index?: number;
-}) {
-  const [hover, setHover] = useState(false);
-  return (
-    <div
-      role="menuitem"
-      tabIndex={-1}
-      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onClick(); }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "6px 9px",
-        borderRadius: 5,
-        cursor: "pointer",
-        userSelect: "none",
-        color: destructive ? (hover ? "#fca5a5" : "#f87171") : "var(--text)",
-        background: hover ? (destructive ? "rgba(239,68,68,0.10)" : "var(--bg-hover)") : "transparent",
-        animation: "pi-menu-row-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both",
-        animationDelay: `${40 + index * 28}ms`,
-      }}
-    >
-      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 14, height: 14, color: destructive ? "#ef4444" : "var(--text-muted)", opacity: destructive ? 0.95 : 0.85 }}>
-        {icon}
-      </span>
-      <span style={{ flex: 1 }}>{label}</span>
-    </div>
-  );
-}
-
-function PinIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2Z" />
-    </svg>
-  );
-}
-
-function StarIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-    </svg>
-  );
-}
-
-function PencilIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-      <path d="M10 11v6M14 11v6" />
-      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-    </svg>
-  );
-}

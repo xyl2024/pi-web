@@ -232,6 +232,38 @@ export interface AgentsFile {
   label: string;
 }
 
+/**
+ * Workspace row returned by GET /api/workspaces.
+ *
+ * Aggregates session-level metadata up to a cwd. Sorts by `lastUsed`
+ * (max of that cwd's session modified timestamps) desc, with the active
+ * cwd pinned to the front by the caller.
+ *
+ * `runningCount` comes from the in-memory AgentSessionWrapper registry —
+ * cheap to recompute on every request. `totalSessions` requires a full
+ * disk scan, so the route caches the full list with a 5s TTL (the same
+ * window /api/sessions uses).
+ */
+export interface Workspace {
+  cwd: string;
+  /** max(session.modified) for sessions in this cwd — sort key */
+  lastUsed: string;
+  /** Number of session files in this cwd */
+  totalSessions: number;
+  /** Sessions currently between agent_start and agent_end in this cwd */
+  runningCount: number;
+  /** First message of the most recently modified session — sidebar hover tooltip */
+  firstMessage: string;
+  /** Name (if any) of the most recently modified session — sidebar hover tooltip */
+  latestSessionName?: string;
+}
+
+export interface WorkspacesResponse {
+  workspaces: Workspace[];
+  /** base64url({lastUsed, cwd}) — opaque cursor; null means "no more" */
+  nextCursor: string | null;
+}
+
 // ── Right-side button bar tab IDs ─────────────────────────────────────────
 // Single source of truth for the global tab IDs the right button bar toggles.
 // AppShell and SettingsModal both consume these.
