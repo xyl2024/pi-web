@@ -644,7 +644,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, [setToolPresetState, t, toast]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior });
   }, []);
 
   const scrollUserMsgToTop = useCallback(() => {

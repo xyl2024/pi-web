@@ -670,7 +670,18 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   // user's own scroll event and userScrolledUpRef never flips. wheel/touchmove
   // are not produced by scrollIntoView, so they capture intent before the
   // scroll happens and reliably disengage sticky-bottom mode.
-  const handleUserScrollIntent = useCallback(() => {
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    // Only treat upward scroll (deltaY < 0) as "user wants to disengage".
+    // Scrolling down at the bottom is a no-op; don't surface the button or
+    // flip sticky-bottom off in that case.
+    if (e.deltaY < 0) {
+      userScrolledUpRef.current = true;
+      setShowToBottom(true);
+    }
+  }, []);
+
+  const handleTouchMove = useCallback(() => {
+    // Touch has no direction; assume the user is actively scrolling.
     userScrolledUpRef.current = true;
     setShowToBottom(true);
   }, []);
@@ -707,12 +718,18 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   }, []);
 
   const handleToBottom = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
     userScrolledUpRef.current = false;
     setShowToBottom(false);
     isProgrammaticScrollRef.current = true;
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // scrollHeight, not messagesEndRef.scrollIntoView: the latter aligns to
+    // the scrollport edges and leaves the container's bottom padding visible
+    // as a gap. Setting scrollTop directly to scrollHeight scrolls to the
+    // absolute bottom regardless of padding/layout.
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     setTimeout(() => { isProgrammaticScrollRef.current = false; }, 500);
-  }, [messagesEndRef]);
+  }, []);
 
   // ── In-session search: Ctrl+F toggle ──
   useEffect(() => {
@@ -821,9 +838,20 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
 
     // Auto-scroll on every streaming update (unless user paused)
     if (streamState.isStreaming && !userScrolledUpRef.current) {
-      isProgrammaticScrollRef.current = true;
-      messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
-      setTimeout(() => { isProgrammaticScrollRef.current = false; }, 150);
+      const el = scrollContainerRef.current;
+      if (el) {
+        isProgrammaticScrollRef.current = true;
+        // Clear the button synchronously so the user doesn't see it for the
+        // 150ms while the programmatic-scroll guard is up — handleScroll is
+        // gated by that flag and won't recompute showToBottom until later.
+        setShowToBottom(false);
+        // scrollTop = scrollHeight scrolls to the absolute bottom of the
+        // scrollable area (browser clamps to scrollHeight - clientHeight).
+        // messagesEndRef.scrollIntoView aligns to the scrollport and leaves a
+        // gap equal to the container's bottom padding.
+        el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
+        setTimeout(() => { isProgrammaticScrollRef.current = false; }, 150);
+      }
     }
   }, [streamState.streamingMessage, streamState.isStreaming]);
 
@@ -1309,7 +1337,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
         <AgentTodoPanel
           sessionId={session?.id ?? null}
         />
-        <div ref={scrollContainerRef} onScroll={handleScroll} onWheel={handleUserScrollIntent} onTouchMove={handleUserScrollIntent} className="relative flex-1 overflow-y-auto px-4 py-4">
+        <div ref={scrollContainerRef} onScroll={handleScroll} onWheel={handleWheel} onTouchMove={handleTouchMove} className="relative flex-1 overflow-y-auto px-4 py-4">
           <div className="mx-auto max-w-[820px]">
 
             {(() => {
