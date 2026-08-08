@@ -184,12 +184,10 @@ function TranslateTabIcon() {
 }
 
 function ToolCallsTabIcon() {
+  // Wrench — reads as "tools / tool calls".
   return (
-    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="2" y1="12" x2="2" y2="7" />
-      <line x1="6" y1="12" x2="6" y2="4" />
-      <line x1="10" y1="12" x2="10" y2="2" />
-      <line x1="0.5" y1="12.5" x2="13.5" y2="12.5" />
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
     </svg>
   );
 }
@@ -225,14 +223,13 @@ function RssTabIcon() {
 }
 
 function TokensTabIcon() {
-  // Coin silhouette with a small bar chart — reads as "tokens / cost".
+  // Bar chart — reads as "tokens / cost over time".
   return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="8" r="6" />
-      <line x1="5.5" y1="11" x2="6.5" y2="9" />
-      <line x1="7.5" y1="11" x2="8.5" y2="8" />
-      <line x1="9.5" y1="11" x2="10.5" y2="6.5" />
-      <line x1="4.5" y1="11.5" x2="11.5" y2="11.5" />
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="2" y1="12" x2="2" y2="7" />
+      <line x1="6" y1="12" x2="6" y2="4" />
+      <line x1="10" y1="12" x2="10" y2="2" />
+      <line x1="0.5" y1="12.5" x2="13.5" y2="12.5" />
     </svg>
   );
 }
