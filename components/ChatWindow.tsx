@@ -624,6 +624,17 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const userScrolledUpRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
 
+  // Detect user-initiated scroll intent via wheel/touch events. We can't rely
+  // on the scroll event alone: during fast streaming each chunk re-arms
+  // isProgrammaticScrollRef for ~150ms, so the guard in handleScroll eats the
+  // user's own scroll event and userScrolledUpRef never flips. wheel/touchmove
+  // are not produced by scrollIntoView, so they capture intent before the
+  // scroll happens and reliably disengage sticky-bottom mode.
+  const handleUserScrollIntent = useCallback(() => {
+    userScrolledUpRef.current = true;
+    setShowToBottom(true);
+  }, []);
+
   // ── In-session search state ──
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchKeywords, setSearchKeywords] = useState<string[]>([]);
@@ -1206,7 +1217,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
         <AgentTodoPanel
           sessionId={session?.id ?? null}
         />
-        <div ref={scrollContainerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto px-4 py-4">
+        <div ref={scrollContainerRef} onScroll={handleScroll} onWheel={handleUserScrollIntent} onTouchMove={handleUserScrollIntent} className="relative flex-1 overflow-y-auto px-4 py-4">
           <div className="mx-auto max-w-[820px]">
 
             {(() => {
