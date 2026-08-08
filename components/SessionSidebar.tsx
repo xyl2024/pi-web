@@ -348,10 +348,14 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, initialSess
     refreshAll();
   }, [refreshAll]);
 
-  // Initial / refresh / cwd-change: reset to page 1 of workspaces.
+  // refreshKey is bumped on session creation / rename / deletion / agent end.
+  // Reload workspaces AND each loaded cwd's session page so renames and new
+  // sessions show up in the sidebar immediately — fetchWorkspaces alone only
+  // refreshes workspace-level metadata, not the per-cwd session rows (whose
+  // name/modified come from /api/sessions?cwd=).
   useEffect(() => {
-    void fetchWorkspaces(null, "reset");
-  }, [fetchWorkspaces, refreshKey]);
+    refreshAll();
+  }, [refreshKey, refreshAll]);
 
   // Auto-load: any cwd that enters the workspaces list AND is currently
   // expanded (default true) needs its first session page fetched. Tracking
