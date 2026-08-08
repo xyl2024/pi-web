@@ -37,6 +37,12 @@
  * - Read-only: no click-to-jump and no tooltip. Tasks are a static
  *   at-a-glance status display; the per-task "<button>" affordance was
  *   removed alongside the tooltip to keep the panel unambiguously passive.
+ * - The in-progress subject gets a slow light sweep (`.agent-todo-live`):
+ *   a gradient highlight clipped to the glyphs and animated across them.
+ *   Applied to the expanded row's subject and to the collapsed header label
+ *   (which is that same subject), so "something is running" reads the same
+ *   in both states. Text-only — no extra DOM, no layout shift, and nothing
+ *   to re-position between the two states.
  */
 
 import { memo, useCallback, useMemo, useState } from "react";
@@ -76,6 +82,7 @@ const TaskRow = memo(function TaskRow({ task, isLast }: TaskRowProps) {
       }}
     >
       <span
+        className={isInProgress ? "agent-todo-live agent-todo-live--accent" : undefined}
         style={{
           fontSize: 13,
           lineHeight: 1.4,
@@ -215,6 +222,7 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
           }}
         >
           <span
+            className={showCollapsedSubject ? "agent-todo-live agent-todo-live--title" : undefined}
             style={{
               fontSize: 12,
               fontWeight: 600,
@@ -276,6 +284,43 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
         @keyframes agent-todo-fade-in {
           from { opacity: 0; transform: translateY(-6px); }
           to   { opacity: 1; transform: translateY(0); }
+        }
+        /* Light sweep for the in-progress subject. The gradient is 3x the
+           element width so the highlight spends most of the cycle off-screen
+           — that gap between passes is what keeps it calm rather than a
+           constant strobe. Only -webkit-text-fill-color is transparent (not
+           color), so the reduced-motion fallback just restores currentColor
+           and inherits each call site's own inline color. */
+        .agent-todo-live {
+          background-size: 300% 100%;
+          background-repeat: no-repeat;
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
+          animation: agent-todo-live-sweep 2.6s linear infinite;
+        }
+        .agent-todo-live--accent {
+          background-image: linear-gradient(100deg,
+            var(--accent) 0%, var(--accent) 44%,
+            color-mix(in srgb, var(--accent) 45%, #fff) 50%,
+            var(--accent) 56%, var(--accent) 100%);
+        }
+        .agent-todo-live--title {
+          background-image: linear-gradient(100deg,
+            var(--text) 0%, var(--text) 44%,
+            color-mix(in srgb, var(--accent) 55%, #fff) 50%,
+            var(--text) 56%, var(--text) 100%);
+        }
+        @keyframes agent-todo-live-sweep {
+          from { background-position: 100% 0; }
+          to   { background-position: 0% 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .agent-todo-live {
+            animation: none;
+            background-image: none;
+            -webkit-text-fill-color: currentColor;
+          }
         }
       `}</style>
     </>
