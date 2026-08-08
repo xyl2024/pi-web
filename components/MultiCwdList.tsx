@@ -222,6 +222,56 @@ function CwdGroup({
     return () => onHeaderRef(null);
   }, [onHeaderRef]);
 
+  // Body height animation for expand/collapse. The body DOM outlives the
+  // collapsed state so the exit animation can squeeze it to zero, then it
+  // unmounts (session data lives in the parent's perCwdSessions cache, so
+  // re-expanding remounts instantly). Unlike useCollapseHeight, the measured
+  // element is unmounted between collapses, so the ResizeObserver rebinds on
+  // every `rendered` flip instead of once at mount.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [allowAnim, setAllowAnim] = useState(false);
+  const [bodyHeight, setBodyHeight] = useState<number | null>(null);
+  const [rendered, setRendered] = useState(expanded);
+  const [collapsed, setCollapsed] = useState(!expanded);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setAllowAnim(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  // Measure the rendered body; follow content growth (lazy-loaded sessions
+  // arriving mid-expand) via ResizeObserver.
+  useEffect(() => {
+    if (!rendered) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    const update = () =>
+      setBodyHeight((prev) => (prev === el.scrollHeight ? prev : el.scrollHeight));
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [rendered]);
+
+  // Expand: remount the body, keep it squeezed until measured, then release
+  // so the height transition runs 0 → actual.
+  useEffect(() => {
+    if (expanded) setRendered(true);
+  }, [expanded]);
+
+  useEffect(() => {
+    if (expanded && rendered && bodyHeight != null) setCollapsed(false);
+  }, [expanded, rendered, bodyHeight]);
+
+  // Collapse: squeeze to zero, then unmount after the animation window.
+  // The timeout also covers the empty-body case where no transition fires.
+  useEffect(() => {
+    if (expanded) return;
+    setCollapsed(true);
+    const timer = window.setTimeout(() => setRendered(false), 220);
+    return () => window.clearTimeout(timer);
+  }, [expanded]);
+
   const sessions = group?.sessions ?? [];
   // Non-pinned sessions, sorted by modified desc (the API already returns
   // them sorted, but re-sort here defensively for cross-cwd consistency).
@@ -375,7 +425,7 @@ function CwdGroup({
               display: "flex", alignItems: "center", justifyContent: "center",
               flexShrink: 0,
               color: "var(--text-dim)",
-              transition: "transform 0.15s",
+              transition: "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
               transform: expanded ? "rotate(0deg)" : "rotate(-90deg)",
             }}
           >
@@ -528,9 +578,24 @@ function CwdGroup({
         )}
       </div>
 
-      {/* Body: pinned sessions + recent sessions */}
-      {expanded && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 6 }}>
+      {/* Body: pinned sessions + recent sessions. The DOM outlives the
+          collapsed state so the exit animation can squeeze it to zero, then
+          it unmounts after the animation settles. */}
+      {rendered && (
+        <div
+          style={{
+            height: collapsed ? 0 : bodyHeight ?? undefined,
+            overflow: "hidden",
+            // Opacity trails the height so text doesn't look squashed mid-
+            // animation (same trick as CollapsiblePanel).
+            opacity: collapsed ? 0 : 1,
+            transition:
+              allowAnim && bodyHeight != null
+                ? "height 180ms cubic-bezier(0.22, 1, 0.36, 1), opacity 110ms ease 55ms"
+                : "none",
+          }}
+        >
+          <div ref={bodyRef} style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 6 }}>
           {pinnedInCwd.length > 0 && (
             <>
               <div style={{ padding: "2px 6px 1px", fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
@@ -588,6 +653,7 @@ function CwdGroup({
               onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(s.id) : undefined}
             />
           ))}
+          </div>
         </div>
       )}
     </div>
