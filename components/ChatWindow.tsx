@@ -40,6 +40,7 @@ interface Props {
   newSessionCwd: string | null;
   onAgentEnd?: () => void;
   onSessionCreated?: (session: SessionInfo) => void;
+  onFirstAssistantReady?: () => void;
   modelsRefreshKey?: number;
   chatInputRef?: React.RefObject<ChatInputHandle | null>;
   /** If set, navigate to this entry after the session finishes loading */
@@ -479,7 +480,7 @@ function ProcessDetailsGroup({
   );
 }
 
-function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest, cwd, onCwdChange, showCwdPicker, onRenameCompleted, onSessionNameChange }: Props) {
+function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreated, onFirstAssistantReady, modelsRefreshKey, chatInputRef, scrollToEntryId, onScrollComplete, onNewSessionRequest, cwd, onCwdChange, showCwdPicker, onRenameCompleted, onSessionNameChange }: Props) {
   const { t, locale } = useI18n();
   const toast = useToast();
   const [slashResources, setSlashResources] = useState<SlashResource[]>([]);
@@ -502,7 +503,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     userMessageHistory,
     activeLeafId, currentSessionId,
   } = useAgentSession({
-    session, newSessionCwd, onAgentEnd, onSessionCreated,
+    session, newSessionCwd, onAgentEnd, onSessionCreated, onFirstAssistantReady,
     modelsRefreshKey,
     statsEmit,
     scrollToEntryId,

@@ -356,10 +356,12 @@ export function AppShell() {
   }, [selectedSession?.cwd, newSessionCwd, handleNewSession]);
 
   // Called by ChatWindow when a new session gets its real id from pi
+  // Note: no refreshKey bump here — the .jsonl does not exist yet (pi lazily
+  // creates it on the first assistant message), so a sidebar refresh at this
+  // point would find nothing. handleFirstAssistantReady refreshes instead.
   const handleSessionCreated = useCallback((session: SessionInfo) => {
     setNewSessionCwd(null);
     setSelectedSession(session);
-    setRefreshKey((k) => k + 1);
     router.replace(`?session=${encodeURIComponent(session.id)}`, { scroll: false });
   }, [router]);
 
@@ -383,6 +385,13 @@ export function AppShell() {
   const handleAgentEnd = useCallback(() => {
     setRefreshKey((k) => k + 1);
     setExplorerRefreshKey((k) => k + 1);
+  }, []);
+
+  // New sessions become listable only after pi persists the first assistant
+  // message (lazy .jsonl creation), so refresh at that moment — not at
+  // session creation, when the file does not exist yet.
+  const handleFirstAssistantReady = useCallback(() => {
+    setRefreshKey((k) => k + 1);
   }, []);
 
   // Auto-name callback wiring: update the in-memory selected session so the
@@ -1191,6 +1200,7 @@ export function AppShell() {
               newSessionCwd={effectiveNewSessionCwd}
               onAgentEnd={handleAgentEnd}
               onSessionCreated={handleSessionCreated}
+              onFirstAssistantReady={handleFirstAssistantReady}
               modelsRefreshKey={modelsRefreshKey}
               chatInputRef={chatInputRef}
               scrollToEntryId={pendingScrollEntryId}

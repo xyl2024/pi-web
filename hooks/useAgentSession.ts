@@ -63,6 +63,10 @@ export interface UseAgentSessionOptions {
   newSessionCwd: string | null;
   onAgentEnd?: () => void;
   onSessionCreated?: (session: SessionInfo) => void;
+  /** Fired once, when the first assistant message of a brand-new session has
+   *  been persisted (pi lazily creates the .jsonl at that point). The sidebar
+   *  uses this to refresh at the earliest moment the session is listable. */
+  onFirstAssistantReady?: () => void;
   modelsRefreshKey?: number;
   chatInputRef?: React.RefObject<ChatInputHandle | null>;
   setNewSessionModel?: (model: { provider: string; modelId: string } | null) => void;
@@ -97,7 +101,7 @@ export interface ChatInputHandle {
 
 export function useAgentSession(opts: UseAgentSessionOptions) {
   const {
-    session, newSessionCwd, onAgentEnd, onSessionCreated,
+    session, newSessionCwd, onAgentEnd, onSessionCreated, onFirstAssistantReady,
     modelsRefreshKey, statsEmit,
     scrollToEntryId, onScrollComplete,
   } = opts;
@@ -149,6 +153,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   // clears it to avoid double-toasting.
   const pendingAssistantErrorRef = useRef<string | null>(null);
   const handleAgentEventRef = useRef<((event: AgentEvent) => void) | null>(null);
+  // Set when POST /api/agent/new returns for a brand-new session. Cleared on
+  // the first assistant message_end — pi persists the .jsonl lazily at that
+  // moment (openSync "wx" in SessionManager._persist), which is the earliest
+  // point the session becomes listable by the sidebar.
+  const pendingNewSessionFirstAssistantRef = useRef(false);
   const initialScrollDoneRef = useRef(false);
   const scrollToEntryIdRef = useRef(scrollToEntryId);
   scrollToEntryIdRef.current = scrollToEntryId;
@@ -371,6 +380,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         if (completed && completed.role !== "user") {
           setMessages((prev) => [...prev, normalizeToolCalls(completed)]);
         }
+        // First assistant message of a brand-new session → pi has lazily
+        // persisted the .jsonl by now, so the sidebar can finally list it.
+        if (completed?.role === "assistant" && pendingNewSessionFirstAssistantRef.current) {
+          pendingNewSessionFirstAssistantRef.current = false;
+          onFirstAssistantReady?.();
+        }
         dispatch({ type: "reset" });
         setAgentPhase({ kind: "waiting_model" });
         // Capture assistant errors for the upcoming agent_end toast. During
@@ -465,7 +480,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         }
         break;
     }
-  }, [loadSession, onAgentEnd, permissionsRef, t, toast]);
+  }, [loadSession, onAgentEnd, onFirstAssistantReady, permissionsRef, t, toast]);
   handleAgentEventRef.current = handleAgentEvent;
 
   const handleSend = useCallback(async (message: string, images?: AttachedImage[]) => {
@@ -517,6 +532,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         const realId = result.sessionId;
         sessionIdRef.current = realId;
         connectEvents(realId);
+        // Defer the sidebar refresh until the first assistant message lands:
+        // the .jsonl does not exist before that, so a refresh right now would
+        // not find the session.
+        pendingNewSessionFirstAssistantRef.current = true;
         onSessionCreated?.({
           id: realId,
           path: "",
