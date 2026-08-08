@@ -225,7 +225,7 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
             className={showCollapsedSubject ? "agent-todo-live agent-todo-live--title" : undefined}
             style={{
               fontSize: 12,
-              fontWeight: 600,
+              fontWeight: 400,
               color: "var(--text)",
               overflow: "hidden",
               textOverflow: "ellipsis",
