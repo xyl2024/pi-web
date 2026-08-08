@@ -1136,9 +1136,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                   <polyline points="21 15 16 10 5 21" />
                 </svg>
               }
-              label={t("Attach")}
-              title={t("Attach image")}
-              ariaLabel={t("Attach image")}
+              label={t("Upload image")}
+              ariaLabel={t("Upload image")}
               variant={attachedImages.length ? "accent" : "default"}
             />
             )}
@@ -1347,7 +1346,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     </svg>
                   }
                   label={t("Thinking")}
-                  title={t("Change thinking level")}
                 />
                 {thinkingDropdownOpen && (
                   <div style={{
@@ -1409,7 +1407,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     </svg>
                   }
                   label={t("Tools")}
-                  title={t("Change tool preset")}
                 />
                 {toolDropdownOpen && (
                   <div style={{
@@ -1458,7 +1455,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 variant="accent"
                 expandDirection="left"
                 label={t("New")}
-                title={t("New session")}
                 ariaLabel={t("New session")}
                 icon={
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

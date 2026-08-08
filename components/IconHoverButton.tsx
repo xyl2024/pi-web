@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, type ReactNode } from "react";
-import { Tooltip } from "./Tooltip";
 
 type Variant = "default" | "accent" | "danger";
 
@@ -11,8 +10,6 @@ interface IconHoverButtonProps {
   /** Plain text revealed when the button is hovered or focused. */
   label: string;
   onClick: () => void;
-  /** Tooltip content (project-standard Radix tooltip). Defaults to label. */
-  title?: string;
   /** Accessible label for screen readers. Defaults to label. */
   ariaLabel?: string;
   /** Color variant — controls base/hover palette. */
@@ -43,7 +40,6 @@ export function IconHoverButton({
   icon,
   label,
   onClick,
-  title,
   ariaLabel,
   variant = "default",
   active = false,
@@ -115,9 +111,5 @@ export function IconHoverButton({
     </button>
   );
 
-  return (
-    <Tooltip content={title ?? label}>
-      {button}
-    </Tooltip>
-  );
+  return button;
 }
