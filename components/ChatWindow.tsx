@@ -25,6 +25,8 @@ import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { useI18n } from "@/hooks/useI18n";
 import { useToast } from "@/components/Toast";
+import { useConfirm } from "./ConfirmDialog";
+import { setChatHeaderActions } from "@/hooks/chatHeaderActionsStore";
 import type { SlashResource } from "./ChatInput";
 import { ToolCallStatsProvider, useToolCallStatsEmit } from "@/hooks/ToolCallStatsContext";
 import { useToolCallStats } from "@/hooks/useToolCallStats";
@@ -869,6 +871,132 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
     : null;
 
   const sessionId = session?.id;
+
+  // ── Auto-name: LLM-driven session name generation (moved up from ChatInput
+  // when the button relocated to the AppShell top bar). The 3s "generated
+  // name" label flash was dropped with the move — the sidebar updates
+  // immediately and a toast already confirms the rename. ──
+  const [isAutoNaming, setIsAutoNaming] = useState(false);
+  const confirm = useConfirm();
+  const currentSessionName = session?.name ?? null;
+  const handleAutoName = useCallback(async () => {
+    if (!sessionId) return;
+    if (isAutoNaming) return;
+    if (agentRunning) return;
+    if (!firstUserMessageText || !firstUserMessageText.trim()) return;
+
+    if (currentSessionName && currentSessionName.trim()) {
+      const ok = await confirm({
+        title: t("Auto-name session?"),
+        description: t("This will replace the current session name."),
+        confirmLabel: t("Auto-name"),
+        cancelLabel: t("Cancel"),
+        destructive: false,
+      });
+      if (!ok) return;
+    }
+
+    setIsAutoNaming(true);
+    try {
+      const suggestRes = await fetch(
+        `/api/sessions/${encodeURIComponent(sessionId)}/auto-name`,
+        { method: "POST" },
+      );
+      const suggestBody = (await suggestRes.json().catch(() => ({}))) as {
+        name?: unknown;
+        error?: unknown;
+      };
+      if (!suggestRes.ok || typeof suggestBody.name !== "string") {
+        const reason = typeof suggestBody.error === "string" ? suggestBody.error : `HTTP ${suggestRes.status}`;
+        throw new Error(reason);
+      }
+      const name = suggestBody.name.trim();
+      if (!name) {
+        toast.show({ kind: "error", message: t("Auto-naming returned an empty name") });
+        return;
+      }
+
+      const patchRes = await fetch(
+        `/api/sessions/${encodeURIComponent(sessionId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        },
+      );
+      if (!patchRes.ok) {
+        const body = (await patchRes.json().catch(() => ({}))) as { error?: unknown };
+        const reason = typeof body.error === "string" ? body.error : `HTTP ${patchRes.status}`;
+        throw new Error(reason);
+      }
+
+      onSessionNameChange?.(name);
+      try { await onRenameCompleted?.(); } catch { /* sidebar refresh is best-effort */ }
+      toast.show({ kind: "success", message: `${t("Renamed")} ${name}` });
+    } catch (error) {
+      toast.show({
+        kind: "error",
+        message: `${t("Auto-naming failed")}: ${
+          error instanceof Error && error.message ? error.message : t("Network error")
+        }`,
+      });
+    } finally {
+      setIsAutoNaming(false);
+    }
+  }, [
+    sessionId,
+    isAutoNaming,
+    agentRunning,
+    firstUserMessageText,
+    currentSessionName,
+    confirm,
+    toast,
+    onSessionNameChange,
+    onRenameCompleted,
+    t,
+  ]);
+
+  // Auto-name is only available when there's a session, a usable first user
+  // message, the agent isn't running, and no LLM call is already in flight.
+  const canAutoName = Boolean(
+    sessionId &&
+    firstUserMessageText &&
+    firstUserMessageText.trim() &&
+    !agentRunning &&
+    !isAutoNaming
+  );
+
+  // ── Publish Replay / Export / Auto-name actions for the AppShell top bar.
+  // Rebuilt only when a dependency changes; the store's content guard then
+  // skips AppShell re-renders when nothing actually changed. ──
+  const headerActions = useMemo(() => ({
+    onOpenReplay: openReplay,
+    replayVisible: !streamState.isStreaming && !agentRunning && messages.length > 0,
+    onExport: handleExport,
+    exportVisible: Boolean(session) && !agentRunning,
+    isExporting,
+    onAutoName: handleAutoName,
+    autoNameVisible: Boolean(session) && !agentRunning,
+    canAutoName,
+    isAutoNaming,
+  }), [
+    openReplay,
+    streamState.isStreaming,
+    agentRunning,
+    messages.length,
+    handleExport,
+    session,
+    isExporting,
+    handleAutoName,
+    canAutoName,
+    isAutoNaming,
+  ]);
+
+  useEffect(() => {
+    setChatHeaderActions(headerActions);
+    return () => setChatHeaderActions(null);
+  }, [headerActions]);
+
   const slashResourceKey = sessionId ?? (newSessionCwd ? `new:${newSessionCwd}` : "none");
 
   useEffect(() => {
@@ -934,15 +1062,7 @@ function ChatWindowContent({ session, newSessionCwd, onAgentEnd, onSessionCreate
       slashResourceKey={slashResourceKey}
       onSlashAction={(action) => { if (action === "new") onNewSessionRequest?.(); }}
       onNewSession={onNewSessionRequest}
-      onOpenReplay={openReplay}
-      replayAvailable={!streamState.isStreaming && !agentRunning && messages.length > 0}
-      onExport={session ? handleExport : undefined}
-      isExporting={isExporting}
       sessionId={currentSessionId}
-      firstUserMessageText={firstUserMessageText}
-      currentSessionName={session?.name ?? null}
-      onRenameCompleted={onRenameCompleted ?? (() => {})}
-      onSessionNameChange={onSessionNameChange}
       userMessageHistory={userMessageHistory}
       cwd={cwd ?? null}
       onCwdChange={onCwdChange ?? (() => {})}

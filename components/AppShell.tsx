@@ -53,6 +53,7 @@ import type { ChatInputHandle } from "./ChatInput";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { buildCommands, type Command, type CommandContext } from "@/lib/commands";
 import { useAgentControls } from "@/hooks/sessionUiStore";
+import { useChatHeaderActions } from "@/hooks/chatHeaderActionsStore";
 
 interface ToolInfo {
   name: string;
@@ -146,6 +147,7 @@ export function AppShell() {
     return () => { cancelled = true; };
   }, []);
   const agentControls = useAgentControls();
+  const headerActions = useChatHeaderActions();
 
   const openPalette = useCallback(() => {
     // The palette is the top-level modal — opening it closes every other
@@ -948,6 +950,100 @@ export function AppShell() {
               </button>
               </Tooltip>
               </div>
+          )}
+          <div style={{ flex: 1 }} />
+          {showChat && headerActions && (headerActions.replayVisible || headerActions.exportVisible || headerActions.autoNameVisible) && (
+            <div style={{ display: "flex", alignItems: "stretch", height: "100%" }}>
+              {headerActions.replayVisible && (
+                <Tooltip content={t("Replay")}>
+                  <button
+                    type="button"
+                    onClick={headerActions.onOpenReplay}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      width: 36, height: 36, padding: 0,
+                      background: "none", border: "none", borderLeft: "1px solid var(--border)",
+                      color: "var(--text-muted)", cursor: "pointer", transition: "color 0.12s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
+                    </svg>
+                  </button>
+                </Tooltip>
+              )}
+              {headerActions.exportVisible && (
+                <Tooltip content={headerActions.isExporting ? t("Exporting...") : t("Export session")}>
+                  <button
+                    type="button"
+                    onClick={headerActions.onExport}
+                    disabled={headerActions.isExporting}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      width: 36, height: 36, padding: 0,
+                      background: "none", border: "none", borderLeft: "1px solid var(--border)",
+                      color: headerActions.isExporting ? "var(--accent)" : "var(--text-muted)",
+                      cursor: headerActions.isExporting ? "default" : "pointer",
+                      opacity: headerActions.isExporting ? 0.8 : 1,
+                      transition: "color 0.12s",
+                    }}
+                    onMouseEnter={(e) => { if (!headerActions.isExporting) e.currentTarget.style.color = "var(--text)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = headerActions.isExporting ? "var(--accent)" : "var(--text-muted)"; }}
+                  >
+                    {headerActions.isExporting ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="2" x2="12" y2="6" />
+                        <line x1="12" y1="16" x2="12" y2="22" />
+                        <line x1="4.93" y1="4.93" x2="7.76" y2="7.76" />
+                        <line x1="16.24" y1="16.24" x2="19.07" y2="19.07" />
+                        <line x1="2" y1="12" x2="6" y2="12" />
+                        <line x1="16" y1="12" x2="22" y2="12" />
+                      </svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                    )}
+                  </button>
+                </Tooltip>
+              )}
+              {headerActions.autoNameVisible && (
+                <Tooltip content={headerActions.isAutoNaming ? t("Naming...") : t("Auto-name session")}>
+                  <button
+                    type="button"
+                    onClick={headerActions.onAutoName}
+                    disabled={!headerActions.canAutoName}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      width: 36, height: 36, padding: 0,
+                      background: "none", border: "none", borderLeft: "1px solid var(--border)",
+                      color: headerActions.isAutoNaming ? "var(--accent)" : "var(--text-muted)",
+                      cursor: headerActions.canAutoName ? "pointer" : "default",
+                      opacity: headerActions.canAutoName ? 1 : 0.5,
+                      transition: "color 0.12s",
+                    }}
+                    onMouseEnter={(e) => { if (headerActions.canAutoName) e.currentTarget.style.color = "var(--text)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = headerActions.isAutoNaming ? "var(--accent)" : "var(--text-muted)"; }}
+                  >
+                    {headerActions.isAutoNaming ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 7v5l3 2" />
+                      </svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2l1.8 5.4L19 9l-5.2 1.6L12 16l-1.8-5.4L5 9l5.2-1.6L12 2z" />
+                        <path d="M19 14l.9 2.6L22 17.5l-2.1.9L19 21l-.9-2.6L16 17.5l2.1-.9L19 14z" />
+                      </svg>
+                    )}
+                  </button>
+                </Tooltip>
+              )}
+            </div>
           )}
           {/* Top panel dropdown — shared, only one active at a time */}
           <CollapsiblePanel
