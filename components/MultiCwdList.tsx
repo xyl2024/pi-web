@@ -433,17 +433,6 @@ function CwdGroup({
               <polyline points="2 4 5 7 8 4" />
             </svg>
           </span>
-          {workspace.runningCount > 0 && (
-            <span
-              title={t("running")}
-              aria-label={t("running")}
-              className="animate-[pulse_1.5s_infinite]"
-              style={{
-                width: 5, height: 5, borderRadius: "50%",
-                background: "var(--accent)", flexShrink: 0,
-              }}
-            />
-          )}
         </span>
 
         {/* "+" trigger — shown only on row hover (matches the existing "…"
